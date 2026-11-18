@@ -662,8 +662,8 @@ class EpubBookEngine(val file: File) : Closeable {
 
         fun formatLocator(spineIndex: Int, offset: Int): String = "epub:${spineIndex.coerceAtLeast(0)}:${offset.coerceAtLeast(0)}"
 
-        fun parseLocator(locator: String): Pair<Int, Int>? {
-            if (!locator.startsWith("epub:")) return null
+        fun parseLocator(locator: String?): Pair<Int, Int>? {
+            if (locator.isNullOrBlank() || !locator.startsWith("epub:")) return null
             val parts = locator.split(':')
             if (parts.size < 3) return null
             val spine = parts[1].toIntOrNull() ?: return null

@@ -21,11 +21,11 @@ class BooksAndFormatEnginesTest {
 
     @Test
     fun epubLocatorFormattingAndParsingRoundTrips() {
-        val formatted = EpubBookEngine.formatLocator(spineIndex = 4, scrollRatio = 0.625f)
-        assertEquals("epub:4:0.6250", formatted)
+        val formatted = EpubBookEngine.formatLocator(spineIndex = 4, offset = 12)
+        assertEquals("epub:4:12", formatted)
 
         val parsed = EpubBookEngine.parseLocator(formatted)
-        assertEquals(4 to 0.625f, parsed)
+        assertEquals(4 to 12, parsed)
 
         assertNull(EpubBookEngine.parseLocator(null))
         assertNull(EpubBookEngine.parseLocator(""))
