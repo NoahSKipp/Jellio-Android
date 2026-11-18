@@ -1,0 +1,177 @@
+package com.jellio.android.ui
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.jellio.android.data.JellioRepository
+import com.jellio.android.data.catching
+import com.jellio.android.data.model.BaseItemDto
+import com.jellio.android.data.model.logoUrl
+import com.jellio.android.data.prefs.StreamPreferences
+import com.jellio.android.data.session.Session
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+sealed interface AuthState {
+    data object Loading : AuthState
+    data object LoggedOut : AuthState
+    data class LoggedIn(val session: Session) : AuthState
+}
+
+@HiltViewModel
+class AppViewModel @Inject constructor(
+    private val repository: JellioRepository,
+    private val streamPreferences: StreamPreferences,
+    val remoteControlManager: com.jellio.android.data.remote.RemoteControlManager,
+    val nowPlayingManager: com.jellio.android.data.nowplaying.NowPlayingManager,
+    val audiobookController: com.jellio.android.ui.audiobook.AudiobookPlayerController,
+    val offlineDownloadManager: com.jellio.android.data.offline.OfflineDownloadManager,
+    private val sessionGuard: com.jellio.android.data.session.SessionGuard,
+    private val syncPlayManager: com.jellio.android.data.syncplay.SyncPlayManager,
+) : ViewModel() {
+    val authState: StateFlow<AuthState> = repository.sessionFlow
+        .map { session -> if (session != null) AuthState.LoggedIn(session) else AuthState.LoggedOut }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AuthState.Loading)
+
+    private val _libraries = MutableStateFlow<List<BaseItemDto>>(emptyList())
+    val libraries: StateFlow<List<BaseItemDto>> = _libraries.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            sessionGuard.expired.collect { expired ->
+                if (expired != null) {
+                    signOut(expired)
+                    sessionGuard.acknowledge(expired)
+                }
+            }
+        }
+        viewModelScope.launch {
+            authState.collectLatest { state ->
+                if (state is AuthState.LoggedIn) {
+                    launch { repository.reportCapabilities() }
+                    // Right after an update or wake the network or server may not
+                    // be ready yet; keep trying instead of leaving the menu empty.
+                    var waitMs = 1_000L
+                    while (true) {
+                        val entries = try {
+                            repository.getLibraryNavEntries(state.session.userId)
+                        } catch (err: Exception) {
+                            emptyList()
+                        }
+                        if (entries.isNotEmpty()) {
+                            _libraries.value = entries
+                            break
+                        }
+                        kotlinx.coroutines.delay(waitMs)
+                        waitMs = (waitMs * 2).coerceAtMost(30_000L)
+                    }
+                } else {
+                    _libraries.value = emptyList()
+                }
+            }
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch { signOut(expired = null) }
+    }
+
+    // A session the server ended signs out the same way, then the sign-in
+    // screen opens on that account with a note saying why.
+    private suspend fun signOut(expired: com.jellio.android.data.session.ExpiredSession?) {
+        nowPlayingManager.stopPolling()
+        if (expired == null) {
+            repository.logout()
+            return
+        }
+        syncPlayManager.leaveLocally()
+        com.jellio.android.ui.auth.LoginHandoff.put(expired.userName)
+        com.jellio.android.ui.auth.LoginHandoff.putNotice(com.jellio.android.data.i18n.Strings.get("auth_session_expired"))
+        repository.logoutExpired(expired.serverAddress, expired.userId)
+    }
+
+    fun imageUrl(session: Session, item: BaseItemDto, imageType: String, maxWidth: Int): String {
+        if (imageType == "Logo") {
+            val logoTag = item.ImageTags?.get("Logo") ?: item.ParentLogoImageTag
+            val targetId = if (item.ImageTags?.containsKey("Logo") == true) {
+                item.Id
+            } else if (!item.ParentLogoItemId.isNullOrBlank()) {
+                item.ParentLogoItemId!!
+            } else if (!item.SeriesId.isNullOrBlank()) {
+                item.SeriesId!!
+            } else {
+                item.Id
+            }
+            return repository.imageUrl(session.serverAddress, targetId, logoTag, "Logo", maxWidth, session.accessToken)
+        }
+        val backdropTag = item.BackdropImageTags?.firstOrNull() ?: item.ParentBackdropImageTags?.firstOrNull()
+        val primaryTag = item.ImageTags?.get("Primary") ?: item.PrimaryImageTag
+        val resolvedType = if (imageType == "Backdrop" && backdropTag == null && primaryTag != null) "Primary" else imageType
+        val tag = when (resolvedType) {
+            "Backdrop" -> backdropTag
+            "Primary" -> primaryTag
+            "Thumb" -> item.ImageTags?.get("Thumb") ?: item.ThumbImageTag ?: item.ParentThumbImageTag
+            else -> item.ImageTags?.get(resolvedType)
+        }
+        val targetId = if (resolvedType == "Backdrop" && item.BackdropImageTags.isNullOrEmpty() && !item.ParentBackdropItemId.isNullOrBlank()) {
+            item.ParentBackdropItemId!!
+        } else item.Id
+        return repository.imageUrl(session.serverAddress, targetId, tag, resolvedType, maxWidth, session.accessToken)
+    }
+
+    fun rawImageUrl(session: Session, itemId: String, tag: String?, imageType: String, maxWidth: Int): String =
+        repository.imageUrl(session.serverAddress, itemId, tag, imageType, maxWidth, session.accessToken)
+
+    fun userImageUrl(session: Session, userId: String, tag: String?, maxWidth: Int): String =
+        repository.userImageUrl(session.serverAddress, userId, tag, maxWidth, session.accessToken)
+
+    fun bannerUrl(session: Session, userId: String): String =
+        repository.bannerUrl(session.serverAddress, session.accessToken, userId)
+
+    fun serviceLogoUrl(session: Session, name: String): String = logoUrl(session.serverAddress, name)
+
+    suspend fun getMediaSources(session: Session, itemId: String, forceFresh: Boolean = false) =
+        repository.getMediaSources(session.userId, itemId, forceFresh = forceFresh)
+
+    suspend fun readyInfo(itemId: String): com.jellio.android.data.streams.ReadyInfo? = kotlinx.coroutines.coroutineScope {
+        val tiers = async { repository.getQualityTiers(itemId) }
+        val serverMap = repository.getWarmSources(itemId)
+        val serverWarm = serverMap?.keys.orEmpty().map { com.jellio.android.data.streams.normalizeSourceId(it) }.toSet()
+        val localWarm = repository.getLocallyWarmedSourceIds(itemId).map { com.jellio.android.data.streams.normalizeSourceId(it) }.toSet()
+        val warm = serverWarm + localWarm
+        if (warm.isEmpty() && serverMap == null) return@coroutineScope null
+        com.jellio.android.data.streams.ReadyInfo(
+            warm,
+            tiers.await().mapKeys { com.jellio.android.data.streams.normalizeSourceId(it.key) },
+        )
+    }
+
+    suspend fun rememberStreamChoice(itemId: String, mediaSourceId: String) {
+        if (streamPreferences.isRememberEnabled()) streamPreferences.remember(itemId, mediaSourceId)
+    }
+
+    suspend fun rememberedMediaSourceId(itemId: String): String? = streamPreferences.rememberedMediaSourceId(itemId)
+
+    suspend fun getItemOrNull(session: Session, itemId: String): BaseItemDto? =
+        catching { repository.getItem(session.userId, itemId) }.getOrNull()
+
+    suspend fun resolvePlayAction(session: Session, item: BaseItemDto, forceChoice: Boolean = false): PlayAction =
+        decidePlayAction(item, streamPreferences, forceChoice) { getMediaSources(session, item.Id) }
+
+    suspend fun getUserConfiguration(userId: String) =
+        catching { repository.getUser(userId)?.Configuration }.getOrNull()
+
+    fun saveLanguagePreferences(session: Session, audio: String?, subtitle: String?) {
+        viewModelScope.launch {
+            catching { repository.updateLanguagePreferences(session.userId, audio, subtitle) }
+        }
+    }
+}

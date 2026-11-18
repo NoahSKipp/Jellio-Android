@@ -1,0 +1,2438 @@
+package com.jellio.android.ui.settings
+
+import com.jellio.android.ui.common.SidePanel
+import com.jellio.android.ui.common.dismissOnBack
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
+import androidx.tv.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.MovieFilter
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.SettingsRemote
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.Icons
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
+import com.jellio.android.data.i18n.genreDisplayName
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
+import androidx.compose.ui.platform.LocalContext
+import com.jellio.android.BuildConfig
+import com.jellio.android.di.normalizeServerAddress
+import com.jellio.android.ui.perf.MotionLevel
+import com.jellio.android.ui.perf.MotionPolicy
+import com.jellio.android.data.prefs.PlayerPrefs
+import com.jellio.android.data.model.LanguageOption
+import com.jellio.android.data.model.LANGUAGE_OPTIONS
+import com.jellio.android.data.model.languageName
+import com.jellio.android.data.session.Session
+import com.jellio.android.ui.common.JellioTextField
+import com.jellio.android.ui.theme.JellioBg
+import com.jellio.android.ui.theme.JellioBgElevated
+import com.jellio.android.ui.theme.JellioBorder
+import com.jellio.android.ui.theme.JellioDanger
+import com.jellio.android.ui.theme.JellioSecondary
+import com.jellio.android.ui.theme.JellioText
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.text.style.TextAlign
+import kotlinx.coroutines.delay
+import com.jellio.android.ui.theme.JellioTextSecondary
+import com.jellio.android.ui.update.AppUpdateViewModel
+import com.jellio.android.ui.update.ManualCheckResult
+import com.jellio.android.data.prefs.AppLanguage
+import com.jellio.android.ui.i18n.string
+import com.jellio.android.ui.i18n.formatString
+
+private enum class LanguageField { AUDIO, SUBTITLE, DISPLAY }
+private enum class ShortcutPickerField { BUTTON, TRIGGER }
+
+private enum class SettingsCategory(val labelKey: String, val icon: ImageVector) {
+    ACCOUNT("settings_cat_account", Icons.Filled.Person),
+    PLAYBACK("settings_cat_playback", Icons.Filled.PlayCircle),
+    RECOMMENDATIONS("settings_cat_recommendations", Icons.Filled.AutoAwesome),
+    ANISYNC("settings_cat_anisync", Icons.Filled.Sync),
+    DISPLAY("settings_cat_display", Icons.Filled.Palette),
+    ABOUT("settings_cat_about", Icons.Filled.Info);
+
+    val label: String
+        @Composable get() = string(labelKey)
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+
+private val LocalActiveCategoryFocus = compositionLocalOf<FocusRequester?> { null }
+
+@Composable
+fun SettingsScreen(
+    session: Session,
+    onLogout: () -> Unit,
+    onViewProfile: () -> Unit,
+    onCustomizeHome: () -> Unit = {},
+    onShowChangelog: () -> Unit = {},
+    onLaunchOnboarding: () -> Unit = {},
+    onOpenQuickHub: () -> Unit = {},
+    modifier: Modifier = Modifier,
+    viewModel: SettingsViewModel = hiltViewModel(),
+    appUpdateViewModel: AppUpdateViewModel = hiltViewModel(),
+    friendsViewModel: com.jellio.android.ui.friends.FriendsViewModel = hiltViewModel(),
+) {
+    val friendsState by friendsViewModel.state.collectAsState()
+    var showRequestsPicker by remember { mutableStateOf(false) }
+    val rememberStream by viewModel.rememberStream.collectAsState()
+    val removeFromWatchlistAfterWatching by viewModel.removeFromWatchlistAfterWatching.collectAsState()
+    val audioLanguage by viewModel.audioLanguage.collectAsState()
+    val subtitleLanguage by viewModel.subtitleLanguage.collectAsState()
+    var openField by remember { mutableStateOf<LanguageField?>(null) }
+    var openShortcutPicker by remember { mutableStateOf<ShortcutPickerField?>(null) }
+    var showRecordKeyDialog by remember { mutableStateOf(false) }
+    val currentActivity = androidx.compose.ui.platform.LocalContext.current as? com.jellio.android.MainActivity
+    androidx.compose.runtime.DisposableEffect(showRecordKeyDialog) {
+        // The whole capture dialog, not just its listening step, keeps the hub shortcut quiet.
+        currentActivity?.isQuickHubSuppressed = showRecordKeyDialog
+        if (!showRecordKeyDialog) {
+            currentActivity?.isRecordingShortcut = false
+            currentActivity?.onShortcutKeyRecorded = null
+        }
+        onDispose {
+            currentActivity?.isQuickHubSuppressed = false
+            currentActivity?.isRecordingShortcut = false
+            currentActivity?.onShortcutKeyRecorded = null
+        }
+    }
+    val changeAvatarFocusRequester = remember { FocusRequester() }
+    val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(session.userId) {
+        viewModel.load(session)
+        viewModel.loadRecommendations(session.userId)
+    }
+    LaunchedEffect(session.userId, friendsState.loaded) {
+        if (friendsState.available && friendsState.loaded) friendsViewModel.loadSettings()
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+    // Categories down the left like the web settings' own menu, the
+    // focused one's settings on the right.
+    var category by remember { mutableStateOf(SettingsCategory.ACCOUNT) }
+    LaunchedEffect(category) { scrollState.scrollTo(0) }
+    val categoryFocus = remember { SettingsCategory.entries.associateWith { FocusRequester() } }
+    val contentFocus = remember { FocusRequester() }
+    var contentHasFocus by remember { mutableStateOf(false) }
+    var focusSeen by remember { mutableStateOf(false) }
+    // Settings opens on its first menu section, so the d-pad starts where the
+    // menu is. Another screen closing at the same moment can take focus back,
+    // so it is asked again once if nothing in here has had it yet.
+    LaunchedEffect(Unit) {
+        repeat(3) {
+            var granted = false
+            repeat(25) {
+                if (!granted) {
+                    granted = runCatching { categoryFocus.getValue(SettingsCategory.ACCOUNT).requestFocus() }.isSuccess
+                    if (!granted) delay(40)
+                }
+            }
+            delay(300)
+            if (focusSeen) return@LaunchedEffect
+        }
+    }
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
+    if (isCompact) {
+        Column(modifier = Modifier.fillMaxSize().padding(top = 16.dp, start = 16.dp, end = 16.dp)) {
+            Text(text = string("settings_title"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
+            androidx.compose.foundation.lazy.LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            ) {
+                items(SettingsCategory.entries) { entry ->
+                    val selected = entry == category
+                    Surface(
+                        onClick = { category = entry },
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(999.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = if (selected) JellioSecondary else Color.White.copy(alpha = 0.08f),
+                            contentColor = if (selected) JellioBg else JellioTextSecondary,
+                            focusedContainerColor = if (selected) JellioSecondary else Color.White.copy(alpha = 0.16f),
+                            focusedContentColor = if (selected) JellioBg else JellioText,
+                        ),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        ) {
+                            Icon(imageVector = entry.icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text(text = entry.label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                        }
+                    }
+                }
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState),
+            ) {
+                Text(text = category.label, style = MaterialTheme.typography.headlineSmall, color = JellioText, modifier = Modifier.padding(top = 4.dp))
+                when (category) {
+                    SettingsCategory.ACCOUNT -> {
+                        SettingsSection(title = string("onboarding_step_profile"), icon = Icons.Filled.AccountCircle, description = formatString("settings_signed_in_on", session.userName, session.serverAddress)) {
+                            SettingsActionRow(
+                                label = string("settings_change_avatar"),
+                                icon = Icons.Filled.AddAPhoto,
+                                onClick = { viewModel.openAvatarPicker() },
+                            )
+                            SettingsDivider()
+                            SettingsActionRow(
+                                label = string("settings_view_profile"),
+                                description = string("settings_view_profile_desc"),
+                                icon = Icons.Filled.Badge,
+                                onClick = onViewProfile,
+                            )
+                        }
+                        val isPrivate by viewModel.isPrivate.collectAsState()
+                        SettingsSection(title = string("onboarding_summary_profile_privacy"), icon = Icons.Filled.Lock) {
+                            SettingsToggleRow(
+                                label = string("settings_private_profile"),
+                                description = string("settings_private_profile_desc"),
+                                checked = isPrivate,
+                                onToggle = { viewModel.setPrivate(!isPrivate) },
+                            )
+                            val friendSettings = friendsState.settings
+                            if (friendsState.available && friendsState.loaded && friendSettings != null) {
+                                SettingsDivider()
+                                SettingsToggleRow(
+                                    label = string("friends_setting_add"),
+                                    description = string("friends_setting_add_desc"),
+                                    checked = friendSettings.FriendsCanAddToWatchlist,
+                                    onToggle = { friendsViewModel.setCanAdd(!friendSettings.FriendsCanAddToWatchlist) },
+                                )
+                                SettingsDivider()
+                                SettingsPickerRow(
+                                    label = string("friends_setting_requests"),
+                                    value = string(if (friendSettings.FriendRequestsFrom == "nobody") "friends_requests_nobody" else "friends_requests_everyone"),
+                                    onClick = { showRequestsPicker = true },
+                                )
+                            }
+                        }
+                        SettingsSection(title = string("settings_security"), icon = Icons.Filled.Key, form = true) {
+                            PasswordSection(session = session, viewModel = viewModel)
+                        }
+                        SettingsSection(title = null) {
+                            SettingsActionRow(
+                                label = string("nav_log_out"),
+                                icon = Icons.AutoMirrored.Filled.Logout,
+                                onClick = onLogout,
+                                danger = true,
+                            )
+                        }
+                    }
+                    SettingsCategory.PLAYBACK -> {
+                        SettingsSection(title = string("settings_cat_playback"), icon = Icons.Filled.PlayCircle) {
+                            SettingsToggleRow(
+                                label = string("settings_remember_stream"),
+                                description = string("settings_remember_stream_desc"),
+                                checked = rememberStream,
+                                onToggle = { viewModel.setRememberStream(!rememberStream) },
+                            )
+                            SettingsDivider()
+                            SettingsToggleRow(
+                                label = string("settings_remove_watchlist_watched"),
+                                description = string("settings_remove_watchlist_watched_desc"),
+                                checked = removeFromWatchlistAfterWatching,
+                                onToggle = { viewModel.setRemoveFromWatchlistAfterWatching(!removeFromWatchlistAfterWatching) },
+                            )
+                            val playerContext = LocalContext.current
+                            SettingsDivider()
+                            SettingsToggleRow(
+                                label = string("settings_prefer_ready"),
+                                description = string("settings_prefer_ready_desc"),
+                                checked = PlayerPrefs.preferReady,
+                                onToggle = { PlayerPrefs.setPreferReady(playerContext, !PlayerPrefs.preferReady) },
+                            )
+                            SettingsDivider()
+                            SettingsToggleRow(
+                                label = string("settings_skip_intros"),
+                                description = string("settings_skip_intros_desc"),
+                                checked = PlayerPrefs.autoSkipIntro,
+                                onToggle = { PlayerPrefs.setAutoSkipIntro(playerContext, !PlayerPrefs.autoSkipIntro) },
+                            )
+                            SettingsDivider()
+                            SettingsToggleRow(
+                                label = string("settings_dialogue_boost"),
+                                description = string("settings_dialogue_boost_desc"),
+                                checked = PlayerPrefs.dialogueBoost,
+                                onToggle = { PlayerPrefs.setDialogueBoost(playerContext, !PlayerPrefs.dialogueBoost) },
+                            )
+                            SettingsDivider()
+                            SettingsPickerRow(
+                                label = string("settings_preferred_audio"),
+                                value = languageName(audioLanguage) ?: string("settings_no_preference"),
+                                onClick = { openField = LanguageField.AUDIO },
+                            )
+                            SettingsDivider()
+                            SettingsPickerRow(
+                                label = string("settings_preferred_subtitle"),
+                                value = languageName(subtitleLanguage) ?: string("settings_no_preference"),
+                                onClick = { openField = LanguageField.SUBTITLE },
+                            )
+                        }
+                    }
+                    SettingsCategory.RECOMMENDATIONS -> {
+                        SettingsSection(title = string("settings_home_screen"), icon = Icons.Filled.Tune) {
+                            SettingsActionRow(
+                                label = string("settings_customize_home"),
+                                description = string("settings_customize_home_desc"),
+                                icon = Icons.Filled.Tune,
+                                onClick = onCustomizeHome,
+                            )
+                        }
+                    }
+                    SettingsCategory.ANISYNC -> {
+                        AniSyncCategoryContent(viewModel = viewModel)
+                    }
+                    SettingsCategory.DISPLAY -> {
+                        val displayContext = androidx.compose.ui.platform.LocalContext.current
+                        SettingsSection(title = string("settings_cat_display"), icon = Icons.Filled.Palette) {
+                            val activeLang = com.jellio.android.data.prefs.DisplayPreferences.displayLanguage
+                            SettingsPickerRow(
+                                label = string("settings_display_language"),
+                                value = "${activeLang.nativeName} (${activeLang.label})",
+                                onClick = { openField = LanguageField.DISPLAY },
+                            )
+                            SettingsDivider()
+                            MotionRow()
+                            SettingsDivider()
+                            val showPill = com.jellio.android.data.prefs.DisplayPreferences.showNowPlayingPill
+                            SettingsToggleRow(
+                                label = string("settings_show_now_playing_pill"),
+                                description = string("settings_show_now_playing_pill_desc"),
+                                checked = showPill,
+                                onToggle = { com.jellio.android.data.prefs.DisplayPreferences.setShowNowPlayingPill(displayContext, !showPill) },
+                            )
+                            SettingsDivider()
+                            val clockStyle = com.jellio.android.data.prefs.DisplayPreferences.clockStyle
+                            SettingsPickerRow(
+                                label = string("settings_clock"),
+                                value = string(
+                                    when (clockStyle) {
+                                        com.jellio.android.data.prefs.ClockStyle.HOURS_24 -> "settings_clock_24h"
+                                        com.jellio.android.data.prefs.ClockStyle.HOURS_12 -> "settings_clock_12h"
+                                        com.jellio.android.data.prefs.ClockStyle.OFF -> "settings_clock_off"
+                                    },
+                                ),
+                                onClick = {
+                                    val styles = com.jellio.android.data.prefs.ClockStyle.entries
+                                    val next = styles[(styles.indexOf(clockStyle) + 1) % styles.size]
+                                    com.jellio.android.data.prefs.DisplayPreferences.setClockStyle(displayContext, next)
+                                },
+                            )
+                        }
+                    }
+                    SettingsCategory.ABOUT -> {
+                        SettingsSection(title = string("settings_cat_about"), icon = Icons.Filled.Info, description = "Jellio " + BuildConfig.VERSION_NAME) {
+                            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                                SettingsActionRow(
+                                    label = string("settings_whats_new"),
+                                    icon = Icons.Filled.AutoAwesome,
+                                    description = string("settings_whats_new_desc") + " " + BuildConfig.VERSION_NAME,
+                                    onClick = onShowChangelog,
+                                )
+                                SettingsActionRow(
+                                    label = string("onboarding_wizard_card_title"),
+                                    icon = Icons.Filled.Info,
+                                    description = string("onboarding_wizard_card_desc"),
+                                    onClick = onLaunchOnboarding,
+                                )
+                                UpdateCheckRow(viewModel = appUpdateViewModel)
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(64.dp))
+            }
+        }
+    } else {
+    Row(modifier = Modifier.fillMaxSize().padding(top = 32.dp, start = 48.dp, end = 48.dp)) {
+        val currentCategoryFocus = categoryFocus.getValue(category)
+        val categoryScrollState = rememberScrollState()
+        Column(modifier = Modifier.width(310.dp)) {
+            Text(text = string("settings_title"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 24.dp))
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(categoryScrollState)
+                    .padding(bottom = 32.dp)
+                    .focusRestorer(currentCategoryFocus)
+                    .focusGroup(),
+            ) {
+                SettingsCategory.entries.forEach { entry ->
+                    SettingsCategoryItem(
+                        label = entry.label,
+                        icon = entry.icon,
+                        selected = entry == category,
+                        onFocus = {
+                            focusSeen = true
+                            category = entry
+                        },
+                        onClick = { runCatching { contentFocus.requestFocus() } },
+                        modifier = Modifier
+                            .focusRequester(categoryFocus.getValue(entry))
+                            .focusProperties { right = contentFocus },
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.width(48.dp))
+        CompositionLocalProvider(LocalActiveCategoryFocus provides currentCategoryFocus) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxSize()
+                .onFocusChanged {
+                    contentHasFocus = it.hasFocus
+                    if (it.hasFocus) focusSeen = true
+                }
+                .onPreviewKeyEvent { event ->
+                    if (!contentHasFocus) return@onPreviewKeyEvent false
+                    if (event.key == Key.Back && event.type == KeyEventType.KeyUp) {
+                        runCatching { currentCategoryFocus.requestFocus() }
+                        return@onPreviewKeyEvent true
+                    }
+                    false
+                }
+                .focusRequester(contentFocus)
+                .focusRestorer()
+                .focusProperties {
+                    left = currentCategoryFocus
+                    onExit = {
+                        if (requestedFocusDirection == FocusDirection.Left) {
+                            currentCategoryFocus
+                        } else {
+                            FocusRequester.Default
+                        }
+                    }
+                }
+                .focusGroup()
+                .verticalScroll(scrollState),
+        ) {
+          Column(modifier = Modifier.widthIn(max = 820.dp)) {
+            Text(text = category.label, style = MaterialTheme.typography.headlineSmall, color = JellioText, modifier = Modifier.padding(top = 4.dp))
+            when (category) {
+                SettingsCategory.ACCOUNT -> {
+                SettingsSection(title = string("onboarding_step_profile"), icon = Icons.Filled.AccountCircle, description = formatString("settings_signed_in_on", session.userName, session.serverAddress)) {
+                    SettingsActionRow(
+                        label = string("settings_change_avatar"),
+                        icon = Icons.Filled.AddAPhoto,
+                        onClick = { viewModel.openAvatarPicker() },
+                        modifier = Modifier.focusRequester(changeAvatarFocusRequester).onFocusChanged { if (it.isFocused) coroutineScope.launch { scrollState.animateScrollTo(0) } },
+                    )
+                    SettingsDivider()
+                    SettingsActionRow(
+                        label = string("settings_view_profile"),
+                        description = string("settings_view_profile_desc"),
+                        icon = Icons.Filled.Badge,
+                        onClick = onViewProfile,
+                        modifier = Modifier.onFocusChanged { if (it.isFocused) coroutineScope.launch { scrollState.animateScrollTo(0) } },
+                    )
+                }
+
+                val isPrivate by viewModel.isPrivate.collectAsState()
+                SettingsSection(title = string("onboarding_summary_profile_privacy"), icon = Icons.Filled.Lock) {
+                    SettingsToggleRow(
+                        label = string("settings_private_profile"),
+                        description = string("settings_private_profile_desc"),
+                        checked = isPrivate,
+                        onToggle = { viewModel.setPrivate(!isPrivate) },
+                    )
+                    // Hidden on a plugin without friends.
+                    val friendSettings = friendsState.settings
+                    if (friendsState.available && friendsState.loaded && friendSettings != null) {
+                        SettingsDivider()
+                        SettingsToggleRow(
+                            label = string("friends_setting_add"),
+                            description = string("friends_setting_add_desc"),
+                            checked = friendSettings.FriendsCanAddToWatchlist,
+                            onToggle = { friendsViewModel.setCanAdd(!friendSettings.FriendsCanAddToWatchlist) },
+                        )
+                        SettingsDivider()
+                        SettingsPickerRow(
+                            label = string("friends_setting_requests"),
+                            value = string(if (friendSettings.FriendRequestsFrom == "nobody") "friends_requests_nobody" else "friends_requests_everyone"),
+                            onClick = { showRequestsPicker = true },
+                        )
+                    }
+                }
+
+                SettingsSection(title = string("settings_security"), icon = Icons.Filled.Key, form = true) {
+                    PasswordSection(session = session, viewModel = viewModel)
+                }
+
+                SettingsSection(title = null) {
+                    SettingsActionRow(
+                        label = string("nav_log_out"),
+                        icon = Icons.AutoMirrored.Filled.Logout,
+                        onClick = onLogout,
+                        danger = true,
+                    )
+                }
+                }
+                SettingsCategory.PLAYBACK -> {
+                SettingsSection(title = string("settings_cat_playback"), icon = Icons.Filled.PlayCircle) {
+                    SettingsToggleRow(
+                        label = string("settings_remember_stream"),
+                        description = string("settings_remember_stream_desc"),
+                        checked = rememberStream,
+                        onToggle = { viewModel.setRememberStream(!rememberStream) },
+                    )
+                    SettingsDivider()
+                    SettingsToggleRow(
+                        label = string("settings_remove_watchlist_watched"),
+                        description = string("settings_remove_watchlist_watched_desc"),
+                        checked = removeFromWatchlistAfterWatching,
+                        onToggle = { viewModel.setRemoveFromWatchlistAfterWatching(!removeFromWatchlistAfterWatching) },
+                    )
+                    val playerContext = LocalContext.current
+                    SettingsDivider()
+                    SettingsToggleRow(
+                        label = string("settings_prefer_ready"),
+                        description = string("settings_prefer_ready_desc"),
+                        checked = PlayerPrefs.preferReady,
+                        onToggle = { PlayerPrefs.setPreferReady(playerContext, !PlayerPrefs.preferReady) },
+                    )
+                    SettingsDivider()
+                    SettingsToggleRow(
+                        label = string("settings_match_frame_rate"),
+                        description = string("settings_match_frame_rate_desc"),
+                        checked = PlayerPrefs.matchFrameRate,
+                        onToggle = { PlayerPrefs.setMatchFrameRate(playerContext, !PlayerPrefs.matchFrameRate) },
+                    )
+                    SettingsDivider()
+                    SettingsToggleRow(
+                        label = string("settings_skip_intros"),
+                        description = string("settings_skip_intros_desc"),
+                        checked = PlayerPrefs.autoSkipIntro,
+                        onToggle = { PlayerPrefs.setAutoSkipIntro(playerContext, !PlayerPrefs.autoSkipIntro) },
+                    )
+                    SettingsDivider()
+                    SettingsToggleRow(
+                        label = string("settings_dialogue_boost"),
+                        description = string("settings_dialogue_boost_desc"),
+                        checked = PlayerPrefs.dialogueBoost,
+                        onToggle = { PlayerPrefs.setDialogueBoost(playerContext, !PlayerPrefs.dialogueBoost) },
+                    )
+                    SettingsDivider()
+                    SettingsToggleRow(
+                        label = string("settings_audio_passthrough"),
+                        description = string("settings_audio_passthrough_desc"),
+                        checked = PlayerPrefs.audioPassthrough,
+                        onToggle = { PlayerPrefs.setAudioPassthrough(playerContext, !PlayerPrefs.audioPassthrough) },
+                    )
+                    SettingsDivider()
+                    // Each press steps to the next level.
+                    SettingsPickerRow(
+                        label = string("settings_prebuffer_label"),
+                        value = when (PlayerPrefs.prebuffer) {
+                            "more" -> string("settings_prebuffer_more")
+                            "max" -> string("settings_prebuffer_max")
+                            else -> string("settings_prebuffer_standard")
+                        },
+                        onClick = {
+                            val next = when (PlayerPrefs.prebuffer) {
+                                "standard" -> "more"
+                                "more" -> "max"
+                                else -> "standard"
+                            }
+                            PlayerPrefs.setPrebuffer(playerContext, next)
+                        },
+                    )
+                    SettingsDivider()
+                    SettingsPickerRow(
+                        label = string("settings_buffer_switch_label"),
+                        value = when (PlayerPrefs.bufferSwitch) {
+                            "auto" -> string("settings_buffer_switch_auto")
+                            "off" -> string("settings_buffer_switch_off")
+                            else -> string("settings_buffer_switch_ask")
+                        },
+                        onClick = {
+                            val next = when (PlayerPrefs.bufferSwitch) {
+                                "ask" -> "auto"
+                                "auto" -> "off"
+                                else -> "ask"
+                            }
+                            PlayerPrefs.setBufferSwitch(playerContext, next)
+                        },
+                    )
+                }
+
+                SettingsSection(title = string("onboarding_step_playback"), icon = Icons.Filled.Translate) {
+                    SettingsPickerRow(
+                        label = string("settings_preferred_audio"),
+                        value = audioLanguage?.let { languageName(it) } ?: string("settings_no_preference"),
+                        onClick = { openField = LanguageField.AUDIO },
+                    )
+                    SettingsDivider()
+                    SettingsPickerRow(
+                        label = string("settings_preferred_subtitle"),
+                        value = when (subtitleLanguage) {
+                            "off" -> string("settings_subtitles_off")
+                            null, "" -> string("settings_no_preference")
+                            else -> languageName(subtitleLanguage)
+                        },
+                        onClick = { openField = LanguageField.SUBTITLE },
+                    )
+                }
+
+                SettingsSection(title = string("settings_sleep_timer"), icon = Icons.Filled.Bedtime, form = true) {
+                    SleepTimerSection(viewModel = viewModel)
+                }
+                }
+                SettingsCategory.RECOMMENDATIONS -> {
+                    val communityRowEnabled by viewModel.communityRowEnabled.collectAsState()
+                    val communityUsers by viewModel.communityUsers.collectAsState()
+                    val excludedUsers by viewModel.excludedUserIds.collectAsState()
+                    val allGenres by viewModel.allGenres.collectAsState()
+                    val selectedGenres by viewModel.selectedGenres.collectAsState()
+                    val customGenres by viewModel.customGenres.collectAsState()
+                    val genreSearchResult by viewModel.genreSearchResult.collectAsState()
+                    val genreSearching by viewModel.genreSearching.collectAsState()
+                    var customGenreInput by remember { mutableStateOf("") }
+                    var customGenreFeedback by remember { mutableStateOf<String?>(null) }
+                    var genreToDelete by remember { mutableStateOf<String?>(null) }
+
+                    SettingsSection(
+                        title = string("home_customize"),
+                        icon = Icons.Filled.Tune,
+                        description = string("settings_customize_home_desc"),
+                    ) {
+                        SettingsActionRow(
+                            label = string("home_customize"),
+                            icon = Icons.Filled.Tune,
+                            description = string("settings_customize_home_desc"),
+                            onClick = onCustomizeHome,
+                        )
+                    }
+
+                    SettingsSection(
+                        title = string("home_community_watching"),
+                        icon = Icons.Filled.Group,
+                        description = string("settings_community_desc"),
+                    ) {
+                        SettingsToggleRow(
+                            label = string("settings_community_toggle"),
+                            description = string("settings_community_toggle_desc"),
+                            checked = communityRowEnabled,
+                            onToggle = { viewModel.setCommunityRowEnabled(session.userId, !communityRowEnabled) },
+                        )
+                        if (communityRowEnabled && communityUsers.isNotEmpty()) {
+                            SettingsDivider()
+                            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                                Text(
+                                    text = string("settings_community_included"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = JellioText,
+                                    modifier = Modifier.padding(bottom = 4.dp),
+                                )
+                                Text(
+                                    text = string("settings_community_included_desc"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = JellioTextSecondary,
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                )
+                                communityUsers.forEach { user ->
+                                    val isIncluded = !excludedUsers.contains(user.Id)
+                                    val userAvatarUrl = if (!user.PrimaryImageTag.isNullOrEmpty()) {
+                                        val cleanServer = com.jellio.android.di.normalizeServerAddress(session.serverAddress)
+                                        "$cleanServer/Users/${user.Id}/Images/Primary?maxWidth=64${if (session.accessToken.isNotEmpty()) "&ApiKey=${session.accessToken}&api_key=${session.accessToken}" else ""}"
+                                    } else null
+
+                                    SettingsRowSurface(onClick = { viewModel.toggleCommunityExcludedUser(session.userId, user.Id) }) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(CircleShape)
+                                                .background(JellioSecondary),
+                                        ) {
+                                            if (userAvatarUrl != null) {
+                                                AsyncImage(
+                                                    model = userAvatarUrl,
+                                                    contentDescription = user.Name,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize(),
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = user.Name.firstOrNull()?.uppercaseChar()?.toString() ?: "U",
+                                                    color = Color.White,
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                )
+                                            }
+                                        }
+                                        SettingsRowText(label = user.Name, description = null)
+                                        SettingsSwitch(checked = isIncluded)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsSection(
+                        title = string("settings_genres_title"),
+                        icon = Icons.Filled.MovieFilter,
+                        description = string("settings_genres_desc"),
+                    ) {
+                        SettingsActionRow(
+                            label = string("settings_genres_reset"),
+                            icon = Icons.Filled.Sync,
+                            description = if (selectedGenres.isEmpty()) string("settings_genres_auto_active") else formatString("settings_genres_selected_count", selectedGenres.size),
+                            onClick = { viewModel.resetSelectedGenres(session.userId) },
+                        )
+                        if (allGenres.isNotEmpty()) {
+                            SettingsDivider()
+                            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                                Text(
+                                    text = string("settings_genres_available"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = JellioText,
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                )
+                                allGenres.forEach { genre ->
+                                    val isSelected = selectedGenres.contains(genre)
+                                    SettingsRowSurface(onClick = { viewModel.toggleSelectedGenre(session.userId, genre) }) {
+                                        SettingsRowText(
+                                            label = genreDisplayName(genre),
+                                            description = if (isSelected) string("settings_genres_included") else null,
+                                            color = if (isSelected) JellioSecondary else JellioText,
+                                        )
+                                        SettingsSwitch(checked = isSelected)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsSection(
+                        title = string("settings_custom_genres_title"),
+                        icon = Icons.Filled.Category,
+                        description = string("settings_custom_genres_desc"),
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                JellioTextField(
+                                    value = customGenreInput,
+                                    onValueChange = {
+                                        customGenreInput = it
+                                        customGenreFeedback = null
+                                    },
+                                    label = string("settings_custom_genres_search"),
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Surface(
+                                    onClick = {
+                                        val query = customGenreInput.trim()
+                                        if (query.isBlank()) return@Surface
+                                        val matchedEnabled = selectedGenres.find { it.equals(query, ignoreCase = true) }
+                                        if (matchedEnabled != null) {
+                                            customGenreFeedback = com.jellio.android.data.i18n.Strings.format("settings_custom_genres_enabled_exists", matchedEnabled)
+                                            return@Surface
+                                        }
+                                        val matchedCustom = customGenres.find { it.name.equals(query, ignoreCase = true) }
+                                        if (matchedCustom != null) {
+                                            customGenreFeedback = com.jellio.android.data.i18n.Strings.format("settings_custom_genres_custom_exists", matchedCustom.name)
+                                            return@Surface
+                                        }
+                                        viewModel.searchGenre(query)
+                                    },
+                                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                                    colors = ClickableSurfaceDefaults.colors(
+                                        containerColor = JellioSecondary,
+                                        contentColor = JellioBg,
+                                    ),
+                                ) {
+                                    Text(
+                                        text = if (genreSearching) string("status_loading") else string("action_search"),
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                    )
+                                }
+                            }
+
+                            customGenreFeedback?.let {
+                                Text(
+                                    text = it,
+                                    color = JellioSecondary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(top = 8.dp),
+                                )
+                            }
+
+                            if (genreSearchResult != null) {
+                                val res = genreSearchResult!!
+                                if (res.Found && !res.Name.isNullOrBlank()) {
+                                    val displayName = res.Name
+                                    val matchedEnabled = selectedGenres.find { it.equals(displayName, ignoreCase = true) }
+                                    val matchedCustom = customGenres.find { it.name.equals(displayName, ignoreCase = true) }
+                                    val isStandard = res.IsStandard || allGenres.any { it.equals(displayName, ignoreCase = true) }
+                                    val standardName = allGenres.find { it.equals(displayName, ignoreCase = true) } ?: displayName
+
+                                    Column(modifier = Modifier.padding(top = 12.dp)) {
+                                        if (matchedEnabled != null) {
+                                            Text(
+                                                text = formatString("settings_custom_genres_enabled_exists", matchedEnabled),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = JellioTextSecondary,
+                                            )
+                                        } else if (matchedCustom != null) {
+                                            Text(
+                                                text = formatString("settings_custom_genres_custom_exists", matchedCustom.name),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = JellioTextSecondary,
+                                            )
+                                        } else if (isStandard) {
+                                            Text(
+                                                text = formatString("settings_custom_genres_standard_available", standardName),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = JellioSecondary,
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Surface(
+                                                onClick = {
+                                                    viewModel.toggleSelectedGenre(session.userId, standardName)
+                                                    customGenreInput = ""
+                                                    customGenreFeedback = null
+                                                },
+                                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                                                colors = ClickableSurfaceDefaults.colors(
+                                                    containerColor = JellioSecondary,
+                                                    contentColor = JellioBg,
+                                                ),
+                                            ) {
+                                                Text(
+                                                    text = formatString("settings_custom_genres_enable_standard_btn", standardName),
+                                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                )
+                                            }
+                                        } else {
+                                            Text(
+                                                text = formatString("settings_custom_genres_found", displayName),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = JellioSecondary,
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Surface(
+                                                onClick = {
+                                                    viewModel.addCustomGenre(
+                                                        session.userId,
+                                                        com.jellio.android.data.model.CustomGenreItem(name = displayName, category = res.Category, enabled = true)
+                                                    )
+                                                    customGenreInput = ""
+                                                    customGenreFeedback = null
+                                                },
+                                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                                                colors = ClickableSurfaceDefaults.colors(
+                                                    containerColor = JellioSecondary,
+                                                    contentColor = JellioBg,
+                                                ),
+                                            ) {
+                                                Text(
+                                                    text = formatString("settings_custom_genres_add_btn", displayName),
+                                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else if (!genreSearching && customGenreInput.isNotBlank()) {
+                                    Text(
+                                        text = string("settings_custom_genres_not_found"),
+                                        color = JellioTextSecondary,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(top = 8.dp),
+                                    )
+                                }
+                            }
+
+                            if (customGenres.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = string("settings_custom_genres_added"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = JellioText,
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                )
+                                customGenres.forEach { custom ->
+                                    val statusDesc = if (custom.enabled) string("settings_genres_included") else string("settings_genres_excluded")
+                                    val holdHint = string("settings_custom_genres_hold_to_delete")
+                                    SettingsRowSurface(
+                                        onClick = { viewModel.toggleCustomGenre(session.userId, custom.name) },
+                                        onLongClick = { genreToDelete = custom.name },
+                                    ) {
+                                        SettingsRowText(
+                                            label = custom.name,
+                                            description = "$statusDesc · $holdHint",
+                                            color = if (custom.enabled) JellioSecondary else JellioText,
+                                        )
+                                        SettingsSwitch(checked = custom.enabled)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    genreToDelete?.let { name ->
+                        val cancelFocus = remember { FocusRequester() }
+                        var ignoreInitialKeyUp by remember(name) { mutableStateOf(true) }
+                        LaunchedEffect(Unit) {
+                            repeat(5) {
+                                if (runCatching { cancelFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+                                delay(50)
+                            }
+                        }
+                        Dialog(
+                            onDismissRequest = { genreToDelete = null },
+                            properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true),
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.65f))
+                                    .onPreviewKeyEvent { event ->
+                                        if (ignoreInitialKeyUp) {
+                                            if (event.type == KeyEventType.KeyUp) {
+                                                ignoreInitialKeyUp = false
+                                                return@onPreviewKeyEvent true
+                                            }
+                                            if (event.type == KeyEventType.KeyDown) {
+                                                ignoreInitialKeyUp = false
+                                            }
+                                        }
+                                        false
+                                    },
+                            ) {
+                                Surface(
+                                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
+                                    colors = ClickableSurfaceDefaults.colors(
+                                        containerColor = JellioBgElevated,
+                                        contentColor = JellioText,
+                                    ),
+                                    modifier = Modifier
+                                        .width(420.dp)
+                                        .padding(24.dp),
+                                    onClick = {},
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(20.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
+                                        Text(
+                                            text = string("settings_custom_genres_delete_title"),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = JellioText,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = formatString("settings_custom_genres_delete_prompt", name),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = JellioTextSecondary,
+                                            textAlign = TextAlign.Center,
+                                        )
+                                        Spacer(modifier = Modifier.height(20.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Surface(
+                                                onClick = { genreToDelete = null },
+                                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                                                colors = ClickableSurfaceDefaults.colors(
+                                                    containerColor = Color.White.copy(alpha = 0.1f),
+                                                    contentColor = JellioText,
+                                                    focusedContainerColor = Color.White.copy(alpha = 0.25f),
+                                                ),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .focusRequester(cancelFocus),
+                                            ) {
+                                                Text(
+                                                    text = string("action_cancel"),
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    modifier = Modifier
+                                                        .padding(vertical = 10.dp)
+                                                        .fillMaxWidth(),
+                                                    textAlign = TextAlign.Center,
+                                                )
+                                            }
+                                            Surface(
+                                                onClick = {
+                                                    viewModel.removeCustomGenre(session.userId, name)
+                                                    genreToDelete = null
+                                                },
+                                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                                                colors = ClickableSurfaceDefaults.colors(
+                                                    containerColor = JellioDanger.copy(alpha = 0.2f),
+                                                    contentColor = JellioDanger,
+                                                    focusedContainerColor = JellioDanger,
+                                                    focusedContentColor = Color.White,
+                                                ),
+                                                modifier = Modifier.weight(1f),
+                                            ) {
+                                                Text(
+                                                    text = string("action_delete"),
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier
+                                                        .padding(vertical = 10.dp)
+                                                        .fillMaxWidth(),
+                                                    textAlign = TextAlign.Center,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                SettingsCategory.ANISYNC -> {
+                    AniSyncCategoryContent(viewModel = viewModel)
+                }
+                SettingsCategory.DISPLAY -> {
+                val displayContext = androidx.compose.ui.platform.LocalContext.current
+                SettingsSection(title = string("settings_cat_display"), icon = Icons.Filled.Tv) {
+                    val activeLang = com.jellio.android.data.prefs.DisplayPreferences.displayLanguage
+                    SettingsPickerRow(
+                        label = string("settings_display_language"),
+                        value = "${activeLang.nativeName} (${activeLang.label})",
+                        onClick = { openField = LanguageField.DISPLAY },
+                    )
+                    SettingsDivider()
+                    MotionRow()
+                    SettingsDivider()
+                    val showPill = com.jellio.android.data.prefs.DisplayPreferences.showNowPlayingPill
+                    SettingsToggleRow(
+                        label = string("settings_show_now_playing_pill"),
+                        description = string("settings_show_now_playing_pill_desc"),
+                        checked = showPill,
+                        onToggle = { com.jellio.android.data.prefs.DisplayPreferences.setShowNowPlayingPill(displayContext, !showPill) },
+                    )
+                    SettingsDivider()
+                    val clockStyle = com.jellio.android.data.prefs.DisplayPreferences.clockStyle
+                    SettingsPickerRow(
+                        label = string("settings_clock"),
+                        value = string(
+                            when (clockStyle) {
+                                com.jellio.android.data.prefs.ClockStyle.HOURS_24 -> "settings_clock_24h"
+                                com.jellio.android.data.prefs.ClockStyle.HOURS_12 -> "settings_clock_12h"
+                                com.jellio.android.data.prefs.ClockStyle.OFF -> "settings_clock_off"
+                            },
+                        ),
+                        onClick = {
+                            val styles = com.jellio.android.data.prefs.ClockStyle.entries
+                            val next = styles[(styles.indexOf(clockStyle) + 1) % styles.size]
+                            com.jellio.android.data.prefs.DisplayPreferences.setClockStyle(displayContext, next)
+                        },
+                    )
+                }
+                }
+                SettingsCategory.ABOUT -> {
+                SettingsSection(title = string("settings_cat_about"), icon = Icons.Filled.Info, description = "Jellio " + BuildConfig.VERSION_NAME) {
+                    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                        SettingsActionRow(
+                            label = string("settings_whats_new"),
+                            icon = Icons.Filled.AutoAwesome,
+                            description = string("settings_whats_new_desc") + " " + BuildConfig.VERSION_NAME,
+                            onClick = onShowChangelog,
+                        )
+                        SettingsActionRow(
+                            label = string("onboarding_wizard_card_title"),
+                            icon = Icons.Filled.Info,
+                            description = string("onboarding_wizard_card_desc"),
+                            onClick = onLaunchOnboarding,
+                        )
+                        UpdateCheckRow(viewModel = appUpdateViewModel)
+                    }
+                }
+                }
+            }
+            Spacer(modifier = Modifier.height(64.dp))
+          }
+        }
+        }
+    }
+    }
+
+    val field = openField
+    if (field == LanguageField.DISPLAY) {
+        val currentContext = LocalContext.current
+        DisplayLanguagePickerOverlay(
+            selectedLanguage = com.jellio.android.data.prefs.DisplayPreferences.displayLanguage,
+            onSelect = { lang ->
+                com.jellio.android.data.prefs.DisplayPreferences.setDisplayLanguage(currentContext, lang)
+                openField = null
+            },
+            onDismiss = { openField = null },
+        )
+    } else if (field != null) {
+        val selectedCode = if (field == LanguageField.AUDIO) audioLanguage else subtitleLanguage
+        LanguagePickerOverlay(
+            title = if (field == LanguageField.AUDIO) string("settings_preferred_audio") else string("settings_preferred_subtitle"),
+            selectedCode = selectedCode,
+            isSubtitle = field == LanguageField.SUBTITLE,
+            onSelect = { code ->
+                if (field == LanguageField.AUDIO) viewModel.setAudioLanguage(session, code) else viewModel.setSubtitleLanguage(session, code)
+                openField = null
+            },
+            onDismiss = { openField = null },
+        )
+    }
+
+    if (showRequestsPicker) {
+        FriendRequestsPickerOverlay(
+            selected = friendsState.settings?.FriendRequestsFrom ?: "everyone",
+            onSelect = { value ->
+                friendsViewModel.setRequestsFrom(value)
+                showRequestsPicker = false
+            },
+            onDismiss = { showRequestsPicker = false },
+        )
+    }
+
+    val shortcutField = openShortcutPicker
+    if (shortcutField == ShortcutPickerField.BUTTON) {
+        val currentContext = LocalContext.current
+        QuickHubButtonPickerOverlay(
+            selected = com.jellio.android.data.prefs.QuickHubPreferences.button,
+            onSelect = { btn ->
+                com.jellio.android.data.prefs.QuickHubPreferences.setButton(currentContext, btn)
+                openShortcutPicker = null
+            },
+            onRecordNew = {
+                openShortcutPicker = null
+                showRecordKeyDialog = true
+            },
+            onDismiss = { openShortcutPicker = null },
+        )
+    } else if (shortcutField == ShortcutPickerField.TRIGGER) {
+        val currentContext = LocalContext.current
+        QuickHubTriggerPickerOverlay(
+            selected = com.jellio.android.data.prefs.QuickHubPreferences.trigger,
+            onSelect = { trg ->
+                com.jellio.android.data.prefs.QuickHubPreferences.setTrigger(currentContext, trg)
+                openShortcutPicker = null
+            },
+            onDismiss = { openShortcutPicker = null },
+        )
+    }
+
+    if (showRecordKeyDialog) {
+        val currentContext = LocalContext.current
+        RecordRemoteButtonDialog(
+            onDismiss = { showRecordKeyDialog = false },
+            onSave = { keyCode, label, trigger ->
+                com.jellio.android.data.prefs.QuickHubPreferences.setCustomButton(
+                    currentContext,
+                    keyCode,
+                    label,
+                    trigger,
+                )
+                showRecordKeyDialog = false
+            },
+        )
+    }
+
+    val showAvatarPicker by viewModel.showAvatarPicker.collectAsState()
+    var wasShowingAvatarPicker by remember { mutableStateOf(false) }
+    LaunchedEffect(showAvatarPicker) {
+        if (wasShowingAvatarPicker && !showAvatarPicker) changeAvatarFocusRequester.requestFocus()
+        wasShowingAvatarPicker = showAvatarPicker
+    }
+    if (showAvatarPicker) {
+        val avatarPresets by viewModel.avatarPresets.collectAsState()
+        val avatarStatus by viewModel.avatarPickerStatus.collectAsState()
+        val avatarBusyKey by viewModel.avatarBusyKey.collectAsState()
+        AvatarPickerOverlay(
+            presets = avatarPresets,
+            status = avatarStatus,
+            busyKey = avatarBusyKey,
+            presetImageUrl = { id -> viewModel.avatarPresetUrl(session, id) },
+            onSelectPreset = { id -> viewModel.selectAvatarPreset(session, id) },
+            onUpload = { bytes, contentType -> viewModel.uploadAvatar(session, bytes, contentType) },
+            onDismiss = { viewModel.closeAvatarPicker() },
+        )
+    }
+    }
+}
+
+@Composable
+private fun SettingsPickerRow(label: String, value: String, onClick: () -> Unit) {
+    SettingsRowSurface(onClick = onClick) {
+        SettingsRowText(label = label, description = value)
+        Icon(imageVector = Icons.Filled.ChevronRight, contentDescription = null, tint = JellioTextSecondary, modifier = Modifier.size(24.dp))
+    }
+}
+
+@Composable
+private fun QuickHubNoticeCard(text: String) {
+    var isFocused by remember { mutableStateOf(false) }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = if (isFocused) 0.09f else 0.05f))
+            .border(
+                1.dp,
+                if (isFocused) Color.White.copy(alpha = 0.40f) else Color.White.copy(alpha = 0.10f),
+                RoundedCornerShape(12.dp),
+            )
+            .focusable()
+            .onFocusChanged { isFocused = it.isFocused }
+            .padding(18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(
+                imageVector = Icons.Filled.Info,
+                contentDescription = null,
+                tint = if (isFocused) Color.White else JellioTextSecondary,
+                modifier = Modifier.size(20.dp).padding(top = 2.dp),
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isFocused) JellioText else JellioTextSecondary,
+                lineHeight = 22.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShortcutPickerRow(
+    label: String,
+    description: String? = null,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (isSelected) Color.White.copy(alpha = 0.18f) else Color.Transparent,
+            contentColor = JellioText,
+            focusedContainerColor = Color.White.copy(alpha = 0.28f),
+            focusedContentColor = JellioText,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, Color.White),
+                shape = RoundedCornerShape(8.dp),
+            ),
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).let {
+            if (focusRequester != null) it.focusRequester(focusRequester) else it
+        },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = label, style = MaterialTheme.typography.bodyLarge, color = JellioText)
+                if (!description.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(text = description, style = MaterialTheme.typography.bodySmall, color = JellioTextSecondary)
+                }
+            }
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun QuickHubButtonPickerOverlay(
+    selected: com.jellio.android.data.prefs.QuickHubButton,
+    onSelect: (com.jellio.android.data.prefs.QuickHubButton) -> Unit,
+    onRecordNew: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val firstRowFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { firstRowFocusRequester.requestFocus() }
+    SidePanel(title = string("settings_quick_hub_button"), width = 440.dp, onDismiss = onDismiss) {
+        LazyColumn {
+            items(com.jellio.android.data.prefs.QuickHubButton.entries) { btn ->
+                val customLabel = if (btn == com.jellio.android.data.prefs.QuickHubButton.CUSTOM && com.jellio.android.data.prefs.QuickHubPreferences.customKeyCode != 0) {
+                    com.jellio.android.data.prefs.QuickHubPreferences.customKeyLabel.ifBlank {
+                        com.jellio.android.data.prefs.QuickHubPreferences.getKeyDisplayName(com.jellio.android.data.prefs.QuickHubPreferences.customKeyCode)
+                    }
+                } else null
+
+                val label = if (customLabel != null) {
+                    "${string(btn.labelKey)} ($customLabel)"
+                } else {
+                    string(btn.labelKey)
+                }
+
+                val desc = if (customLabel != null) {
+                    formatString(btn.subKey, customLabel)
+                } else {
+                    string(btn.subKey)
+                }
+
+                ShortcutPickerRow(
+                    label = label,
+                    description = desc,
+                    isSelected = btn == selected,
+                    onClick = {
+                        if (btn == com.jellio.android.data.prefs.QuickHubButton.CUSTOM && com.jellio.android.data.prefs.QuickHubPreferences.customKeyCode == 0) {
+                            onRecordNew()
+                        } else {
+                            onSelect(btn)
+                        }
+                    },
+                    focusRequester = if (btn == com.jellio.android.data.prefs.QuickHubButton.entries.first()) firstRowFocusRequester else null,
+                )
+            }
+            item {
+                SettingsDivider()
+                ShortcutPickerRow(
+                    label = string("settings_quick_hub_record_btn"),
+                    description = string("settings_quick_hub_record_btn_desc"),
+                    isSelected = false,
+                    onClick = onRecordNew,
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun QuickHubTriggerPickerOverlay(
+    selected: com.jellio.android.data.prefs.QuickHubTrigger,
+    onSelect: (com.jellio.android.data.prefs.QuickHubTrigger) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val firstRowFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { firstRowFocusRequester.requestFocus() }
+    SidePanel(title = string("settings_quick_hub_trigger"), width = 420.dp, onDismiss = onDismiss) {
+        LazyColumn {
+            items(com.jellio.android.data.prefs.QuickHubTrigger.entries) { trg ->
+                ShortcutPickerRow(
+                    label = string(trg.labelKey),
+                    description = string(trg.subKey),
+                    isSelected = trg == selected,
+                    onClick = { onSelect(trg) },
+                    focusRequester = if (trg == com.jellio.android.data.prefs.QuickHubTrigger.entries.first()) firstRowFocusRequester else null,
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun DisplayLanguagePickerOverlay(
+    selectedLanguage: com.jellio.android.data.prefs.AppLanguage,
+    onSelect: (com.jellio.android.data.prefs.AppLanguage) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val firstRowFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { firstRowFocusRequester.requestFocus() }
+    SidePanel(title = string("settings_display_language"), width = 360.dp, onDismiss = onDismiss) {
+        LazyColumn {
+            items(com.jellio.android.data.prefs.AppLanguage.entries) { lang ->
+                LanguagePickerRow(
+                    label = "${lang.nativeName} (${lang.label})",
+                    isSelected = lang == selectedLanguage,
+                    onClick = { onSelect(lang) },
+                    focusRequester = if (lang == com.jellio.android.data.prefs.AppLanguage.entries.first()) firstRowFocusRequester else null,
+                )
+            }
+        }
+    }
+}
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun FriendRequestsPickerOverlay(
+    selected: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val firstRowFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { firstRowFocusRequester.requestFocus() }
+    SidePanel(title = string("friends_setting_requests"), width = 360.dp, onDismiss = onDismiss) {
+        LanguagePickerRow(
+            label = string("friends_requests_everyone"),
+            isSelected = selected != "nobody",
+            onClick = { onSelect("everyone") },
+            focusRequester = firstRowFocusRequester,
+        )
+        LanguagePickerRow(
+            label = string("friends_requests_nobody"),
+            isSelected = selected == "nobody",
+            onClick = { onSelect("nobody") },
+        )
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun LanguagePickerOverlay(
+    title: String,
+    selectedCode: String?,
+    isSubtitle: Boolean = false,
+    onSelect: (String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val firstRowFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { firstRowFocusRequester.requestFocus() }
+    SidePanel(title = title, width = 360.dp, onDismiss = onDismiss) {
+        LazyColumn {
+            if (isSubtitle) {
+                item {
+                    LanguagePickerRow(
+                        label = string("settings_subtitles_off"),
+                        isSelected = selectedCode == "off",
+                        onClick = { onSelect("off") },
+                        focusRequester = firstRowFocusRequester,
+                    )
+                }
+            }
+            item {
+                LanguagePickerRow(
+                    label = string("settings_no_preference"),
+                    isSelected = if (isSubtitle) selectedCode.isNullOrEmpty() else selectedCode == null,
+                    onClick = { onSelect(if (isSubtitle) "" else null) },
+                    focusRequester = if (!isSubtitle) firstRowFocusRequester else remember { FocusRequester() },
+                )
+            }
+            items(LANGUAGE_OPTIONS) { option: LanguageOption ->
+                LanguagePickerRow(label = com.jellio.android.data.model.languageName(option.code), isSelected = selectedCode == option.code, onClick = { onSelect(option.code) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun LanguagePickerRow(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (isSelected) Color.White.copy(alpha = 0.18f) else Color.Transparent,
+            contentColor = JellioText,
+            focusedContainerColor = Color.White.copy(alpha = 0.28f),
+            focusedContentColor = JellioText,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, Color.White),
+                shape = RoundedCornerShape(8.dp),
+            )
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).let {
+            if (focusRequester != null) it.focusRequester(focusRequester) else it
+        },
+    ) {
+        Text(
+            text = label,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+        )
+    }
+}
+
+@Composable
+private fun PasswordSection(session: Session, viewModel: SettingsViewModel) {
+    // Folded behind a button: open, the three fields each grabbed the
+    // D-pad and brought up the keyboard on the way down the page.
+    var open by remember { mutableStateOf(false) }
+    var everOpened by remember { mutableStateOf(false) }
+    val firstField = remember { androidx.compose.ui.focus.FocusRequester() }
+    val openButton = remember { androidx.compose.ui.focus.FocusRequester() }
+    var current by remember { mutableStateOf("") }
+    var next by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    val isUpdating by viewModel.isUpdatingPassword.collectAsState()
+    val status by viewModel.passwordStatus.collectAsState()
+    val tick by viewModel.passwordUpdateTick.collectAsState()
+
+    LaunchedEffect(tick) {
+        if (tick > 0) {
+            current = ""
+            next = ""
+            confirm = ""
+            open = false
+        }
+    }
+    LaunchedEffect(open) {
+        if (open) {
+            everOpened = true
+            runCatching { firstField.requestFocus() }
+        } else if (everOpened) {
+            runCatching { openButton.requestFocus() }
+        }
+    }
+
+    Column {
+        if (!open) {
+            status?.let { Text(text = it, color = JellioTextSecondary, modifier = Modifier.padding(bottom = 12.dp)) }
+            PasswordButton(label = string("settings_change_password"), onClick = { open = true }, modifier = Modifier.focusRequester(openButton))
+            return@Column
+        }
+        JellioTextField(value = current, onValueChange = { current = it }, label = com.jellio.android.ui.i18n.string("settings_password_current"), isPassword = true, modifier = Modifier.fillMaxWidth().focusRequester(firstField))
+        Spacer(modifier = Modifier.height(12.dp))
+        JellioTextField(value = next, onValueChange = { next = it }, label = com.jellio.android.ui.i18n.string("settings_password_new"), isPassword = true, modifier = Modifier.fillMaxWidth())
+        Spacer(modifier = Modifier.height(12.dp))
+        JellioTextField(value = confirm, onValueChange = { confirm = it }, label = com.jellio.android.ui.i18n.string("settings_password_confirm"), isPassword = true, modifier = Modifier.fillMaxWidth())
+        status?.let { Text(text = it, color = JellioTextSecondary, modifier = Modifier.padding(top = 12.dp)) }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 16.dp)) {
+            PasswordButton(
+                label = if (isUpdating) string("settings_updating_password") else string("settings_update_password"),
+                enabled = !isUpdating,
+                onClick = { viewModel.updatePassword(session, current, next, confirm) },
+            )
+            PasswordButton(
+                label = string("action_cancel"),
+                enabled = !isUpdating,
+                onClick = {
+                    current = ""
+                    next = ""
+                    confirm = ""
+                    open = false
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PasswordButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+    jumpLeftToCategory: Boolean = true,
+) {
+    val activeCategoryFocus = LocalActiveCategoryFocus.current
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = JellioBgElevated,
+            contentColor = JellioText,
+            focusedContainerColor = Color.White.copy(alpha = 0.28f),
+            focusedContentColor = JellioText,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, Color.White),
+                shape = RoundedCornerShape(999.dp),
+            )
+        ),
+        modifier = modifier.then(
+            if (jumpLeftToCategory && activeCategoryFocus != null) {
+                Modifier.focusProperties { left = activeCategoryFocus }
+            } else {
+                Modifier
+            }
+        ),
+    ) {
+        Text(text = label, modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp))
+    }
+}
+
+@Composable
+private fun SleepTimerSection(viewModel: SettingsViewModel) {
+    val active by viewModel.sleepTimerActive.collectAsState()
+    val isCancelling by viewModel.isCancellingSleepTimer.collectAsState()
+
+    if (active) {
+        SettingsActionRow(
+            label = if (isCancelling) string("settings_sleep_timer_cancelling") else string("settings_sleep_timer_cancel"),
+            description = string("settings_sleep_timer_running"),
+            icon = Icons.Filled.Bedtime,
+            onClick = { viewModel.cancelSleepTimer() },
+            danger = true,
+        )
+    } else {
+        SettingsRowSurface(
+            onClick = { /* info row */ },
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Bedtime,
+                contentDescription = null,
+                tint = JellioTextSecondary,
+                modifier = Modifier.size(22.dp),
+            )
+            SettingsRowText(
+                label = string("settings_sleep_timer_none"),
+                description = string("settings_sleep_timer_empty"),
+                color = JellioTextSecondary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsCategoryItem(label: String, icon: ImageVector, selected: Boolean, onFocus: () -> Unit, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) Color.White.copy(alpha = 0.10f) else Color.Transparent,
+            contentColor = if (selected) JellioText else JellioTextSecondary,
+            focusedContainerColor = Color.White.copy(alpha = 0.16f),
+            focusedContentColor = JellioText,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(border = BorderStroke(2.dp, JellioSecondary), shape = RoundedCornerShape(12.dp)),
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        modifier = modifier
+            .fillMaxWidth()
+            .onFocusChanged { if (it.isFocused) onFocus() },
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+        ) {
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(22.dp))
+            Text(text = label, style = MaterialTheme.typography.titleMedium, maxLines = 1, softWrap = false)
+        }
+    }
+}
+
+private val CardBorder = Color.White.copy(alpha = 0.08f)
+private val CardBg = Color.White.copy(alpha = 0.035f)
+
+// A grouped card like the web settings: an icon badge and title over
+// divided rows. form = true pads the body for fields and buttons.
+@Composable
+private fun SettingsSection(
+    title: String?,
+    icon: ImageVector? = null,
+    description: String? = null,
+    form: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .padding(top = 20.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(CardBg)
+            .border(1.dp, CardBorder, RoundedCornerShape(16.dp)),
+    ) {
+        if (title != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            ) {
+                if (icon != null) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(Color.White.copy(alpha = 0.06f)),
+                    ) {
+                        Icon(imageVector = icon, contentDescription = null, tint = JellioText, modifier = Modifier.size(22.dp))
+                    }
+                }
+                Column {
+                    Text(text = title, style = MaterialTheme.typography.titleMedium, color = JellioText)
+                    if (description != null) {
+                        Text(text = description, style = MaterialTheme.typography.bodySmall, color = JellioTextSecondary)
+                    }
+                }
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(CardBorder))
+        }
+        Column(modifier = if (form) Modifier.padding(20.dp) else Modifier.padding(vertical = 6.dp)) { content() }
+    }
+}
+
+@Composable
+private fun SettingsDivider() {
+    Box(Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(1.dp).background(CardBorder))
+}
+
+// One focusable row inside a card: a soft highlight with a thin accent
+// border when focused, nothing at rest.
+@Composable
+private fun SettingsRowSurface(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    danger: Boolean = false,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val accent = if (danger) JellioDanger else JellioSecondary
+    val activeCategoryFocus = LocalActiveCategoryFocus.current
+    Surface(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            contentColor = JellioText,
+            focusedContainerColor = if (danger) JellioDanger.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.08f),
+            focusedContentColor = JellioText,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(border = BorderStroke(2.dp, accent), shape = RoundedCornerShape(12.dp)),
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        modifier = modifier
+            .then(if (activeCategoryFocus != null) Modifier.focusProperties { left = activeCategoryFocus } else Modifier)
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun RowScope.SettingsRowText(label: String, description: String?, color: Color = JellioText) {
+    Column(modifier = Modifier.weight(1f)) {
+        Text(text = label, color = color, style = MaterialTheme.typography.titleSmall)
+        if (!description.isNullOrBlank()) {
+            Text(text = description, color = JellioTextSecondary, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun SettingsActionRow(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    description: String? = null,
+    danger: Boolean = false,
+) {
+    val color = if (danger) JellioDanger else JellioText
+    SettingsRowSurface(onClick = onClick, modifier = modifier, danger = danger) {
+        Icon(imageVector = icon, contentDescription = null, tint = if (danger) JellioDanger else JellioTextSecondary, modifier = Modifier.size(22.dp))
+        SettingsRowText(label = label, description = description, color = color)
+        if (!danger) {
+            Icon(imageVector = Icons.Filled.ChevronRight, contentDescription = null, tint = JellioTextSecondary, modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+// The web settings' toggle: a pill track with a sliding thumb.
+@Composable
+private fun SettingsSwitch(checked: Boolean) {
+    Box(
+        contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
+        modifier = Modifier
+            .width(48.dp)
+            .height(28.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (checked) JellioSecondary else Color.White.copy(alpha = 0.14f))
+            .padding(3.dp),
+    ) {
+        Box(
+            Modifier
+                .size(22.dp)
+                .clip(CircleShape)
+                .background(if (checked) JellioBg else JellioText),
+        )
+    }
+}
+
+@Composable
+private fun UpdateCheckRow(viewModel: AppUpdateViewModel) {
+    val result by viewModel.manualCheckResult.collectAsState()
+    val updateState by viewModel.uiState.collectAsState()
+
+    Column(modifier = Modifier.padding(top = 12.dp)) {
+        val activeCategoryFocus = LocalActiveCategoryFocus.current
+        Surface(
+            onClick = { viewModel.checkForUpdateManually() },
+            enabled = result != ManualCheckResult.Checking,
+            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = JellioBgElevated,
+                contentColor = JellioText,
+                focusedContainerColor = Color.White.copy(alpha = 0.28f),
+                focusedContentColor = JellioText,
+            ),
+            border = ClickableSurfaceDefaults.border(
+                focusedBorder = Border(
+                    border = BorderStroke(2.dp, Color.White),
+                    shape = RoundedCornerShape(999.dp),
+                )
+            ),
+            modifier = if (activeCategoryFocus != null) Modifier.focusProperties { left = activeCategoryFocus } else Modifier,
+        ) {
+            Text(text = string("settings_check_updates"), modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp))
+        }
+        when (val current = result) {
+            null -> {}
+            ManualCheckResult.Checking -> {
+                Text(text = string("settings_check_updates_checking"), color = JellioTextSecondary, modifier = Modifier.padding(top = 10.dp))
+            }
+            ManualCheckResult.UpToDate -> {
+                Text(text = string("settings_check_updates_latest"), color = JellioTextSecondary, modifier = Modifier.padding(top = 10.dp))
+            }
+            ManualCheckResult.Error -> {
+                Text(text = string("settings_check_updates_error"), color = JellioTextSecondary, modifier = Modifier.padding(top = 10.dp))
+            }
+            is ManualCheckResult.Preparing -> {
+                Text(text = com.jellio.android.ui.i18n.formatString("settings_check_updates_preparing", current.version), color = JellioTextSecondary, modifier = Modifier.padding(top = 10.dp))
+            }
+            is ManualCheckResult.UpdateFound -> {
+                Text(
+                    text = com.jellio.android.data.i18n.Strings.format("tv_update_available", current.version),
+                    color = JellioText,
+                    modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
+                )
+                Surface(
+                    onClick = { viewModel.download() },
+                    enabled = !updateState.downloading,
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
+                    colors = com.jellio.android.ui.common.primaryButtonColors(),
+                    border = ClickableSurfaceDefaults.border(
+                        focusedBorder = Border(
+                            border = BorderStroke(2.5.dp, Color.White),
+                            shape = RoundedCornerShape(999.dp),
+                        )
+                    ),
+                ) {
+                    Text(
+                        text = com.jellio.android.data.i18n.Strings.get(if (updateState.downloading) "update_downloading" else "update_install"),
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+// Seasonal animations: Auto picks from the device check, the rest force
+// it. Pressing cycles through them.
+@Composable
+private fun MotionRow() {
+    val context = LocalContext.current
+    val preference = MotionPolicy.preference
+    val profile = MotionPolicy.profile
+    val options = listOf("auto", "full", "reduced", "still", "off")
+    fun labelOf(value: String) = when (value) {
+        "full" -> "Full"
+        "reduced" -> "Reduced"
+        "still" -> "Still (no animation)"
+        "off" -> "Off"
+        else -> "Auto (" + when (profile?.suggested) {
+            MotionLevel.REDUCED -> "Reduced"
+            MotionLevel.STILL -> "Still"
+            MotionLevel.OFF -> "Off"
+            else -> "Full"
+        } + ")"
+    }
+    SettingsRowSurface(
+        onClick = {
+            val next = options[(options.indexOf(preference).coerceAtLeast(0) + 1) % options.size]
+            MotionPolicy.setPreference(context, next)
+        },
+    ) {
+        SettingsRowText(
+            label = com.jellio.android.data.i18n.Strings.get("settings_seasonal_animations") + labelOf(preference),
+            description = com.jellio.android.data.i18n.Strings.get("settings_seasonal_animations_desc") +
+                (profile?.let { com.jellio.android.data.i18n.Strings.get("settings_seasonal_device_tier") + it.describe() + "." } ?: ""),
+        )
+        Icon(imageVector = Icons.Filled.ChevronRight, contentDescription = null, tint = JellioTextSecondary, modifier = Modifier.size(24.dp))
+    }
+}
+
+@Composable
+private fun SettingsToggleRow(label: String, description: String, checked: Boolean, onToggle: () -> Unit) {
+    SettingsRowSurface(onClick = onToggle) {
+        SettingsRowText(label = label, description = description)
+        SettingsSwitch(checked = checked)
+    }
+}
+
+@Composable
+private fun AniSyncCategoryContent(viewModel: SettingsViewModel) {
+    val settings by viewModel.aniSyncSettings.collectAsState()
+    val loading by viewModel.aniSyncLoading.collectAsState()
+    val actionBusy by viewModel.aniSyncActionBusy.collectAsState()
+    val message by viewModel.aniSyncMessage.collectAsState()
+    val simklPin by viewModel.simklPinData.collectAsState()
+    val simklPolling by viewModel.simklPinPolling.collectAsState()
+
+    var usernameInput by remember { mutableStateOf("") }
+    var tokenInput by remember { mutableStateOf("") }
+    var clientIdInput by remember { mutableStateOf("") }
+    var clientSecretInput by remember { mutableStateOf("") }
+    var refreshTokenInput by remember { mutableStateOf("") }
+    var showAdvanced by remember { mutableStateOf(false) }
+
+    val currentSettings = settings
+    val activeServiceId = currentSettings?.SelectedService ?: "anilist"
+    val services = currentSettings?.Services.orEmpty()
+    val activeServiceStatus = services.find { it.Id.equals(activeServiceId, ignoreCase = true) }
+
+    LaunchedEffect(Unit) {
+        viewModel.loadAniSync()
+    }
+
+    LaunchedEffect(activeServiceId, activeServiceStatus?.UpdatedAtUtc) {
+        usernameInput = activeServiceStatus?.Username.orEmpty()
+        tokenInput = ""
+        clientIdInput = ""
+        clientSecretInput = ""
+        refreshTokenInput = ""
+        showAdvanced = false
+    }
+
+    if (loading && currentSettings == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(40.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = string("status_loading"), color = JellioTextSecondary)
+        }
+        return
+    }
+
+    // Active Service Selector Card
+    val supportedServices = listOf(
+        "anilist" to "AniList",
+        "myanimelist" to "MyAnimeList",
+        "shikimori" to "Shikimori",
+        "simkl" to "Simkl",
+    )
+
+    SettingsSection(
+        title = string("anisync_active_service"),
+        icon = Icons.Filled.Sync,
+        description = string("anisync_active_service_desc"),
+    ) {
+        supportedServices.forEach { (id, name) ->
+            val status = services.find { it.Id.equals(id, ignoreCase = true) }
+            val isConnected = status?.Connected == true
+            val isSelected = activeServiceId.equals(id, ignoreCase = true)
+            val connectedUsername = status?.Username
+            val desc = if (isConnected) {
+                if (!connectedUsername.isNullOrBlank()) {
+                    formatString("anisync_connected_as", connectedUsername)
+                } else {
+                    string("anisync_connected")
+                }
+            } else {
+                string("anisync_not_connected")
+            }
+
+            SettingsRowSurface(
+                onClick = { viewModel.selectAniSyncService(id) },
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = name,
+                            color = if (isSelected) JellioSecondary else JellioText,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        )
+                        if (isConnected) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF2E7D32).copy(alpha = 0.35f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = string("anisync_connected"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF81C784),
+                                )
+                            }
+                        }
+                    }
+                    Text(text = desc, color = JellioTextSecondary, style = MaterialTheme.typography.bodySmall)
+                }
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = JellioSecondary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        }
+    }
+
+    // Status & Actions for Active Service (setup is done on Jellio Web)
+    val activeDisplayName = supportedServices.find { it.first.equals(activeServiceId, ignoreCase = true) }?.second ?: activeServiceId
+    var showSetupGuide by remember { mutableStateOf(false) }
+    SettingsSection(
+        title = formatString("anisync_login_title", activeDisplayName),
+        icon = Icons.Filled.Key,
+        form = true,
+    ) {
+        if (activeServiceStatus?.Connected == true) {
+            val credSuffix = activeServiceStatus.MaskedCredential?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+            Text(
+                text = formatString("anisync_connected_as", activeServiceStatus.Username ?: activeDisplayName) + credSuffix,
+                color = Color(0xFF81C784),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            val syncSummary = activeServiceStatus.LastSyncedTitle?.takeIf { it.isNotBlank() }
+                ?.let { formatString("anisync_last_synced", it) }
+                ?: string("anisync_never_synced")
+            Text(
+                text = syncSummary,
+                color = JellioTextSecondary,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        } else {
+            Text(
+                text = formatString("anisync_setup_on_web_notice", activeDisplayName),
+                color = JellioTextSecondary,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+
+        message?.let { msg ->
+            Text(
+                text = msg,
+                color = JellioSecondary,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(top = 16.dp),
+        ) {
+            if (activeServiceStatus?.Connected == true) {
+                var syncRange by remember { mutableStateOf("recent") }
+                val syncRanges = listOf(
+                    "recent" to string("anisync_range_recent"),
+                    "week" to string("anisync_range_week"),
+                    "month" to string("anisync_range_month"),
+                    "year" to string("anisync_range_year"),
+                    "all" to string("anisync_range_all"),
+                )
+                val activeRangeIndex = syncRanges.indexOfFirst { it.first == syncRange }.coerceAtLeast(0)
+                val activeRangeLabel = syncRanges[activeRangeIndex].second
+                PasswordButton(
+                    label = string("anisync_btn_test"),
+                    enabled = actionBusy == null,
+                    jumpLeftToCategory = false,
+                    onClick = { viewModel.testAniSync(activeServiceId) },
+                )
+                PasswordButton(
+                    label = activeRangeLabel,
+                    enabled = actionBusy == null,
+                    jumpLeftToCategory = false,
+                    onClick = { syncRange = syncRanges[(activeRangeIndex + 1) % syncRanges.size].first },
+                )
+                PasswordButton(
+                    label = string("anisync_btn_sync_now"),
+                    enabled = actionBusy == null,
+                    jumpLeftToCategory = false,
+                    onClick = { viewModel.syncAniSyncNow(activeServiceId, syncRange) },
+                )
+                PasswordButton(
+                    label = string("anisync_btn_disconnect"),
+                    enabled = actionBusy == null,
+                    jumpLeftToCategory = false,
+                    onClick = { viewModel.disconnectAniSync(activeServiceId) },
+                )
+            }
+
+            PasswordButton(
+                label = string("anisync_btn_setup_guide"),
+                enabled = actionBusy == null,
+                jumpLeftToCategory = false,
+                onClick = { showSetupGuide = true },
+            )
+        }
+    }
+
+    if (showSetupGuide) {
+        AniSyncSetupGuideDialog(
+            services = currentSettings?.Services.orEmpty(),
+            onDismiss = { showSetupGuide = false },
+        )
+    }
+
+    // Sync Preferences
+    SettingsSection(
+        title = string("anisync_preferences_title"),
+        icon = Icons.Filled.Tune,
+    ) {
+        val enabled = currentSettings?.Enabled ?: false
+        SettingsToggleRow(
+            label = string("anisync_enable_title"),
+            description = string("anisync_enable_desc"),
+            checked = enabled,
+            onToggle = { viewModel.setAniSyncEnabled(!enabled) },
+        )
+        SettingsDivider()
+        val onlyAnime = currentSettings?.OnlyAnimeItems ?: true
+        SettingsToggleRow(
+            label = string("anisync_only_anime_title"),
+            description = string("anisync_only_anime_desc"),
+            checked = onlyAnime,
+            onToggle = { viewModel.setAniSyncOnlyAnime(!onlyAnime) },
+        )
+        SettingsDivider()
+        val allConnected = currentSettings?.SyncAllConnected ?: false
+        SettingsToggleRow(
+            label = string("anisync_all_connected_title"),
+            description = string("anisync_all_connected_desc"),
+            checked = allConnected,
+            onToggle = { viewModel.setAniSyncAllConnected(!allConnected) },
+        )
+    }
+
+    // Recent Sync Activity
+    val logs = currentSettings?.RecentLogs.orEmpty()
+    SettingsSection(
+        title = string("anisync_recent_activity_title"),
+        icon = Icons.Filled.Info,
+    ) {
+        if (logs.isEmpty()) {
+            var isFocused by remember { mutableStateOf(false) }
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isFocused) Color.White.copy(alpha = 0.08f) else Color.Transparent)
+                    .border(
+                        width = if (isFocused) 1.dp else 0.dp,
+                        color = if (isFocused) Color.White.copy(alpha = 0.35f) else Color.Transparent,
+                        shape = RoundedCornerShape(10.dp),
+                    )
+                    .focusable()
+                    .onFocusChanged { isFocused = it.isFocused }
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+            ) {
+                Text(
+                    text = string("anisync_recent_empty"),
+                    color = JellioTextSecondary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        } else {
+            logs.take(10).forEachIndexed { index, entry ->
+                if (index > 0) SettingsDivider()
+                var isFocused by remember { mutableStateOf(false) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isFocused) Color.White.copy(alpha = 0.08f) else Color.Transparent)
+                        .border(
+                            width = if (isFocused) 1.dp else 0.dp,
+                            color = if (isFocused) Color.White.copy(alpha = 0.35f) else Color.Transparent,
+                            shape = RoundedCornerShape(10.dp),
+                        )
+                        .focusable()
+                        .onFocusChanged { isFocused = it.isFocused }
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = if (entry.Success) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = if (entry.Success) Color(0xFF81C784) else JellioDanger,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        val epText = entry.EpisodeNumber?.let { " - Ep $it" }.orEmpty()
+                        Text(
+                            text = "${entry.ItemTitle}$epText (${entry.Service})",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = JellioText,
+                        )
+                        if (entry.Message.isNotBlank()) {
+                            Text(
+                                text = entry.Message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = JellioTextSecondary,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AniSyncSetupGuideDialog(
+    services: List<com.jellio.android.data.model.AniSyncServiceStatusDto>,
+    onDismiss: () -> Unit,
+) {
+    val guideScroll = rememberScrollState()
+    val closeFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(80)
+        runCatching { closeFocus.requestFocus() }
+    }
+    fun isServerConfigured(id: String): Boolean {
+        val svc = services.find { it.Id.equals(id, ignoreCase = true) } ?: return false
+        val hasId = !svc.ServerClientId.isNullOrBlank()
+        return when (id) {
+            "anilist", "myanimelist" -> hasId
+            "shikimori" -> hasId && svc.HasServerClientSecret
+            "simkl" -> hasId
+            else -> false
+        }
+    }
+    val sections = listOf(
+        "AniList" to if (isServerConfigured("anilist")) {
+            listOf(
+                "Configured on this server: you only need your own AniList account.",
+                "1. Open Jellio Web (Settings > Ani-Sync > AniList) and click Authorize with AniList.",
+                "2. Log in to your AniList account and approve access.",
+                "3. Copy the full redirect URL (#access_token=...), paste it into the token box, and click Save & Connect.",
+            )
+        } else {
+            listOf(
+                "1. Open anilist.co/settings/developer in a browser and click Create New Client.",
+                "2. Set Redirect URL to: https://anilist.co/api/v2/oauth/pin",
+                "3. Copy your Client ID (Client Secret is not needed for AniList).",
+                "4. In Jellio Web (Settings > Ani-Sync > AniList), expand Advanced Settings, paste Client ID, and click Authorize with AniList.",
+                "5. Approve on AniList, copy the full redirect URL (#access_token=...), paste it into the token box, and click Save & Connect.",
+            )
+        },
+        "MyAnimeList" to if (isServerConfigured("myanimelist")) {
+            listOf(
+                "Configured on this server: you only need your own MyAnimeList account.",
+                "1. Open Jellio Web (Settings > Ani-Sync > MyAnimeList) and click Authorize with MyAnimeList.",
+                "2. Log in to your MyAnimeList account and approve access.",
+                "3. Copy the callback URL (?code=...&state=...), paste it into the token box, and click Save & Connect.",
+            )
+        } else {
+            listOf(
+                "1. Open myanimelist.net/apiconfig in a browser and click Create ID.",
+                "2. Set App Type to web and App Redirect URL to your Jellio Web URL.",
+                "3. Copy your Client ID (and Client Secret if provided).",
+                "4. In Jellio Web (Settings > Ani-Sync > MyAnimeList), expand Advanced Settings, paste Client ID (and Secret), and click Authorize with MyAnimeList.",
+                "5. Approve on MyAnimeList, copy the callback URL (?code=...&state=...), paste it into the token box, and click Save & Connect.",
+            )
+        },
+        "Shikimori" to if (isServerConfigured("shikimori")) {
+            listOf(
+                "Configured on this server: you only need your own Shikimori account.",
+                "1. Open Jellio Web (Settings > Ani-Sync > Shikimori) and click Authorize with Shikimori.",
+                "2. Log in to your Shikimori account and approve access.",
+                "3. Copy the authorization code or callback URL, paste it into the token box, and click Save & Connect.",
+            )
+        } else {
+            listOf(
+                "1. Open shikimori.one/oauth/applications in a browser and create a new OAuth application.",
+                "2. Set Redirect URI to urn:ietf:wg:oauth:2.0:oob (or your Jellio Web URL).",
+                "3. Copy your Client ID and Client Secret.",
+                "4. In Jellio Web (Settings > Ani-Sync > Shikimori), expand Advanced Settings, paste Client ID and Client Secret, and click Authorize with Shikimori.",
+                "5. Approve on Shikimori, copy the authorization code or callback URL, paste it into the token box, and click Save & Connect.",
+            )
+        },
+        "Simkl" to if (isServerConfigured("simkl")) {
+            listOf(
+                "Configured on this server: you only need your own Simkl account.",
+                "1. Open Jellio Web (Settings > Ani-Sync > Simkl) and click Connect with PIN Code (or Authorize with Simkl).",
+                "2. Visit simkl.com/pin and enter the code shown on Jellio Web to link your Simkl account.",
+            )
+        } else {
+            listOf(
+                "1. Open simkl.com/settings/developer/ in a browser and create an application.",
+                "2. Set Redirect URI to your Jellio Web URL and copy your Client ID (and Client Secret for OAuth redirect).",
+                "3. In Jellio Web (Settings > Ani-Sync > Simkl), expand Advanced Settings and paste your Client ID.",
+                "4. Click Connect with PIN Code (visit simkl.com/pin and enter the code) or click Authorize with Simkl and paste the callback URL.",
+            )
+        },
+    )
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .widthIn(min = 560.dp, max = 720.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(JellioBgElevated)
+                .border(1.dp, JellioBorder, RoundedCornerShape(18.dp))
+                .padding(24.dp),
+        ) {
+            Text(
+                text = string("anisync_guide_title"),
+                style = MaterialTheme.typography.headlineSmall,
+                color = JellioText,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(guideScroll),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                sections.forEach { (serviceName, steps) ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.04f))
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = serviceName,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = JellioSecondary,
+                        )
+                        steps.forEach { step ->
+                            Text(
+                                text = step,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = JellioTextSecondary,
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            PasswordButton(
+                label = string("anisync_guide_close"),
+                onClick = onDismiss,
+                modifier = Modifier.focusRequester(closeFocus),
+            )
+        }
+    }
+}
+
+

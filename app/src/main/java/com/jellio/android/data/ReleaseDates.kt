@@ -1,0 +1,152 @@
+package com.jellio.android.data
+
+import com.jellio.android.data.model.BaseItemDto
+import com.jellio.android.data.i18n.Strings
+import com.jellio.android.data.i18n.displayLocale
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+
+private val ISO_DATE_PREFIX = Regex("^(\\d{4})-(\\d{2})-(\\d{2})")
+
+private val verifiedTodayStreamIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+fun markTodayItemHasStream(itemId: String?, hasStream: Boolean) {
+    if (itemId.isNullOrBlank()) return
+    if (hasStream) verifiedTodayStreamIds.add(itemId) else verifiedTodayStreamIds.remove(itemId)
+}
+
+fun isTodayItemStreamVerified(itemId: String?): Boolean =
+    !itemId.isNullOrBlank() && verifiedTodayStreamIds.contains(itemId)
+
+fun clearVerifiedTodayStreamIds() {
+    verifiedTodayStreamIds.clear()
+}
+
+private data class ParsedUtcDay(val year: Int, val epochMs: Long, val exactEpochMs: Long? = null)
+
+// The UTC day of the moment the date names, like the web client's
+// Date.getUTC*. A date without a time or zone is taken as that UTC day.
+private fun parseUtcDay(raw: String?): ParsedUtcDay? {
+    if (raw.isNullOrBlank()) return null
+    val trimmed = raw.trim()
+    val exact = runCatching {
+        java.time.OffsetDateTime.parse(trimmed).toInstant().toEpochMilli()
+    }.recoverCatching {
+        java.time.Instant.parse(trimmed).toEpochMilli()
+    }.getOrNull()
+    if (exact != null) {
+        val day = java.time.Instant.ofEpochMilli(exact).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+        return ParsedUtcDay(day.year, day.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), exact)
+    }
+    val match = ISO_DATE_PREFIX.find(trimmed) ?: return null
+    val (yearStr, monthStr, dayStr) = match.destructured
+    val year = yearStr.toIntOrNull() ?: return null
+    val month = monthStr.toIntOrNull() ?: return null
+    val day = dayStr.toIntOrNull() ?: return null
+    val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        clear()
+        set(year, month - 1, day, 0, 0, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return ParsedUtcDay(year, cal.timeInMillis)
+}
+
+// PremiereDate, or EndDate when there is no readable PremiereDate.
+private fun itemDay(item: BaseItemDto): ParsedUtcDay? = parseUtcDay(item.PremiereDate) ?: parseUtcDay(item.EndDate)
+
+private fun utcMidnightMs(nowMs: Long): Long {
+    val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        timeInMillis = nowMs
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return cal.timeInMillis
+}
+
+// Unreleased by its dates alone: a later day, a later air time today, a
+// placeholder year, or a virtual item with no dates and no runtime.
+fun isUnreleasedByDate(item: BaseItemDto, nowMs: Long = System.currentTimeMillis()): Boolean {
+    if (item.UserData?.Played == true || (item.UserData?.PlaybackPositionTicks ?: 0L) > 0L) return false
+    val parsed = itemDay(item) ?: return item.LocationType == "Virtual" && (item.RunTimeTicks ?: 0L) <= 0L
+    if (parsed.year >= 9000) return true
+    val todayUtcMs = utcMidnightMs(nowMs)
+    if (parsed.epochMs > todayUtcMs) return true
+    return parsed.epochMs == todayUtcMs && parsed.exactEpochMs != null && parsed.exactEpochMs > nowMs
+}
+
+// Like web: an episode dated today stays unreleased until a stream for it
+// has been found.
+fun isUnreleasedItem(item: BaseItemDto, nowMs: Long = System.currentTimeMillis()): Boolean {
+    if (isUnreleasedByDate(item, nowMs)) return true
+    if (item.Type != null && item.Type != "Episode") return false
+    return isReleasedToday(item, nowMs) && !isTodayItemStreamVerified(item.Id)
+}
+
+fun isReleasedToday(item: BaseItemDto, nowMs: Long = System.currentTimeMillis()): Boolean {
+    if (item.UserData?.Played == true || (item.UserData?.PlaybackPositionTicks ?: 0L) > 0L) return false
+    val todayUtcMs = utcMidnightMs(nowMs)
+    val parsed = itemDay(item) ?: return false
+    if (parsed.year >= 9000) return false
+    return parsed.epochMs == todayUtcMs
+}
+
+fun isPendingTodayRelease(item: BaseItemDto, nowMs: Long = System.currentTimeMillis()): Boolean {
+    return isReleasedToday(item, nowMs) && !isTodayItemStreamVerified(item.Id)
+}
+
+fun episodeReleaseLabel(
+    item: BaseItemDto,
+    nowMs: Long = System.currentTimeMillis(),
+    locale: Locale = displayLocale(),
+): String? {
+    if (!isUnreleasedItem(item, nowMs) && !isPendingTodayRelease(item, nowMs)) return null
+    val todayUtcMs = utcMidnightMs(nowMs)
+    if (!item.PremiereDate.isNullOrBlank()) {
+        val parsed = parseUtcDay(item.PremiereDate)
+        if (parsed != null && parsed.year < 9000) {
+            val diffDays = ((parsed.epochMs - todayUtcMs) / (24L * 60L * 60L * 1000L)).toInt()
+            return when {
+                diffDays <= 0 -> Strings.get("calendar_today")
+                diffDays == 1 -> Strings.get("calendar_tomorrow")
+                diffDays < 7 -> Strings.format("coming_soon_in_days", diffDays)
+                else -> SimpleDateFormat("MMM d", locale).apply {
+                    timeZone = TimeZone.getTimeZone("UTC")
+                }.format(Date(parsed.epochMs))
+            }
+        }
+    }
+    return Strings.get("coming_soon_badge")
+}
+
+fun filterReleasedItems(items: List<BaseItemDto>, nowMs: Long = System.currentTimeMillis()): List<BaseItemDto> {
+    return items.filterNot { isUnreleasedItem(it, nowMs) }
+}
+
+fun seasonEpisodeReleaseLabels(
+    episodes: List<BaseItemDto>,
+    nowMs: Long = System.currentTimeMillis(),
+    locale: Locale = displayLocale(),
+): Map<String, String> {
+    val result = LinkedHashMap<String, String>()
+    var seenUnreleased = false
+    for (ep in episodes) {
+        val label = episodeReleaseLabel(ep, nowMs, locale)
+        if (label != null) {
+            result[ep.Id] = label
+            seenUnreleased = true
+        } else if (seenUnreleased &&
+            ep.PremiereDate.isNullOrBlank() &&
+            ep.UserData?.Played != true &&
+            (ep.UserData?.PlaybackPositionTicks ?: 0L) <= 0L &&
+            (ep.RunTimeTicks ?: 0L) <= 0L
+        ) {
+            result[ep.Id] = Strings.get("coming_soon_badge")
+        }
+    }
+    return result
+}
