@@ -730,6 +730,7 @@ class BooksRepository @Inject constructor(
             """(/|\\)(manga|comics?|manhwa|manhua|webtoons?)(/|\\)""",
             RegexOption.IGNORE_CASE,
         )
+        private val COMIC_GENRES = setOf("manga", "comic", "comics", "manhwa", "manhua", "webtoon", "webtoons")
         private val NON_ALNUM_REGEX = Regex("""[^a-z0-9]+""")
 
         fun isComicItem(item: BaseItemDto): Boolean =
@@ -740,6 +741,7 @@ class BooksRepository @Inject constructor(
             if (!item.SeriesName.isNullOrBlank()) return true
             if (!item.Path.isNullOrBlank() && COMIC_PATH_REGEX.containsMatchIn(item.Path)) return true
             if (!item.Name.isNullOrBlank() && CHAPTER_NAME_REGEX.containsMatchIn(item.Name)) return true
+            if (item.Genres?.any { it.trim().lowercase(Locale.US) in COMIC_GENRES } == true) return true
             return false
         }
 
