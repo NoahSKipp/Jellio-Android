@@ -3,6 +3,7 @@ package com.jellio.android.ui.player
 import com.jellio.android.data.i18n.Strings
 import com.jellio.android.data.prefs.PlayerPrefs
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box

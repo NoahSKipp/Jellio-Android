@@ -77,6 +77,7 @@ data class ComicInfo(
     val title: String? = null,
     val series: String? = null,
     val writer: String? = null,
+    val number: String? = null,
     val mangaDirection: MangaReadingDirection = MangaReadingDirection.UNKNOWN,
 )
 
@@ -152,6 +153,7 @@ class CbzBookEngine(val file: File) : Closeable {
         var title: String? = null
         var series: String? = null
         var writer: String? = null
+        var number: String? = null
         var mangaTag: String? = null
 
         var event = parser.eventType
@@ -161,6 +163,7 @@ class CbzBookEngine(val file: File) : Closeable {
                     "title" -> title = parser.nextText().trim().ifBlank { null }
                     "series" -> series = parser.nextText().trim().ifBlank { null }
                     "writer" -> writer = parser.nextText().trim().ifBlank { null }
+                    "number" -> number = parser.nextText().trim().ifBlank { null }
                     "manga" -> mangaTag = parser.nextText().trim().ifBlank { null }
                 }
             }
@@ -172,7 +175,7 @@ class CbzBookEngine(val file: File) : Closeable {
             "no" -> MangaReadingDirection.LTR
             else -> MangaReadingDirection.UNKNOWN
         }
-        ComicInfo(title = title, series = series, writer = writer, mangaDirection = direction)
+        ComicInfo(title = title, series = series, writer = writer, number = number, mangaDirection = direction)
     }.getOrNull()
 
     override fun close() {

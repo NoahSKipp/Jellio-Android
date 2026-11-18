@@ -453,7 +453,7 @@ class PlayerViewModel @Inject constructor(
                     val startTicks = startPositionTicks ?: snapshot?.UserData?.PlaybackPositionTicks ?: 0L
                     val offlineTitle = if (isEpisode) snapshot?.SeriesName.orEmpty().ifBlank { offlineVideoEntry.title } else (snapshot?.Name ?: offlineVideoEntry.title)
                     val offlineArt = offlineVideoEntry.coverPath?.let { path ->
-                        listOf(com.jellio.android.ui.common.ArtCandidate(url = path, portrait = true))
+                        listOf(com.jellio.android.ui.common.ArtCandidate(url = path, blurred = false))
                     } ?: emptyList()
                     val offlinePauseInfo = PauseOverlayInfo(
                         art = offlineArt,

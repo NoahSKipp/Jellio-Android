@@ -34,6 +34,7 @@ class AppViewModel @Inject constructor(
     val nowPlayingManager: com.jellio.android.data.nowplaying.NowPlayingManager,
     val audiobookController: com.jellio.android.ui.audiobook.AudiobookPlayerController,
     val offlineDownloadManager: com.jellio.android.data.offline.OfflineDownloadManager,
+    val booksRepository: com.jellio.android.data.books.BooksRepository,
     private val sessionGuard: com.jellio.android.data.session.SessionGuard,
     private val syncPlayManager: com.jellio.android.data.syncplay.SyncPlayManager,
 ) : ViewModel() {

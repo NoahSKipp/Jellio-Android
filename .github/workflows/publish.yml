@@ -37,6 +37,10 @@ jobs:
           if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
             echo "$SIGNING_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/jellio-android.keystore"
             echo "SIGNING_KEYSTORE_FILE=$RUNNER_TEMP/jellio-android.keystore" >> "$GITHUB_ENV"
+            echo "REQUIRE_RELEASE_SIGNING=true" >> "$GITHUB_ENV"
+          else
+            echo "::warning::SIGNING_KEYSTORE_BASE64 secret is not configured; falling back to debug signing."
+            echo "REQUIRE_RELEASE_SIGNING=false" >> "$GITHUB_ENV"
           fi
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
@@ -44,7 +48,6 @@ jobs:
       - name: Assemble release APK
         run: ./gradlew :app:assembleRelease
         env:
-          REQUIRE_RELEASE_SIGNING: "true"
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}

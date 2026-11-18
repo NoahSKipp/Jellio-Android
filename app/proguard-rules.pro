@@ -6,6 +6,8 @@
 -keep class kotlin.Metadata { *; }
 -keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*
 -keep class com.jellio.android.data.model.** { *; }
+-keep class com.jellio.android.data.books.** { *; }
+-keep class com.jellio.android.data.offline.** { *; }
 -keep class com.jellio.android.data.cache.** { *; }
 -keep class com.jellio.android.data.prefs.** { *; }
 -keep class com.jellio.android.data.session.** { *; }
