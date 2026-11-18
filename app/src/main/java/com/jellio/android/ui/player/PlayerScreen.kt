@@ -61,6 +61,35 @@ fun PlayerScreen(
         onDispose { prebuiltPlayer.release() }
     }
     val frameRateActivity = context as? android.app.Activity
+    val hostView = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(frameRateActivity, hostView) {
+        hostView.keepScreenOn = true
+        val window = frameRateActivity?.window
+        val prevCutoutMode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P && window != null) {
+            window.attributes.layoutInDisplayCutoutMode.also {
+                window.attributes = window.attributes.apply {
+                    layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+            }
+        } else {
+            null
+        }
+        val controller = if (window != null) androidx.core.view.WindowCompat.getInsetsController(window, hostView) else null
+        controller?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        if (controller != null) {
+            controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        onDispose {
+            hostView.keepScreenOn = false
+            controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P && window != null && prevCutoutMode != null) {
+                window.attributes = window.attributes.apply {
+                    layoutInDisplayCutoutMode = prevCutoutMode
+                }
+            }
+            frameRateActivity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
     LaunchedEffect(uiState.videoFrameRate) {
         val fps = uiState.videoFrameRate
         if (frameRateActivity != null && fps != null && PlayerPrefs.matchFrameRate) {

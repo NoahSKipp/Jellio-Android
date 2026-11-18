@@ -1410,10 +1410,13 @@ private fun AssignCategoryDialog(
     onDismiss: () -> Unit,
     onSave: (List<String>) -> Unit,
 ) {
-    val normTarget = BooksRepository.normalizeId(targetKey)
+    val normTarget = BooksRepository.normalizeId(targetKey.removePrefix("i:").removePrefix("s:"))
     val initialSelected = remember(targetKey, categories) {
         categories.filter { cat ->
-            cat.Items.any { it == targetKey || BooksRepository.normalizeId(it) == normTarget }
+            cat.Items.any {
+                it == targetKey ||
+                    BooksRepository.normalizeId(it.removePrefix("i:").removePrefix("s:")) == normTarget
+            }
         }.map { it.Id }.toSet()
     }
     var selected by remember(initialSelected) { mutableStateOf(initialSelected) }

@@ -254,4 +254,7 @@ interface BooksApi {
 
     @DELETE("Jellio/downloads/conversions/{slotId}")
     suspend fun releaseConversionSlot(@Path("slotId") slotId: String): Response<Unit>
+
+    @POST("Jellio/trackers/sync")
+    suspend fun syncTracker(@Body body: TrackerSyncRequest): Response<Unit>
 }

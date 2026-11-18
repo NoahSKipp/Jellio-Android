@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -23,6 +27,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -69,57 +74,94 @@ private fun QrCode(text: String, modifier: Modifier = Modifier) {
 internal fun PairingOverlay(pairing: LivePairing, onNewCode: () -> Unit, onClose: () -> Unit) {
     BackHandler(onBack = onClose)
     val focus = remember { FocusRequester() }
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)), contentAlignment = Alignment.Center) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(40.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clip(RoundedCornerShape(24.dp)).background(JellioBgElevated).padding(40.dp),
-        ) {
-            Box(modifier = Modifier.size(280.dp).clip(RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
-                when {
-                    pairing.code.isEmpty() && !pairing.expired -> ScreenSpinner()
-                    !pairing.expired -> QrCode(pairing.url, Modifier.size(280.dp))
-                    else -> Box(Modifier.size(280.dp).background(Color.White.copy(alpha = 0.06f)))
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val isCompactWidth = screenWidthDp < 680
+    val qrSize = if (isCompactWidth) 200.dp else 280.dp
+
+    @Composable
+    fun QrBox() {
+        Box(modifier = Modifier.size(qrSize).clip(RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+            when {
+                pairing.code.isEmpty() && !pairing.expired -> ScreenSpinner()
+                !pairing.expired -> QrCode(pairing.url, Modifier.size(qrSize))
+                else -> Box(Modifier.size(qrSize).background(Color.White.copy(alpha = 0.06f)))
+            }
+        }
+    }
+
+    @Composable
+    fun DetailsColumn(modifier: Modifier = Modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = modifier) {
+            Text(text = Strings.get("live_link_qr_title"), style = MaterialTheme.typography.headlineSmall, color = JellioText)
+            Text(text = Strings.get("live_link_qr_scan"), color = JellioTextSecondary)
+            if (pairing.code.isNotEmpty() && !pairing.expired) {
+                val address = pairing.url.substringBefore("?")
+                Text(text = Strings.format("live_link_qr_manual", address, pairing.code), color = JellioTextSecondary)
+                Text(
+                    text = pairing.code,
+                    color = JellioText,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = if (isCompactWidth) 28.sp else 36.sp,
+                    letterSpacing = 6.sp,
+                )
+            }
+            pairing.addedName?.let {
+                Text(text = Strings.format("live_link_qr_added", it), color = Color(0xFF66BB6A), fontWeight = FontWeight.SemiBold)
+            }
+            if (pairing.expired) {
+                Text(text = Strings.get("live_link_qr_expired"), color = JellioTextSecondary)
+                Surface(
+                    onClick = onNewCode,
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
+                    colors = primaryButtonColors(),
+                    modifier = Modifier.focusRequester(focus),
+                ) {
+                    Text(text = Strings.get("live_link_qr_new"), modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                }
+            } else {
+                Surface(
+                    onClick = onClose,
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
+                    colors = primaryButtonColors(),
+                    modifier = Modifier.focusRequester(focus),
+                ) {
+                    Text(text = Strings.get("action_done"), modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 }
             }
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.width(460.dp)) {
-                Text(text = Strings.get("live_link_qr_title"), style = MaterialTheme.typography.headlineSmall, color = JellioText)
-                Text(text = Strings.get("live_link_qr_scan"), color = JellioTextSecondary)
-                if (pairing.code.isNotEmpty() && !pairing.expired) {
-                    val address = pairing.url.substringBefore("?")
-                    Text(text = Strings.format("live_link_qr_manual", address, pairing.code), color = JellioTextSecondary)
-                    Text(
-                        text = pairing.code,
-                        color = JellioText,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 36.sp,
-                        letterSpacing = 6.sp,
-                    )
-                }
-                pairing.addedName?.let {
-                    Text(text = Strings.format("live_link_qr_added", it), color = Color(0xFF66BB6A), fontWeight = FontWeight.SemiBold)
-                }
-                if (pairing.expired) {
-                    Text(text = Strings.get("live_link_qr_expired"), color = JellioTextSecondary)
-                    Surface(
-                        onClick = onNewCode,
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
-                        colors = primaryButtonColors(),
-                        modifier = Modifier.focusRequester(focus),
-                    ) {
-                        Text(text = Strings.get("live_link_qr_new"), modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                    }
-                } else {
-                    Surface(
-                        onClick = onClose,
-                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
-                        colors = primaryButtonColors(),
-                        modifier = Modifier.focusRequester(focus),
-                    ) {
-                        Text(text = Strings.get("action_done"), modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                    }
-                }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.75f))
+            .padding(16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (isCompactWidth) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 460.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(JellioBgElevated)
+                    .verticalScroll(rememberScrollState())
+                    .padding(24.dp),
+            ) {
+                QrBox()
+                DetailsColumn(modifier = Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(40.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clip(RoundedCornerShape(24.dp)).background(JellioBgElevated).padding(40.dp),
+            ) {
+                QrBox()
+                DetailsColumn(modifier = Modifier.width(460.dp))
             }
         }
     }

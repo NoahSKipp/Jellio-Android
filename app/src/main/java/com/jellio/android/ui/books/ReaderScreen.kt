@@ -219,7 +219,9 @@ fun ReaderScreen(
                     onPageChanged = viewModel::updateMangaPage,
                     onToggleHud = { hudVisible = !hudVisible },
                     onOpenAdjacentChapter = { ch ->
-                        onOpenChapter(ch.Id, ch.MangaId, ch.ChapterId)
+                        val nextMangaId = ch.MangaId.takeIf { it > 0 }
+                        val nextChapterId = ch.ChapterId.takeIf { it > 0 }
+                        onOpenChapter(ch.Id, nextMangaId, nextChapterId)
                     },
                 )
                 if (state.mangaBrightness < 0.99f) {
@@ -414,6 +416,7 @@ fun ReaderScreen(
         ReaderStudySheet(
             study = study,
             onDismiss = viewModel::closeStudyPopover,
+            onSelectedTextChange = viewModel::updateStudySelectedText,
             onHighlightColorSelect = viewModel::updateStudyHighlightColor,
             onHighlightNoteChange = viewModel::updateStudyHighlightNote,
             onSaveHighlight = viewModel::saveHighlightFromStudy,
@@ -1559,6 +1562,7 @@ private fun AnnotationsDrawerSheet(
 fun ReaderStudySheet(
     study: ReaderStudyState,
     onDismiss: () -> Unit,
+    onSelectedTextChange: (String) -> Unit = {},
     onHighlightColorSelect: (String) -> Unit,
     onHighlightNoteChange: (String) -> Unit,
     onSaveHighlight: () -> Unit,
@@ -1566,6 +1570,14 @@ fun ReaderStudySheet(
     onSaveToVocab: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val contextWords = remember(study.sentenceContext) {
+        study.sentenceContext
+            .split(Regex("""\s+"""))
+            .map { it.trim { ch -> !ch.isLetterOrDigit() && ch != '\'' && ch != '-' } }
+            .filter { it.length >= 2 }
+            .distinct()
+            .take(40)
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -1581,20 +1593,29 @@ fun ReaderStudySheet(
         ) {
             Text("Study & Highlight", color = JellioText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
 
-            if (study.selectedText.isNotBlank()) {
-                Surface(
-                    color = JellioBgElevated,
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, JellioBorder),
-                ) {
-                    Text(
-                        text = study.selectedText,
-                        color = JellioText,
-                        fontSize = 14.sp,
-                        maxLines = 5,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(12.dp),
-                    )
+            OutlinedTextField(
+                value = study.selectedText,
+                onValueChange = onSelectedTextChange,
+                label = { Text("Word or passage to study / highlight", color = JellioTextSecondary, fontSize = 12.sp) },
+                colors = jellioTextFieldColors(),
+                maxLines = 4,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (contextWords.size > 1) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Tap a word in the sentence to define:", color = JellioTextSecondary, fontSize = 11.sp)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(contextWords) { word ->
+                            val isSelected = study.selectedText.trim().equals(word, ignoreCase = true)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { onSelectedTextChange(word) },
+                                label = { Text(word, fontSize = 12.sp) },
+                                colors = jellioChipColors(),
+                            )
+                        }
+                    }
                 }
             }
 

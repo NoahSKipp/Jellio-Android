@@ -584,9 +584,12 @@ private fun JellioApp(
                                         )
                                     }
                                     item.Type == "AudioBook" -> {
+                                        val tracks = runCatching {
+                                            appViewModel.booksRepository.getAudiobookTracks(session.userId, item)
+                                        }.getOrNull().orEmpty().ifEmpty { listOf(item) }
                                         appViewModel.offlineDownloadManager.queueAudiobookDownload(
                                             item = item,
-                                            tracks = listOf(item),
+                                            tracks = tracks,
                                             userIdOverride = session.userId,
                                         )
                                     }

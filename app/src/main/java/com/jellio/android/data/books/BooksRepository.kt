@@ -87,7 +87,8 @@ class BooksRepository @Inject constructor(
 
         return when (kind) {
             "audiobook" -> collapseAudiobookTracks(raw)
-            "ebook" -> raw.filterNot { isComicItem(it) }
+            "ebook" -> raw.filterNot { isComicOrManga(it) }
+            "manga" -> raw.filter { isComicOrManga(it) }
             else -> raw
         }
     }
@@ -148,8 +149,25 @@ class BooksRepository @Inject constructor(
 
         if (tracks.isNullOrEmpty()) {
             val offline = offlineDownloads.getDownload(item.Id, userId)
-            if (offline != null && offline.tracksSnapshot.isNotEmpty()) {
-                return offline.tracksSnapshot
+            if (offline != null) {
+                if (offline.tracksSnapshot.isNotEmpty()) {
+                    return offline.tracksSnapshot
+                }
+                if (offline.audiobookTracks.isNotEmpty()) {
+                    return offline.audiobookTracks.mapIndexed { idx, t ->
+                        BaseItemDto(
+                            Id = t.trackId,
+                            Name = t.title.ifBlank { "Track ${t.indexNumber ?: (idx + 1)}" },
+                            Type = "AudioBook",
+                            RunTimeTicks = t.durationTicks.takeIf { it > 0L },
+                            IndexNumber = t.indexNumber ?: (idx + 1),
+                            ParentId = item.ParentId,
+                            Album = item.Album ?: item.Name,
+                            AlbumId = item.AlbumId ?: item.Id,
+                            AlbumArtist = item.AlbumArtist,
+                        )
+                    }
+                }
             }
             return listOf(item)
         }
@@ -492,7 +510,14 @@ class BooksRepository @Inject constructor(
 
     suspend fun updateShelfMembership(kind: String, keys: List<String>, categoryIds: List<String>): Result<Unit> =
         catching {
-            api.updateShelfMembership(kind, ShelfMembershipRequest(Keys = keys, CategoryIds = categoryIds))
+            val formattedKeys = keys.map { raw ->
+                when {
+                    raw.startsWith("i:") || raw.startsWith("s:") -> raw
+                    kind == "manga" -> "s:$raw"
+                    else -> "i:${normalizeId(raw)}"
+                }
+            }
+            api.updateShelfMembership(kind, ShelfMembershipRequest(Keys = formattedKeys, CategoryIds = categoryIds))
             Unit
         }
 
@@ -579,6 +604,15 @@ class BooksRepository @Inject constructor(
     suspend fun migrateManga(fromMangaId: Int, toMangaId: Int, toTitle: String? = null): Result<MangaMigrateResultDto> =
         catching { api.migrateManga(MangaMigrateBody(fromMangaId, toMangaId, toTitle)) }
 
+    suspend fun syncTracker(seriesKey: String?, mangaId: Int?): Result<Unit> =
+        catching {
+            val cleanKey = seriesKey?.removePrefix("s:")?.takeIf { it.isNotBlank() }
+            if (cleanKey != null || mangaId != null) {
+                api.syncTracker(TrackerSyncRequest(Key = cleanKey, MangaId = mangaId))
+            }
+            Unit
+        }
+
     // --- URL builders ---
 
     suspend fun bookCoverUrl(itemId: String): String? {
@@ -642,39 +676,72 @@ class BooksRepository @Inject constructor(
         contentType: String = "",
     ): BookFileFormat {
         val ext = (pathHint ?: file.name).substringAfterLast('.', "").lowercase(Locale.US)
-        when (ext) {
-            "epub" -> return BookFileFormat.EPUB
-            "pdf" -> return BookFileFormat.PDF
-            "cbz", "cbr", "cb7", "cbt" -> return BookFileFormat.CBZ
-        }
-        if (contentType.contains("epub", ignoreCase = true)) return BookFileFormat.EPUB
-        if (contentType.contains("pdf", ignoreCase = true)) return BookFileFormat.PDF
-        if (contentType.contains("comicbook", ignoreCase = true)) return BookFileFormat.CBZ
+        if (ext == "pdf") return BookFileFormat.PDF
+        if (ext in listOf("cbz", "cbr", "cb7", "cbt")) return BookFileFormat.CBZ
+
         val header = ByteArray(4)
-        runCatching { file.inputStream().use { it.read(header) } }
-        if (header[0] == '%'.code.toByte() && header[1] == 'P'.code.toByte() &&
+        val bytesRead = runCatching { file.inputStream().use { it.read(header) } }.getOrDefault(0)
+        if (bytesRead >= 4 &&
+            header[0] == '%'.code.toByte() && header[1] == 'P'.code.toByte() &&
             header[2] == 'D'.code.toByte() && header[3] == 'F'.code.toByte()
         ) {
             return BookFileFormat.PDF
         }
-        if (header[0] == 'P'.code.toByte() && header[1] == 'K'.code.toByte()) {
-            val hasMimetype = runCatching {
+        if (bytesRead >= 2 && header[0] == 'P'.code.toByte() && header[1] == 'K'.code.toByte()) {
+            val zipFormat = runCatching {
                 java.util.zip.ZipFile(file).use { z ->
-                    val entry = z.getEntry("mimetype") ?: return@use false
-                    z.getInputStream(entry).readBytes().toString(Charsets.UTF_8).contains("epub")
+                    val hasContainer = z.getEntry("META-INF/container.xml") != null
+                    val mimeEntry = z.getEntry("mimetype")
+                    val hasEpubMime = mimeEntry != null &&
+                        z.getInputStream(mimeEntry).use { it.readBytes().toString(Charsets.UTF_8) }
+                            .contains("epub", ignoreCase = true)
+                    if (hasContainer || hasEpubMime) {
+                        BookFileFormat.EPUB
+                    } else {
+                        var hasImages = false
+                        val entries = z.entries()
+                        while (entries.hasMoreElements()) {
+                            val e = entries.nextElement()
+                            if (!e.isDirectory && CbzBookEngine.isSupportedImage(e.name)) {
+                                hasImages = true
+                                break
+                            }
+                        }
+                        if (hasImages || ext != "epub") BookFileFormat.CBZ else BookFileFormat.EPUB
+                    }
                 }
-            }.getOrDefault(false)
-            return if (hasMimetype) BookFileFormat.EPUB else BookFileFormat.CBZ
+            }.getOrNull()
+            if (zipFormat != null) return zipFormat
         }
+        if (ext == "epub") return BookFileFormat.EPUB
+        if (contentType.contains("epub", ignoreCase = true)) return BookFileFormat.EPUB
+        if (contentType.contains("pdf", ignoreCase = true)) return BookFileFormat.PDF
+        if (contentType.contains("comicbook", ignoreCase = true)) return BookFileFormat.CBZ
         return BookFileFormat.UNKNOWN
     }
 
     companion object {
         private val COMIC_REGEX = Regex("""\.(cbz|cbr|cb7|cbt)$""", RegexOption.IGNORE_CASE)
+        private val CHAPTER_NAME_REGEX = Regex(
+            """\b(ch(apter)?|ep(isode)?|vol(ume)?|issue|part)\s*\d+|\b(prologue|epilogue|oneshot|one-shot)\b""",
+            RegexOption.IGNORE_CASE,
+        )
+        private val COMIC_PATH_REGEX = Regex(
+            """(/|\\)(manga|comics?|manhwa|manhua|webtoons?)(/|\\)""",
+            RegexOption.IGNORE_CASE,
+        )
         private val NON_ALNUM_REGEX = Regex("""[^a-z0-9]+""")
 
         fun isComicItem(item: BaseItemDto): Boolean =
             !item.Path.isNullOrBlank() && COMIC_REGEX.containsMatchIn(item.Path)
+
+        fun isComicOrManga(item: BaseItemDto): Boolean {
+            if (isComicItem(item)) return true
+            if (!item.SeriesName.isNullOrBlank()) return true
+            if (!item.Path.isNullOrBlank() && COMIC_PATH_REGEX.containsMatchIn(item.Path)) return true
+            if (!item.Name.isNullOrBlank() && CHAPTER_NAME_REGEX.containsMatchIn(item.Name)) return true
+            return false
+        }
 
         fun normalizeId(id: String): String =
             id.replace("-", "").lowercase(Locale.US)

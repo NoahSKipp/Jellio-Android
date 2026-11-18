@@ -1,15 +1,85 @@
-# Jellio for Android
+<p align="center">
+  <img src="assets/jellio-mark-animated.svg" width="140" alt="Jellio for Android">
+</p>
 
-Native Android mobile client for [Jellio](https://github.com/NoahSKipp/Jellio) and Jellyfin servers, built with Kotlin, Jetpack Compose, and Media3 ExoPlayer.
+<h1 align="center">Jellio for Android</h1>
 
-## Highlights
+<p align="center">
+  The native Android phone and tablet client for Jellio, built with Kotlin,<br>
+  Jetpack Compose, and Media3 ExoPlayer.
+</p>
 
-- **Floating Pill Navigation**: Mobile-first glassmorphic floating pill bottom navigation bar with adaptive sidebar fallback for landscape and tablet screens.
-- **Native Video & Live TV Playback**: Direct play and HLS transcoding with Media3 ExoPlayer, touch gestures (vertical brightness/volume swipe, double-tap +/-10s seek), intro/credits skip segments, trickplay thumbnails, and GroupWatch / SyncPlay.
-- **Native Book & Manga Reader**:
-  - **EPUB**: Reflowable reader (paged or continuous vertical scroll), typography customization, Dark/Sepia/Light themes, table of contents, full-book search, and 5-color highlights with notes.
-  - **PDF**: High-DPI native rendering via Android `PdfRenderer` with pinch-to-zoom, double-tap zoom, and page scrubber.
-  - **Manga & Comics**: Local CBZ archives and streamed Suwayomi chapters with 5 reading modes (RTL, LTR, Vertical Webtoon, Vertical with Gaps, Double-Page Spread), scanlator filters, brightness dimmer, and color filters.
-  - **Language & Vocabulary Study**: Inline Wiktionary definitions, DeepL translation, and SM-2 Spaced Repetition Vocabulary flashcards with CSV / Anki export.
-- **Native Audiobook Player & Mini-Player**: Multi-track and single-file M4B playback with embedded chapter markers, variable playback speed (0.75x to 2.0x), sleep timer with gradual 15-second audio fade-out, and a persistent docked mini-player.
-- **Offline Storage & Sync Queue**: Full offline download manager for movies, episodes, books, manga chapters, and audiobooks with automatic offline reading/listening progress queueing and replay on reconnect.
+## Features
+
+- **Adaptive mobile & tablet interface**: floating glassmorphic pill bottom
+  navigation on phones in portrait, adaptive sidebar navigation on tablets and
+  landscape screens, seasonal home screen effects, and guided onboarding.
+- **Home, discovery & Studio Hubs**: hero showcase, Continue Watching, Next Up,
+  weighted personal Top Picks, Because You Watched, Studio Hubs, infinite genre
+  rows, Coming Soon calendar, customizable row layouts synced with your server,
+  typo-tolerant fuzzy search, and rich TMDB actor and crew pages.
+- **Video player & stream intelligence**: Media3 ExoPlayer with direct play and
+  HLS, vertical swipe gestures for brightness and volume, double-tap seek,
+  pinch-to-zoom and aspect ratio toggle, touch lock, screen rotation toggle,
+  Picture-in-Picture with live transport controls, immersive edge-to-edge
+  fullscreen, proactive stream warmup with `Ready` badges, automatic failover,
+  multi-edition selector, subtitle sync, and multi-tier Skip Intro and Skip
+  Credits.
+- **Books, manga & language study**: dedicated Books, Audiobooks, and Manga
+  shelves with synced custom categories; reflowable EPUB reader with inline
+  images, Dark/Sepia/Light themes, typography controls, full-book search,
+  5-color highlights, notes, and Android TextToSpeech read-aloud; native high-DPI
+  PDF reader with pinch-to-zoom; CBZ and live Suwayomi manga reader with 5
+  reading modes, scanlator filters, and tracker sync; inline Wiktionary and DeepL
+  lookup with word chips and SM-2 spaced-repetition vocabulary flashcards.
+- **Audiobook player & background service**: multi-track and single-file M4B
+  playback, embedded chapter markers, chapter boundary tick marks and scrub
+  preview, timestamp bookmarks, 0.75x to 2.0x playback speed, sleep timer with
+  gradual 15-second audio fade-out, a persistent docked mini-player, and a native
+  Android `MediaSessionService` for background notifications, lock-screen
+  controls, and Bluetooth headset controls.
+- **Offline downloads & progress sync**: full offline download manager for
+  movies, episodes, books, manga chapters, and multi-track audiobooks with
+  offline bookshelf browsing and automatic reading, listening, and playback
+  progress replay on reconnect.
+- **Live TV, Group Watch, Friends & Ani-Sync**: Live TV player with channel
+  health badges and EPG guide, SyncPlay watch parties, Friends and shared
+  watchlists, user profiles with achievement badges and activity feed, per-user
+  two-way Ani-Sync (AniList, MyAnimeList, Shikimori, Simkl), localization in 7
+  languages (English, German, Spanish, French, Italian, Polish, Portuguese), and
+  much more.
+
+## Install & Updates
+
+1. Download the latest `.apk` from
+   [GitHub Releases](https://github.com/NoahSKipp/Jellio-Android/releases/latest)
+   on your Android phone or tablet and open it to install.
+2. You also need a Jellyfin server running the
+   [Jellio plugin](https://github.com/NoahSKipp/Jellio).
+3. Enter your Jellyfin server address and sign in with your Jellyfin account.
+
+Jellio for Android checks for new releases automatically and supports
+signature-verified in-app updates from **Settings > About > Check for Updates**.
+
+## Build from source
+
+```bash
+git clone https://github.com/NoahSKipp/Jellio-Android.git
+cd Jellio-Android
+./gradlew :app:assembleDebug
+```
+
+Development requires a JDK and the Android SDK.
+
+## Credits
+
+- UI/UX and architecture adapted from
+  [Jellio](https://github.com/NoahSKipp/Jellio) and
+  [Jellio TV](https://github.com/NoahSKipp/Jellio-TV), inspired by
+  [NuvioTV](https://github.com/NuvioMedia/NuvioTV)
+- Ani-Sync inspired by and adapted from
+  [vosmiic/jellyfin-ani-sync](https://github.com/vosmiic/jellyfin-ani-sync)
+
+## License
+
+GNU General Public License v3.0

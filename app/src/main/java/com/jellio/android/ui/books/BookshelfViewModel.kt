@@ -319,7 +319,7 @@ class BookshelfViewModel @Inject constructor(
                                 subtitle = author,
                                 coverUrl = cover,
                                 progress = prog.Progress.coerceIn(0.0, 1.0),
-                                kind = if (BooksRepository.isComicItem(item)) "manga" else "book",
+                                kind = if (BooksRepository.isComicOrManga(item)) "manga" else "book",
                             )
                         }
 
@@ -343,7 +343,7 @@ class BookshelfViewModel @Inject constructor(
                         val localComicsDeferred = async {
                             state.libraries.flatMap { lib ->
                                 booksRepository.getBookshelfItems(uid, lib.Id, "manga")
-                                    .filter { BooksRepository.isComicItem(it) }
+                                    .filter { BooksRepository.isComicOrManga(it) }
                             }.distinctBy { BooksRepository.normalizeId(it.Id) }
                         }
 
@@ -1120,7 +1120,9 @@ class BookshelfViewModel @Inject constructor(
         val state = _uiState.value
         val shelf = state.shelfByKind[state.activeTab.kind]
         val catIds = state.selectedCategoryId?.let { id ->
-            shelf?.Categories?.firstOrNull { it.Id == id }?.Items?.map { BooksRepository.normalizeId(it) }?.toSet()
+            shelf?.Categories?.firstOrNull { it.Id == id }?.Items?.map {
+                BooksRepository.normalizeId(it.removePrefix("i:").removePrefix("s:"))
+            }?.toSet()
         }
         val q = state.searchQuery.trim().lowercase()
         val filtered = items.filter { item ->
@@ -1157,13 +1159,16 @@ class BookshelfViewModel @Inject constructor(
     fun filteredMangaSeries(): List<MangaSeriesDisplayItem> {
         val state = _uiState.value
         val shelf = state.shelfByKind[BookshelfTab.MANGA.kind]
+        val removed = shelf?.LibraryRemoved.orEmpty().toSet()
         val catItems = state.selectedCategoryId?.let { id ->
             shelf?.Categories?.firstOrNull { it.Id == id }?.Items?.toSet()
         }
         val q = state.searchQuery.trim().lowercase()
         val filtered = state.mangaSeries.filter { series ->
-            val sKey = if (series.key.startsWith("s:")) series.key else "s:${series.key}"
-            if (catItems != null && series.key !in catItems && sKey !in catItems) return@filter false
+            val rawKey = series.key.removePrefix("s:")
+            val sKey = "s:$rawKey"
+            if (rawKey in removed || sKey in removed || series.key in removed) return@filter false
+            if (catItems != null && series.key !in catItems && sKey !in catItems && rawKey !in catItems) return@filter false
             if (q.isNotEmpty()) {
                 val matchTitle = series.title.lowercase().contains(q)
                 val matchAuthor = series.author.orEmpty().lowercase().contains(q)

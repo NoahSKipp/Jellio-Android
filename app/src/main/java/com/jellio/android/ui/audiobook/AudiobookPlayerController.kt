@@ -1,12 +1,16 @@
 package com.jellio.android.ui.audiobook
 
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.annotation.OptIn
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.snapshotFlow
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -18,10 +22,13 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
+import com.jellio.android.MainActivity
 import com.jellio.android.data.JellioRepository
 import com.jellio.android.data.PlaybackRepository
+import com.jellio.android.data.books.AnnotationDto
 import com.jellio.android.data.books.AudiobookChapterDto
 import com.jellio.android.data.books.BooksRepository
+import com.jellio.android.data.books.CreateAnnotationRequest
 import com.jellio.android.data.books.ReadingSessionRequest
 import com.jellio.android.data.catching
 import com.jellio.android.data.model.BaseItemDto
@@ -86,7 +93,11 @@ data class AudiobookPlaybackState(
     val coverUrl: String? = null,
     val author: String = "",
     val offlineDownload: OfflineDownloadItem? = null,
+    val bookmarks: List<AnnotationDto> = emptyList(),
 )
+
+typealias AudiobookPlayerState = AudiobookPlaybackState
+typealias BookAnnotation = AnnotationDto
 
 @Singleton
 class AudiobookPlayerController @Inject constructor(
@@ -228,13 +239,30 @@ class AudiobookPlayerController @Inject constructor(
         val userId = withContext(Dispatchers.IO) { booksRepository.currentUserId() } ?: "default"
         val offlineRecord = offlineDownloadManager.getDownload(book.Id, userId)
         val tracks = withContext(Dispatchers.IO) {
-            val loaded = booksRepository.getAudiobookTracks(userId, book)
-            if (loaded.isNotEmpty()) {
-                loaded
-            } else if (offlineRecord != null && offlineRecord.tracksSnapshot.isNotEmpty()) {
-                offlineRecord.tracksSnapshot
-            } else {
-                listOf(book)
+            val loaded = runCatching { booksRepository.getAudiobookTracks(userId, book) }.getOrNull().orEmpty()
+            val isSyntheticSingleZero = loaded.size <= 1 && (loaded.firstOrNull()?.RunTimeTicks ?: 0L) <= 0L
+            when {
+                offlineRecord != null && offlineRecord.audiobookTracks.isNotEmpty() && (loaded.isEmpty() || isSyntheticSingleZero) -> {
+                    offlineRecord.audiobookTracks.mapIndexed { idx, t ->
+                        BaseItemDto(
+                            Id = t.trackId,
+                            Name = t.title.ifBlank { "Track ${t.indexNumber ?: (idx + 1)}" },
+                            Type = "AudioBook",
+                            RunTimeTicks = t.durationTicks.takeIf { it > 0L },
+                            IndexNumber = t.indexNumber ?: (idx + 1),
+                            ParentId = book.ParentId,
+                            Album = book.Album ?: book.Name,
+                            AlbumId = book.AlbumId ?: book.Id,
+                            AlbumArtist = book.AlbumArtist,
+                        )
+                    }
+                }
+                offlineRecord != null && offlineRecord.tracksSnapshot.isNotEmpty() && (loaded.isEmpty() || isSyntheticSingleZero) -> {
+                    offlineRecord.tracksSnapshot
+                }
+                loaded.isNotEmpty() -> loaded
+                offlineRecord != null && offlineRecord.tracksSnapshot.isNotEmpty() -> offlineRecord.tracksSnapshot
+                else -> listOf(book)
             }
         }
 
@@ -257,6 +285,10 @@ class AudiobookPlayerController @Inject constructor(
             } else {
                 readCachedChapters(resolvedBook.Id)
             }
+        }
+
+        val initialBookmarks = withContext(Dispatchers.IO) {
+            booksRepository.getAnnotations(resolvedBook.Id).filter { it.Kind == "bookmark" }
         }
 
         val cover = withContext(Dispatchers.IO) { resolveCoverUrl(resolvedBook, userId) }
@@ -294,9 +326,11 @@ class AudiobookPlayerController @Inject constructor(
             coverUrl = cover,
             author = resolveAuthor(resolvedBook),
             offlineDownload = offlineRecord,
+            bookmarks = initialBookmarks,
         )
 
         ensurePlayerCreated(speed)
+        startPlaybackForegroundService()
         startBackgroundTickers()
         loadTrack(index = resumeTrackIdx, offsetMs = resumeOffsetMs, autoPlay = true)
     }
@@ -502,6 +536,69 @@ class AudiobookPlayerController @Inject constructor(
         }
     }
 
+    fun addBookmark(note: String? = null) {
+        val current = _state.value
+        val book = current.bookItem ?: return
+        val positionSec = (current.currentPositionMs / 1000.0).coerceAtLeast(0.0)
+        val totalSec = (current.totalDurationMs / 1000.0).coerceAtLeast(1.0)
+        val progress = (positionSec / totalSec).coerceIn(0.0, 1.0)
+        val currentChapterTitle = current.chapters.getOrNull(current.currentChapterIndex)?.Title?.takeIf { it.isNotBlank() }
+            ?: "Chapter ${current.currentChapterIndex + 1}"
+        val clockText = formatDurationClock(positionSec)
+
+        mainScope.launch {
+            val created = withContext(Dispatchers.IO) {
+                booksRepository.addAnnotation(
+                    itemId = book.Id,
+                    request = CreateAnnotationRequest(
+                        Kind = "bookmark",
+                        Locator = "audio:${positionSec.toInt()}",
+                        Position = progress,
+                        Text = clockText,
+                        Note = note?.trim()?.ifBlank { null },
+                        Chapter = currentChapterTitle,
+                    ),
+                )
+            }
+            _state.value = _state.value.copy(
+                bookmarks = (_state.value.bookmarks + created).sortedBy { parseBookmarkSeconds(it.Locator) },
+            )
+        }
+    }
+
+    fun deleteBookmark(annotationId: String) {
+        val book = _state.value.bookItem ?: return
+        mainScope.launch {
+            withContext(Dispatchers.IO) {
+                booksRepository.deleteAnnotation(book.Id, annotationId)
+            }
+            _state.value = _state.value.copy(
+                bookmarks = _state.value.bookmarks.filterNot { it.Id == annotationId },
+            )
+        }
+    }
+
+    fun jumpToBookmark(bookmark: AnnotationDto) {
+        val sec = parseBookmarkSeconds(bookmark.Locator)
+        if (sec >= 0L) {
+            seekToBookPositionMs(sec * 1000L)
+        } else if (bookmark.Position > 0.0 && _state.value.totalDurationMs > 0L) {
+            seekToBookPositionMs((_state.value.totalDurationMs * bookmark.Position).toLong())
+        }
+    }
+
+    fun getOrCreateMediaSession(): MediaSession? {
+        ensurePlayerCreated(_state.value.playbackSpeed)
+        return mediaSession
+    }
+
+    private fun startPlaybackForegroundService() {
+        runCatching {
+            val intent = Intent(context, AudiobookPlaybackService::class.java)
+            context.startService(intent)
+        }
+    }
+
     @OptIn(UnstableApi::class)
     private fun ensurePlayerCreated(speed: Float) {
         if (player != null) {
@@ -536,6 +633,8 @@ class AudiobookPlayerController @Inject constructor(
             .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
+            .setSeekBackIncrementMs(15_000L)
+            .setSeekForwardIncrementMs(30_000L)
             .build()
             .apply {
                 setWakeMode(C.WAKE_MODE_NETWORK)
@@ -544,9 +643,72 @@ class AudiobookPlayerController @Inject constructor(
                 addListener(playerListener)
             }
 
+        val forwardingPlayer = object : ForwardingPlayer(exo) {
+            override fun getAvailableCommands(): Player.Commands {
+                return super.getAvailableCommands()
+                    .buildUpon()
+                    .addAll(
+                        Player.COMMAND_SEEK_TO_NEXT,
+                        Player.COMMAND_SEEK_TO_PREVIOUS,
+                        Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                        Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+                        Player.COMMAND_SEEK_BACK,
+                        Player.COMMAND_SEEK_FORWARD,
+                    )
+                    .build()
+            }
+
+            override fun isCommandAvailable(command: Int): Boolean {
+                return when (command) {
+                    Player.COMMAND_SEEK_TO_NEXT,
+                    Player.COMMAND_SEEK_TO_PREVIOUS,
+                    Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                    Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+                    Player.COMMAND_SEEK_BACK,
+                    Player.COMMAND_SEEK_FORWARD,
+                    -> true
+                    else -> super.isCommandAvailable(command)
+                }
+            }
+
+            override fun seekToNext() {
+                nextChapter()
+            }
+
+            override fun seekToNextMediaItem() {
+                nextChapter()
+            }
+
+            override fun seekToPrevious() {
+                previousChapter()
+            }
+
+            override fun seekToPreviousMediaItem() {
+                previousChapter()
+            }
+
+            override fun seekBack() {
+                skipBackward15s()
+            }
+
+            override fun seekForward() {
+                skipForward30s()
+            }
+        }
+
+        val sessionActivityIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT or
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        val pendingIntent = PendingIntent.getActivity(context, 1001, sessionActivityIntent, pendingFlags)
+
         player = exo
         mediaSession = runCatching {
-            MediaSession.Builder(context, exo).build()
+            MediaSession.Builder(context, forwardingPlayer)
+                .setId("jellio_audiobook")
+                .setSessionActivity(pendingIntent)
+                .build()
         }.getOrNull()
     }
 
@@ -555,14 +717,26 @@ class AudiobookPlayerController @Inject constructor(
             _state.value = _state.value.copy(isPlaying = isPlaying)
             if (isPlaying) {
                 lastPositionSampleAtMs = System.currentTimeMillis()
+                startPlaybackForegroundService()
             } else {
                 sampleListeningTime(forceReset = true)
                 saveLocalResumePosition()
                 val trackId = reportedTrackId
+                val bookId = _state.value.bookItem?.Id
                 val trackPosTicks = (player?.currentPosition ?: 0L).coerceAtLeast(0L) * TICKS_PER_MS
                 if (trackId != null) {
                     mainScope.launch(Dispatchers.IO) {
-                        jellioRepository.reportPlaybackProgress(trackId, trackId, trackPosTicks, isPaused = true)
+                        val res = catching {
+                            jellioRepository.reportPlaybackProgress(trackId, trackId, trackPosTicks, isPaused = true)
+                        }
+                        if (res.isFailure && !bookId.isNullOrBlank()) {
+                            offlineDownloadManager.queueAudiobookProgressMutation(
+                                itemId = bookId,
+                                trackId = trackId,
+                                positionTicks = trackPosTicks,
+                                played = false,
+                            )
+                        }
                     }
                 }
                 flushListeningSession(finishedBook = false)
@@ -836,9 +1010,10 @@ class AudiobookPlayerController @Inject constructor(
         val current = _state.value
         val total = current.totalDurationMs.coerceAtLeast(bookPosMs)
         val chIdx = chapterIndexAt(current.chapters, bookPosMs)
+        val chapterChanged = current.currentChapterIndex != chIdx
         if (
             current.currentPositionMs != bookPosMs ||
-            current.currentChapterIndex != chIdx ||
+            chapterChanged ||
             current.totalDurationMs != total
         ) {
             _state.value = current.copy(
@@ -846,6 +1021,29 @@ class AudiobookPlayerController @Inject constructor(
                 currentChapterIndex = chIdx,
                 totalDurationMs = total,
             )
+            if (chapterChanged) {
+                updateActiveMediaItemMetadata(chIdx)
+            }
+        }
+    }
+
+    private fun updateActiveMediaItemMetadata(chapterIndex: Int) {
+        val p = player ?: return
+        val currentItem = p.currentMediaItem ?: return
+        val current = _state.value
+        val bookTitle = current.bookItem?.Name ?: "Audiobook"
+        val chapterTitle = current.chapters.getOrNull(chapterIndex)?.Title?.takeIf { it.isNotBlank() } ?: bookTitle
+        val updatedMeta = currentItem.mediaMetadata.buildUpon()
+            .setTitle(chapterTitle)
+            .setAlbumTitle(bookTitle)
+            .setDisplayTitle(chapterTitle)
+            .setSubtitle(bookTitle)
+            .build()
+        val updatedItem = currentItem.buildUpon()
+            .setMediaMetadata(updatedMeta)
+            .build()
+        runCatching {
+            p.replaceMediaItem(p.currentMediaItemIndex, updatedItem)
         }
     }
 
@@ -873,6 +1071,7 @@ class AudiobookPlayerController @Inject constructor(
     private fun reportTrackStopped(finishedTrack: Boolean) {
         val trackId = reportedTrackId ?: return
         reportedTrackId = null
+        val bookId = _state.value.bookItem?.Id
         val trackDurMs = trackDurationsMs.getOrElse(currentTrackIndex) { 0L }
         val posMs = if (finishedTrack && trackDurMs > 0L) {
             trackDurMs
@@ -881,7 +1080,17 @@ class AudiobookPlayerController @Inject constructor(
         }
         val ticks = posMs * TICKS_PER_MS
         mainScope.launch(Dispatchers.IO) {
-            jellioRepository.reportPlaybackStopped(trackId, trackId, ticks)
+            val res = catching {
+                jellioRepository.reportPlaybackStopped(trackId, trackId, ticks)
+            }
+            if (res.isFailure && !bookId.isNullOrBlank()) {
+                offlineDownloadManager.queueAudiobookProgressMutation(
+                    itemId = bookId,
+                    trackId = trackId,
+                    positionTicks = ticks,
+                    played = finishedTrack,
+                )
+            }
         }
     }
 
@@ -1011,14 +1220,38 @@ class AudiobookPlayerController @Inject constructor(
             cursor += trackDurationsMs[i]
         }
         val current = _state.value
-        val updatedChapters = if (current.chapters.size == 1 && current.chapters[0].DurationSeconds <= 0.0) {
-            listOf(current.chapters[0].copy(DurationSeconds = cursor / 1000.0))
-        } else {
-            current.chapters
+        val updatedTracks = current.tracks.mapIndexed { idx, t ->
+            if (idx == trackIndex && (t.RunTimeTicks ?: 0L) <= 0L) {
+                t.copy(RunTimeTicks = durationMs * TICKS_PER_MS)
+            } else {
+                t
+            }
         }
+        val updatedChapters = when {
+            current.chapters.size == 1 && current.chapters[0].DurationSeconds <= 0.0 -> {
+                listOf(current.chapters[0].copy(DurationSeconds = cursor / 1000.0))
+            }
+            current.chapters.size == updatedTracks.size && current.chapters.any { it.DurationSeconds <= 0.0 } -> {
+                updatedTracks.mapIndexed { idx, track ->
+                    val startSec = trackStartsMs.getOrElse(idx) { 0L } / 1000.0
+                    val durSec = trackDurationsMs.getOrElse(idx) { 0L } / 1000.0
+                    val existingTitle = current.chapters.getOrNull(idx)?.Title?.takeIf { it.isNotBlank() }
+                    AudiobookChapterDto(
+                        Title = existingTitle ?: track.Name?.takeIf { it.isNotBlank() } ?: "Part ${idx + 1}",
+                        StartSeconds = startSec,
+                        DurationSeconds = durSec,
+                        TrackId = track.Id,
+                        TrackOffsetSeconds = 0.0,
+                    )
+                }
+            }
+            else -> current.chapters
+        }
+        val newTotal = maxOf(current.totalDurationMs, computeTotalDurationMs(updatedChapters), cursor)
         _state.value = current.copy(
+            tracks = updatedTracks,
             chapters = updatedChapters,
-            totalDurationMs = maxOf(current.totalDurationMs, cursor),
+            totalDurationMs = newTotal,
         )
     }
 
@@ -1180,5 +1413,27 @@ class AudiobookPlayerController @Inject constructor(
             }
             sdf.parse(cleaned)?.time ?: 0L
         }.getOrDefault(0L)
+    }
+
+    companion object {
+        fun parseBookmarkSeconds(locator: String): Long {
+            val clean = locator.trim()
+            if (clean.startsWith("audio:", ignoreCase = true)) {
+                return clean.substringAfter(':').toDoubleOrNull()?.toLong() ?: -1L
+            }
+            return clean.toDoubleOrNull()?.toLong() ?: -1L
+        }
+
+        fun formatDurationClock(seconds: Double): String {
+            val totalSec = seconds.toLong().coerceAtLeast(0L)
+            val hrs = totalSec / 3600L
+            val mins = (totalSec % 3600L) / 60L
+            val secs = totalSec % 60L
+            return if (hrs > 0L) {
+                String.format(Locale.US, "%d:%02d:%02d", hrs, mins, secs)
+            } else {
+                String.format(Locale.US, "%d:%02d", mins, secs)
+            }
+        }
     }
 }

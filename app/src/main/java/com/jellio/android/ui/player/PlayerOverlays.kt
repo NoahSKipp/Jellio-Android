@@ -75,6 +75,9 @@ internal fun BufferingOverlay(info: PauseOverlayInfo, modifier: Modifier = Modif
 // NuvioTV's PauseOverlay: everything bottom left, the time top right.
 @Composable
 internal fun PauseOverlay(info: PauseOverlayInfo, modifier: Modifier = Modifier) {
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
+    val sidePad = if (isCompact) 20.dp else 48.dp
+    val bottomPad = if (isCompact) 28.dp else 72.dp
     Box(modifier = modifier.fillMaxSize()) {
         com.jellio.android.ui.common.TitleArtBackdrop(info.art, Modifier.fillMaxSize())
         Box(
@@ -82,15 +85,15 @@ internal fun PauseOverlay(info: PauseOverlayInfo, modifier: Modifier = Modifier)
                 Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.35f), Color.Black.copy(alpha = 0.92f))),
             ),
         )
-        PauseClock(modifier = Modifier.align(Alignment.TopEnd).padding(top = 40.dp, end = 48.dp))
+        PauseClock(modifier = Modifier.align(Alignment.TopEnd).padding(top = if (isCompact) 20.dp else 40.dp, end = sidePad))
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 48.dp, end = 96.dp, bottom = 72.dp)
+                .padding(start = sidePad, end = if (isCompact) 24.dp else 96.dp, bottom = bottomPad)
                 .widthIn(max = 720.dp),
         ) {
-            Text(text = Strings.get("player_youre_watching"), color = JellioTextSecondary, fontSize = 17.sp)
-            Spacer(modifier = Modifier.height(10.dp))
+            Text(text = Strings.get("player_youre_watching"), color = JellioTextSecondary, fontSize = if (isCompact) 14.sp else 17.sp)
+            Spacer(modifier = Modifier.height(if (isCompact) 6.dp else 10.dp))
             var logoFailed by remember(info.logoUrl) { mutableStateOf(false) }
             if (info.logoUrl != null && !logoFailed) {
                 AsyncImage(
@@ -99,13 +102,13 @@ internal fun PauseOverlay(info: PauseOverlayInfo, modifier: Modifier = Modifier)
                     contentScale = ContentScale.Fit,
                     alignment = Alignment.BottomStart,
                     onError = { logoFailed = true },
-                    modifier = Modifier.height(88.dp).widthIn(max = 420.dp),
+                    modifier = Modifier.height(if (isCompact) 56.dp else 88.dp).widthIn(max = if (isCompact) 280.dp else 420.dp),
                 )
             } else {
                 Text(
                     text = info.title,
                     color = JellioText,
-                    fontSize = 38.sp,
+                    fontSize = if (isCompact) 26.sp else 38.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -115,9 +118,9 @@ internal fun PauseOverlay(info: PauseOverlayInfo, modifier: Modifier = Modifier)
             if (details.isNotEmpty() || info.rating != null) {
                 Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (details.isNotEmpty()) {
-                        Text(text = details.joinToString("  •  "), color = JellioTextSecondary, fontSize = 17.sp)
+                        Text(text = details.joinToString("  •  "), color = JellioTextSecondary, fontSize = if (isCompact) 14.sp else 17.sp)
                     }
-                    info.rating?.let { com.jellio.android.ui.home.RatingChip(it, fontSize = 15.sp, badgeWidth = 28.dp, badgeHeight = 12.dp) }
+                    info.rating?.let { com.jellio.android.ui.home.RatingChip(it, fontSize = if (isCompact) 13.sp else 15.sp, badgeWidth = 28.dp, badgeHeight = 12.dp) }
                 }
             }
             if (info.isEpisode) {
@@ -125,11 +128,11 @@ internal fun PauseOverlay(info: PauseOverlayInfo, modifier: Modifier = Modifier)
                     Text(
                         text = it,
                         color = JellioText,
-                        fontSize = 24.sp,
+                        fontSize = if (isCompact) 18.sp else 24.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 12.dp),
+                        modifier = Modifier.padding(top = if (isCompact) 8.dp else 12.dp),
                     )
                 }
             }
@@ -137,11 +140,11 @@ internal fun PauseOverlay(info: PauseOverlayInfo, modifier: Modifier = Modifier)
                 Text(
                     text = it,
                     color = JellioTextSecondary,
-                    fontSize = 17.sp,
-                    lineHeight = 24.sp,
-                    maxLines = 3,
+                    fontSize = if (isCompact) 14.sp else 17.sp,
+                    lineHeight = if (isCompact) 20.sp else 24.sp,
+                    maxLines = if (isCompact) 2 else 3,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 14.dp),
+                    modifier = Modifier.padding(top = if (isCompact) 10.dp else 14.dp),
                 )
             }
         }
@@ -168,6 +171,7 @@ internal fun FailoverOverlay(notice: FailoverNotice, onStop: () -> Unit) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
+                .padding(horizontal = 20.dp)
                 .widthIn(max = 560.dp)
                 .background(JellioBgElevated, RoundedCornerShape(16.dp))
                 .padding(horizontal = 32.dp, vertical = 28.dp),
@@ -261,6 +265,7 @@ internal fun UpNextOverlay(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         delay(150)
@@ -268,7 +273,8 @@ internal fun UpNextOverlay(
     }
     Row(
         modifier = modifier
-            .widthIn(min = 440.dp, max = 540.dp)
+            .padding(horizontal = if (isCompact) 16.dp else 0.dp)
+            .widthIn(min = if (isCompact) 280.dp else 440.dp, max = 540.dp)
             .background(JellioBgElevated, RoundedCornerShape(16.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -278,7 +284,7 @@ internal fun UpNextOverlay(
                 model = info.thumbnailUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.width(112.dp).height(63.dp).clip(RoundedCornerShape(8.dp)),
+                modifier = Modifier.width(if (isCompact) 88.dp else 112.dp).height(if (isCompact) 50.dp else 63.dp).clip(RoundedCornerShape(8.dp)),
             )
         }
         Column(modifier = Modifier.padding(start = 16.dp)) {
@@ -333,6 +339,7 @@ internal fun UpNextOverlay(
 internal const val END_SCREEN_INPUT_DELAY_MS = 800L
 
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 internal fun EndScreen(
     finishedTitle: String,
     finishedSubtitle: String,
@@ -344,6 +351,7 @@ internal fun EndScreen(
     art: List<com.jellio.android.ui.common.ArtCandidate>,
     info: PauseOverlayInfo?,
 ) {
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
     val firstFocus = remember { FocusRequester() }
     // A press meant for the screen before (Play Next held or tapped twice)
     // must not land on this one's buttons.
@@ -382,27 +390,54 @@ internal fun EndScreen(
             ),
         )
         Column(
-            modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = 72.dp).widthIn(max = 760.dp),
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(horizontal = if (isCompact) 24.dp else 72.dp, vertical = if (isCompact) 16.dp else 0.dp)
+                .widthIn(max = 760.dp),
         ) {
             if (next != null) {
                 Text(text = Strings.get("player_up_next").uppercase(), color = JellioSecondary, style = androidx.tv.material3.MaterialTheme.typography.labelLarge, letterSpacing = 1.5.sp)
                 next.seriesName?.let {
-                    Text(text = it, color = JellioText, style = androidx.tv.material3.MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+                    Text(
+                        text = it,
+                        color = JellioText,
+                        style = if (isCompact) androidx.tv.material3.MaterialTheme.typography.titleLarge else androidx.tv.material3.MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
                 }
-                Row(modifier = Modifier.padding(top = 20.dp), verticalAlignment = Alignment.Top) {
-                    if (next.thumbnailUrl != null) {
-                        AsyncImage(
-                            model = next.thumbnailUrl,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.width(320.dp).height(180.dp).clip(RoundedCornerShape(14.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(14.dp)),
-                        )
-                    }
-                    Column(modifier = Modifier.padding(start = if (next.thumbnailUrl != null) 24.dp else 0.dp)) {
-                        Text(text = next.title, color = JellioText, style = androidx.tv.material3.MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (isCompact) {
+                    Column(modifier = Modifier.padding(top = 12.dp)) {
+                        if (next.thumbnailUrl != null) {
+                            AsyncImage(
+                                model = next.thumbnailUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.width(200.dp).height(112.dp).clip(RoundedCornerShape(12.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(12.dp)),
+                            )
+                        }
+                        Text(text = next.title, color = JellioText, style = androidx.tv.material3.MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
                         next.overview?.let {
-                            Text(text = it, color = JellioTextSecondary, maxLines = 5, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
+                            Text(text = it, color = JellioTextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+                        }
+                    }
+                } else {
+                    Row(modifier = Modifier.padding(top = 20.dp), verticalAlignment = Alignment.Top) {
+                        if (next.thumbnailUrl != null) {
+                            AsyncImage(
+                                model = next.thumbnailUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.width(320.dp).height(180.dp).clip(RoundedCornerShape(14.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(14.dp)),
+                            )
+                        }
+                        Column(modifier = Modifier.padding(start = if (next.thumbnailUrl != null) 24.dp else 0.dp)) {
+                            Text(text = next.title, color = JellioText, style = androidx.tv.material3.MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            next.overview?.let {
+                                Text(text = it, color = JellioTextSecondary, maxLines = 5, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
+                            }
                         }
                     }
                 }
@@ -437,13 +472,13 @@ internal fun EndScreen(
                         contentDescription = finishedTitle,
                         contentScale = ContentScale.Fit,
                         alignment = Alignment.CenterStart,
-                        modifier = Modifier.padding(top = 18.dp).height(120.dp).widthIn(max = 520.dp),
+                        modifier = Modifier.padding(top = if (isCompact) 12.dp else 18.dp).height(if (isCompact) 72.dp else 120.dp).widthIn(max = if (isCompact) 280.dp else 520.dp),
                     )
                 } else {
                     Text(
                         text = finishedTitle,
                         color = JellioText,
-                        style = androidx.tv.material3.MaterialTheme.typography.displaySmall,
+                        style = if (isCompact) androidx.tv.material3.MaterialTheme.typography.headlineSmall else androidx.tv.material3.MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -463,10 +498,14 @@ internal fun EndScreen(
                     }
                 }
                 info?.overview?.takeIf { it.isNotBlank() }?.let {
-                    Text(text = it, color = JellioTextSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 12.dp))
+                    Text(text = it, color = JellioTextSecondary, maxLines = if (isCompact) 2 else 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 12.dp))
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 28.dp)) {
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(top = if (isCompact) 16.dp else 28.dp),
+            ) {
                 if (next != null) {
                     EndScreenButton(
                         label = if (countdown != null && countdown > 0) Strings.format("player_play_next_episode_countdown", countdown) else Strings.get("player_play_next_episode"),

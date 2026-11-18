@@ -70,6 +70,7 @@ internal fun buildStreamPlayer(context: Context, dataSourceFactory: androidx.med
         .setMediaSourceFactory(mediaSourceFactory)
         .setLoadControl(buildLoadControl(PlayerPrefs.prebuffer))
         .setAudioAttributes(audioAttributes, true)
+        .setHandleAudioBecomingNoisy(true)
         .build()
 }
 

@@ -1,6 +1,7 @@
 package com.jellio.android.ui.audiobook
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -30,7 +32,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -81,9 +86,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.jellio.android.data.books.AnnotationDto
 import com.jellio.android.data.books.AudiobookChapterDto
 import com.jellio.android.data.offline.OfflineDownloadItem
 import com.jellio.android.ui.common.ScreenSpinner
@@ -126,6 +133,7 @@ fun AudiobookScreen(
     var showSpeedSheet by remember { mutableStateOf(false) }
     var showSleepSheet by remember { mutableStateOf(false) }
     var showChaptersSheet by remember { mutableStateOf(false) }
+    var chaptersSheetInitialTab by remember { mutableStateOf(0) } // 0 = Chapters, 1 = Bookmarks
 
     Box(
         modifier = modifier
@@ -372,10 +380,12 @@ fun AudiobookScreen(
 
                         Spacer(modifier = Modifier.height(22.dp))
 
-                        // Overall Book Timeline Scrubber
+                        // Overall Book Timeline Scrubber with chapter boundary ticks & bookmarks
                         BookTimelineScrubber(
                             currentPositionMs = state.currentPositionMs,
                             totalDurationMs = state.totalDurationMs,
+                            chapters = state.chapters,
+                            bookmarks = state.bookmarks,
                             onSeek = { controller.seekToBookPositionMs(it) },
                         )
 
@@ -510,9 +520,15 @@ fun AudiobookScreen(
 
                         Spacer(modifier = Modifier.height(24.dp))
 
-                        // Secondary Action Bar: Speed / Sleep Timer / Chapters
+                        // Secondary Action Bar: Speed / Sleep Timer / Chapters / Bookmark
+                        val currentPosSec = (state.currentPositionMs / 1000L)
+                        val hasNearbyBookmark = state.bookmarks.any { bm ->
+                            val bmSec = AudiobookPlayerController.parseBookmarkSeconds(bm.Locator)
+                            bmSec >= 0L && kotlin.math.abs(bmSec - currentPosSec) <= 5L
+                        }
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             SecondaryActionPill(
@@ -541,9 +557,72 @@ fun AudiobookScreen(
                                 icon = Icons.AutoMirrored.Filled.List,
                                 label = "Chapters (${state.chapters.size})",
                                 active = false,
-                                onClick = { showChaptersSheet = true },
-                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    chaptersSheetInitialTab = 0
+                                    showChaptersSheet = true
+                                },
+                                modifier = Modifier.weight(1.1f),
                             )
+
+                            Surface(
+                                onClick = {
+                                    controller.addBookmark()
+                                },
+                                color = if (hasNearbyBookmark) JellioSecondary else JellioBgElevated,
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (hasNearbyBookmark || state.bookmarks.isNotEmpty()) JellioSecondary else JellioBorder,
+                                        shape = RoundedCornerShape(14.dp),
+                                    ),
+                            ) {
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                    Icon(
+                                        imageVector = if (hasNearbyBookmark || state.bookmarks.isNotEmpty()) {
+                                            Icons.Filled.Bookmark
+                                        } else {
+                                            Icons.Filled.BookmarkBorder
+                                        },
+                                        contentDescription = "Add bookmark",
+                                        tint = if (hasNearbyBookmark) Color(0xFF0D0D0D) else if (state.bookmarks.isNotEmpty()) JellioSecondary else JellioTextSecondary,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
+                        }
+
+                        if (state.bookmarks.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                onClick = {
+                                    chaptersSheetInitialTab = 1
+                                    showChaptersSheet = true
+                                },
+                                color = JellioBgElevated.copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .border(1.dp, JellioBorder, RoundedCornerShape(12.dp)),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Bookmark,
+                                        contentDescription = null,
+                                        tint = JellioSecondary,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "${state.bookmarks.size} saved bookmark${if (state.bookmarks.size == 1) "" else "s"} - Tap to view",
+                                        color = JellioTextSecondary,
+                                        fontSize = 12.sp,
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(20.dp))
@@ -580,10 +659,18 @@ fun AudiobookScreen(
         ChaptersBottomSheet(
             chapters = state.chapters,
             currentChapterIndex = state.currentChapterIndex,
+            bookmarks = state.bookmarks,
+            initialTab = chaptersSheetInitialTab,
             onSelectChapter = { idx ->
                 controller.selectChapter(idx)
                 showChaptersSheet = false
             },
+            onAddBookmark = { controller.addBookmark() },
+            onSelectBookmark = { bm ->
+                controller.jumpToBookmark(bm)
+                showChaptersSheet = false
+            },
+            onDeleteBookmark = { id -> controller.deleteBookmark(id) },
             onDismiss = { showChaptersSheet = false },
         )
     }
@@ -593,6 +680,8 @@ fun AudiobookScreen(
 private fun BookTimelineScrubber(
     currentPositionMs: Long,
     totalDurationMs: Long,
+    chapters: List<AudiobookChapterDto>,
+    bookmarks: List<AnnotationDto>,
     onSeek: (Long) -> Unit,
 ) {
     var dragging by remember { mutableStateOf(false) }
@@ -604,26 +693,99 @@ private fun BookTimelineScrubber(
     val shownPositionMs = if (dragging) (dragRatio * safeDuration).toLong() else currentPositionMs
     val remainingMs = (totalDurationMs - shownPositionMs).coerceAtLeast(0L)
 
+    val dragTargetChapter = remember(dragging, shownPositionMs, chapters) {
+        if (!dragging || chapters.isEmpty()) {
+            null
+        } else {
+            var match = chapters.first()
+            for (ch in chapters) {
+                val startMs = (ch.StartSeconds * 1000.0).toLong()
+                if (shownPositionMs + 250L >= startMs) {
+                    match = ch
+                }
+            }
+            match
+        }
+    }
+
     Column(modifier = Modifier.fillMaxWidth()) {
-        Slider(
-            value = shownRatio,
-            onValueChange = { value ->
-                dragging = true
-                dragRatio = value.coerceIn(0f, 1f)
-            },
-            onValueChangeFinished = {
-                val seekTarget = (dragRatio * safeDuration).toLong()
-                dragging = false
-                onSeek(seekTarget)
-            },
-            enabled = totalDurationMs > 0L,
-            colors = SliderDefaults.colors(
-                thumbColor = JellioSecondary,
-                activeTrackColor = JellioSecondary,
-                inactiveTrackColor = Color.White.copy(alpha = 0.2f),
-            ),
+        if (dragTargetChapter != null) {
+            Text(
+                text = "${dragTargetChapter.Title.ifBlank { "Chapter" }} (${formatPlaybackTime(shownPositionMs)})",
+                color = JellioSecondary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 2.dp),
+            )
+        }
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier.fillMaxWidth(),
-        )
+        ) {
+            Slider(
+                value = shownRatio,
+                onValueChange = { value ->
+                    dragging = true
+                    dragRatio = value.coerceIn(0f, 1f)
+                },
+                onValueChangeFinished = {
+                    val seekTarget = (dragRatio * safeDuration).toLong()
+                    dragging = false
+                    onSeek(seekTarget)
+                },
+                enabled = totalDurationMs > 0L,
+                colors = SliderDefaults.colors(
+                    thumbColor = JellioSecondary,
+                    activeTrackColor = JellioSecondary,
+                    inactiveTrackColor = Color.White.copy(alpha = 0.2f),
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (totalDurationMs > 0L && (chapters.size > 1 || bookmarks.isNotEmpty())) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp)
+                        .height(14.dp),
+                ) {
+                    val widthPx = size.width
+                    val centerY = size.height / 2f
+                    // Draw chapter boundary ticks
+                    for (i in 1 until chapters.size) {
+                        val startMs = (chapters[i].StartSeconds * 1000.0).toLong()
+                        if (startMs in 1 until totalDurationMs) {
+                            val fraction = (startMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
+                            val x = fraction * widthPx
+                            drawLine(
+                                color = Color.White.copy(alpha = 0.65f),
+                                start = Offset(x, centerY - 5.dp.toPx()),
+                                end = Offset(x, centerY + 5.dp.toPx()),
+                                strokeWidth = 1.5.dp.toPx(),
+                            )
+                        }
+                    }
+                    // Draw bookmark ticks
+                    for (bm in bookmarks) {
+                        val sec = AudiobookPlayerController.parseBookmarkSeconds(bm.Locator)
+                        val bmMs = if (sec >= 0L) sec * 1000L else (bm.Position * safeDuration).toLong()
+                        if (bmMs in 0..totalDurationMs) {
+                            val fraction = (bmMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
+                            val x = fraction * widthPx
+                            drawCircle(
+                                color = Color(0xFFFACC15),
+                                radius = 3.dp.toPx(),
+                                center = Offset(x, centerY - 6.dp.toPx()),
+                            )
+                        }
+                    }
+                }
+            }
+        }
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth(),
@@ -875,9 +1037,15 @@ private fun SleepTimerSheet(
 private fun ChaptersBottomSheet(
     chapters: List<AudiobookChapterDto>,
     currentChapterIndex: Int,
+    bookmarks: List<AnnotationDto>,
+    initialTab: Int = 0,
     onSelectChapter: (Int) -> Unit,
+    onAddBookmark: () -> Unit,
+    onSelectBookmark: (AnnotationDto) -> Unit,
+    onDeleteBookmark: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var activeTab by remember(initialTab) { mutableStateOf(initialTab) }
     var query by remember { mutableStateOf("") }
     val indexedChapters = remember(chapters, query) {
         val trimmed = query.trim()
@@ -895,104 +1063,250 @@ private fun ChaptersBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 560.dp)
+                .heightIn(max = 580.dp)
                 .padding(horizontal = 20.dp),
         ) {
-            Text(
-                text = "Chapters (${chapters.size})",
-                color = JellioText,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = { Text("Search chapters...", color = JellioTextTertiary) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Filled.Search,
-                        contentDescription = null,
-                        tint = JellioTextSecondary,
-                    )
-                },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = "Clear search",
-                                tint = JellioTextSecondary,
-                            )
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = JellioText,
-                    unfocusedTextColor = JellioText,
-                    focusedBorderColor = JellioSecondary,
-                    unfocusedBorderColor = JellioBorder,
-                    focusedContainerColor = JellioBg,
-                    unfocusedContainerColor = JellioBg,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-
-            LazyColumn(
-                contentPadding = PaddingValues(bottom = 28.dp),
+            // Segmented Tab Row: Chapters | Bookmarks
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                itemsIndexed(indexedChapters, key = { _, pair -> pair.first }) { _, (index, chapter) ->
-                    val isCurrent = index == currentChapterIndex
-                    val durMs = (chapter.DurationSeconds * 1000.0).toLong()
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (isCurrent) JellioSecondary.copy(alpha = 0.14f) else Color.Transparent)
-                            .clickable { onSelectChapter(index) }
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
-                    ) {
-                        Text(
-                            text = "${index + 1}.",
-                            color = if (isCurrent) JellioSecondary else JellioTextTertiary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.width(34.dp),
+                Surface(
+                    onClick = { activeTab = 0 },
+                    color = if (activeTab == 0) JellioSecondary else JellioBg,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, if (activeTab == 0) JellioSecondary else JellioBorder, RoundedCornerShape(10.dp)),
+                ) {
+                    Text(
+                        text = "Chapters (${chapters.size})",
+                        color = if (activeTab == 0) Color(0xFF0D0D0D) else JellioText,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 10.dp),
+                    )
+                }
+                Surface(
+                    onClick = { activeTab = 1 },
+                    color = if (activeTab == 1) JellioSecondary else JellioBg,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, if (activeTab == 1) JellioSecondary else JellioBorder, RoundedCornerShape(10.dp)),
+                ) {
+                    Text(
+                        text = "Bookmarks (${bookmarks.size})",
+                        color = if (activeTab == 1) Color(0xFF0D0D0D) else JellioText,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 10.dp),
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (activeTab == 0) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Search chapters...", color = JellioTextTertiary) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.Search,
+                            contentDescription = null,
+                            tint = JellioTextSecondary,
                         )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = chapter.Title.ifBlank { "Chapter ${index + 1}" },
-                                color = if (isCurrent) JellioSecondary else JellioText,
-                                fontSize = 14.sp,
-                                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            if (durMs > 0L) {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = formatPlaybackTime(durMs),
-                                    color = JellioTextSecondary,
-                                    fontSize = 12.sp,
+                    },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = "Clear search",
+                                    tint = JellioTextSecondary,
                                 )
                             }
                         }
-                        if (isCurrent) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = "Current chapter",
-                                tint = JellioSecondary,
-                                modifier = Modifier.size(18.dp),
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = JellioText,
+                        unfocusedTextColor = JellioText,
+                        focusedBorderColor = JellioSecondary,
+                        unfocusedBorderColor = JellioBorder,
+                        focusedContainerColor = JellioBg,
+                        unfocusedContainerColor = JellioBg,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                LazyColumn(
+                    contentPadding = PaddingValues(bottom = 28.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    itemsIndexed(indexedChapters, key = { _, pair -> pair.first }) { _, (index, chapter) ->
+                        val isCurrent = index == currentChapterIndex
+                        val durMs = (chapter.DurationSeconds * 1000.0).toLong()
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isCurrent) JellioSecondary.copy(alpha = 0.14f) else Color.Transparent)
+                                .clickable { onSelectChapter(index) }
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                        ) {
+                            Text(
+                                text = "${index + 1}.",
+                                color = if (isCurrent) JellioSecondary else JellioTextTertiary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.width(34.dp),
                             )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = chapter.Title.ifBlank { "Chapter ${index + 1}" },
+                                    color = if (isCurrent) JellioSecondary else JellioText,
+                                    fontSize = 14.sp,
+                                    fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (durMs > 0L) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = formatPlaybackTime(durMs),
+                                        color = JellioTextSecondary,
+                                        fontSize = 12.sp,
+                                    )
+                                }
+                            }
+                            if (isCurrent) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = "Current chapter",
+                                    tint = JellioSecondary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                        HorizontalDivider(color = JellioBorder.copy(alpha = 0.45f))
+                    }
+                }
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "Saved timestamps",
+                        color = JellioTextSecondary,
+                        fontSize = 13.sp,
+                    )
+                    Button(
+                        onClick = onAddBookmark,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = JellioSecondary,
+                            contentColor = Color(0xFF0D0D0D),
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Bookmark Now", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (bookmarks.isEmpty()) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 36.dp),
+                    ) {
+                        Text(
+                            text = "No bookmarks saved for this audiobook yet.",
+                            color = JellioTextSecondary,
+                            fontSize = 13.sp,
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(bottom = 28.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        items(bookmarks, key = { it.Id }) { bm ->
+                            val sec = AudiobookPlayerController.parseBookmarkSeconds(bm.Locator)
+                            val timeLabel = bm.Text?.takeIf { it.isNotBlank() }
+                                ?: if (sec >= 0L) AudiobookPlayerController.formatDurationClock(sec.toDouble()) else bm.Locator
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onSelectBookmark(bm) }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Bookmark,
+                                    contentDescription = null,
+                                    tint = JellioSecondary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = timeLabel,
+                                        color = JellioSecondary,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    val chTitle = bm.Chapter?.takeIf { it.isNotBlank() }
+                                    if (chTitle != null) {
+                                        Text(
+                                            text = chTitle,
+                                            color = JellioText,
+                                            fontSize = 13.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    val note = bm.Note?.takeIf { it.isNotBlank() }
+                                    if (note != null) {
+                                        Text(
+                                            text = note,
+                                            color = JellioTextSecondary,
+                                            fontSize = 12.sp,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                                IconButton(onClick = { onDeleteBookmark(bm.Id) }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.DeleteOutline,
+                                        contentDescription = "Delete bookmark",
+                                        tint = JellioDanger,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
+                            HorizontalDivider(color = JellioBorder.copy(alpha = 0.45f))
                         }
                     }
-                    HorizontalDivider(color = JellioBorder.copy(alpha = 0.45f))
                 }
             }
         }

@@ -1,7 +1,18 @@
 package com.jellio.android
 
+import android.app.PendingIntent
+import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.drawable.Icon
+import android.os.Build
 import android.os.Bundle
+import android.util.Rational
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -9,10 +20,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.tv.material3.Surface
 import com.jellio.android.data.prefs.QuickHubKeyConfig
@@ -25,10 +36,18 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+val LocalIsInPipMode = compositionLocalOf { false }
+
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val deepLinkItemId = mutableStateOf<String?>(null)
+    val isInPipModeState = mutableStateOf(false)
     private var isPlayerActive: Boolean = false
+    var isPlayerCurrentlyPlaying: Boolean = false
+    var pipAspectWidth: Int = 16
+    var pipAspectHeight: Int = 9
+    var onPipPlayPause: (() -> Unit)? = null
+    var onPipSeekDeltaMs: ((Long) -> Unit)? = null
     var isQuickHubOpen: Boolean = false
     var isRecordingShortcut: Boolean = false
     var onShortcutKeyRecorded: ((Int, KeyEvent) -> Boolean)? = null
@@ -42,7 +61,125 @@ class MainActivity : ComponentActivity() {
     private var quickHubHoldJob: kotlinx.coroutines.Job? = null
     private var quickHubHeldDown: KeyEvent? = null
 
+    private val pipReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != ACTION_PIP_CONTROL) return
+            when (intent.getIntExtra(EXTRA_PIP_CONTROL_TYPE, 0)) {
+                PIP_CONTROL_PLAY_PAUSE -> onPipPlayPause?.invoke()
+                PIP_CONTROL_REWIND -> onPipSeekDeltaMs?.invoke(-10_000L)
+                PIP_CONTROL_FAST_FORWARD -> onPipSeekDeltaMs?.invoke(10_000L)
+            }
+        }
+    }
+
     private fun quickHubAvailable(): Boolean = !isPlayerActive && !isQuickHubSuppressed && onQuickHubShortcut != null
+
+    fun supportsPip(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+
+    private fun buildPipParams(
+        isPlaying: Boolean = isPlayerCurrentlyPlaying,
+        aspectWidth: Int = pipAspectWidth,
+        aspectHeight: Int = pipAspectHeight,
+    ): PictureInPictureParams? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
+        val safeW = aspectWidth.coerceAtLeast(1)
+        val safeH = aspectHeight.coerceAtLeast(1)
+        val ratio = Rational(safeW, safeH).coerceIn(Rational(100, 239), Rational(239, 100))
+        val builder = PictureInPictureParams.Builder()
+            .setAspectRatio(ratio)
+        if (onPipPlayPause != null || onPipSeekDeltaMs != null) {
+            val actions = mutableListOf<RemoteAction>()
+            if (onPipSeekDeltaMs != null) {
+                actions.add(
+                    buildPipRemoteAction(
+                        requestCode = PIP_CONTROL_REWIND,
+                        iconRes = android.R.drawable.ic_media_rew,
+                        title = "Rewind 10s",
+                        controlType = PIP_CONTROL_REWIND,
+                    )
+                )
+            }
+            if (onPipPlayPause != null) {
+                actions.add(
+                    buildPipRemoteAction(
+                        requestCode = PIP_CONTROL_PLAY_PAUSE,
+                        iconRes = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+                        title = if (isPlaying) "Pause" else "Play",
+                        controlType = PIP_CONTROL_PLAY_PAUSE,
+                    )
+                )
+            }
+            if (onPipSeekDeltaMs != null) {
+                actions.add(
+                    buildPipRemoteAction(
+                        requestCode = PIP_CONTROL_FAST_FORWARD,
+                        iconRes = android.R.drawable.ic_media_ff,
+                        title = "Forward 10s",
+                        controlType = PIP_CONTROL_FAST_FORWARD,
+                    )
+                )
+            }
+            builder.setActions(actions)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setAutoEnterEnabled(isPlayerActive && isPlaying)
+            builder.setSeamlessResizeEnabled(true)
+        }
+        return builder.build()
+    }
+
+    private fun buildPipRemoteAction(
+        requestCode: Int,
+        iconRes: Int,
+        title: String,
+        controlType: Int,
+    ): RemoteAction {
+        val intent = Intent(ACTION_PIP_CONTROL).setPackage(packageName).putExtra(EXTRA_PIP_CONTROL_TYPE, controlType)
+        val pendingIntent = PendingIntent.getBroadcast(
+            this,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return RemoteAction(Icon.createWithResource(this, iconRes), title, title, pendingIntent)
+    }
+
+    fun updatePipParams(
+        isPlaying: Boolean,
+        aspectWidth: Int = pipAspectWidth,
+        aspectHeight: Int = pipAspectHeight,
+    ) {
+        isPlayerCurrentlyPlaying = isPlaying
+        if (aspectWidth > 0 && aspectHeight > 0) {
+            pipAspectWidth = aspectWidth
+            pipAspectHeight = aspectHeight
+        }
+        if (!supportsPip()) return
+        try {
+            buildPipParams(isPlaying, pipAspectWidth, pipAspectHeight)?.let { setPictureInPictureParams(it) }
+        } catch (_: Exception) {}
+    }
+
+    fun enterPipNow(aspectWidth: Int = pipAspectWidth, aspectHeight: Int = pipAspectHeight): Boolean {
+        if (!supportsPip()) return false
+        if (aspectWidth > 0 && aspectHeight > 0) {
+            pipAspectWidth = aspectWidth
+            pipAspectHeight = aspectHeight
+        }
+        return try {
+            val params = buildPipParams(isPlayerCurrentlyPlaying, pipAspectWidth, pipAspectHeight)
+            if (params != null) enterPictureInPictureMode(params) else false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        isInPipModeState.value = isInPictureInPictureMode
+    }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val keyCode = event.keyCode
@@ -143,12 +280,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (isPlayerActive && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            if (packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
-                try {
-                    enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().build())
-                } catch (_: Exception) {}
-            }
+        if (isPlayerActive && isPlayerCurrentlyPlaying) {
+            enterPipNow()
         }
     }
 
@@ -160,6 +293,12 @@ class MainActivity : ComponentActivity() {
         com.jellio.android.data.playback.DeviceDecoderCaps.attach(this)
         StartupPrefs.start(this)
         enableEdgeToEdge()
+        ContextCompat.registerReceiver(
+            this,
+            pipReceiver,
+            IntentFilter(ACTION_PIP_CONTROL),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         handleIntent(intent)
         setContent {
             JellioTvTheme {
@@ -170,6 +309,7 @@ class MainActivity : ComponentActivity() {
                 androidx.compose.runtime.CompositionLocalProvider(
                     com.jellio.android.ui.home.LocalGelatoPrefetch provides prefetchLambda,
                     androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.jellio.android.ui.common.TvBringIntoViewSpec,
+                    LocalIsInPipMode provides isInPipModeState.value,
                 ) {
                     Box(modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
                         // One dark ground behind every screen and the nav bar alike.
@@ -182,13 +322,26 @@ class MainActivity : ComponentActivity() {
                             JellioRoot(
                                 deepLinkItemId = deepLinkItemId.value,
                                 onDeepLinkConsumed = { deepLinkItemId.value = null },
-                                onPlayerActiveChanged = { isPlayerActive = it },
+                                onPlayerActiveChanged = { active ->
+                                    isPlayerActive = active
+                                    if (!active) {
+                                        isPlayerCurrentlyPlaying = false
+                                        onPipPlayPause = null
+                                        onPipSeekDeltaMs = null
+                                        updatePipParams(isPlaying = false)
+                                    }
+                                },
                             )
                         }
                     }
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        runCatching { unregisterReceiver(pipReceiver) }
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -205,5 +358,13 @@ class MainActivity : ComponentActivity() {
         when (uri.path) {
             "/play", "/item" -> uri.getQueryParameter("id")?.let { deepLinkItemId.value = "detail:$it" }
         }
+    }
+
+    companion object {
+        private const val ACTION_PIP_CONTROL = "com.jellio.android.ACTION_PIP_CONTROL"
+        private const val EXTRA_PIP_CONTROL_TYPE = "pip_control_type"
+        private const val PIP_CONTROL_PLAY_PAUSE = 1
+        private const val PIP_CONTROL_REWIND = 2
+        private const val PIP_CONTROL_FAST_FORWARD = 3
     }
 }

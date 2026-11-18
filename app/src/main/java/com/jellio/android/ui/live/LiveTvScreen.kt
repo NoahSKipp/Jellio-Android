@@ -2,6 +2,7 @@ package com.jellio.android.ui.live
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,10 +15,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -330,12 +333,20 @@ fun LiveTvScreen(
         onPlay(id)
     }
 
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
+    val horizontalPad = if (isCompact) 16.dp else 48.dp
+    val topPad = if (isCompact) 20.dp else 32.dp
+
     Box(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().padding(top = 32.dp, start = 48.dp, end = 48.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(top = topPad, start = horizontalPad, end = horizontalPad)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (isCompact) 12.dp else 20.dp)) {
                 Text(text = Strings.get("nav_live_tv"), style = MaterialTheme.typography.titleLarge)
                 if (uiState.channels.isNotEmpty() || uiState.links.isNotEmpty()) {
-                    Text(text = Strings.format("live_channel_count", uiState.arranged.all.size + uiState.arranged.broken.size + uiState.myStreams.size), color = JellioTextTertiary)
+                    Text(
+                        text = Strings.format("live_channel_count", uiState.arranged.all.size + uiState.arranged.broken.size + uiState.myStreams.size),
+                        color = JellioTextTertiary,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
                 }
                 Surface(
                     onClick = { viewModel.openPairing(session) },
@@ -357,7 +368,7 @@ fun LiveTvScreen(
                 value = uiState.query,
                 onValueChange = viewModel::setQuery,
                 label = Strings.get("live_search"),
-                modifier = Modifier.padding(top = 16.dp).width(520.dp),
+                modifier = Modifier.padding(top = 16.dp).fillMaxWidth().widthIn(max = 520.dp),
             )
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
                 val filters = uiState.filters
@@ -488,9 +499,28 @@ internal fun GuideSheet(
     onRetry: () -> Unit = {},
 ) {
     BackHandler(onBack = onClose)
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
     val focus = remember { FocusRequester() }
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.CenterEnd) {
-        Column(modifier = Modifier.fillMaxHeight().width(560.dp).background(JellioBgElevated).padding(24.dp)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .pointerInput(Unit) {
+                detectTapGestures { onClose() }
+            },
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(0.92f)
+                .widthIn(max = 560.dp)
+                .background(JellioBgElevated)
+                .pointerInput(Unit) {
+                    detectTapGestures { }
+                }
+                .padding(if (isCompact) 16.dp else 24.dp),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ChannelLogo(channel, imageUrl)
                 Column(modifier = Modifier.padding(start = 14.dp).weight(1f)) {
@@ -531,9 +561,9 @@ internal fun GuideSheet(
                         ) {
                             Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                                 Text(
-                                    text = formatClock(programme.start) + " – " + formatClock(programme.end),
+                                    text = formatClock(programme.start) + " - " + formatClock(programme.end),
                                     color = JellioTextSecondary,
-                                    modifier = Modifier.width(140.dp),
+                                    modifier = Modifier.width(if (isCompact) 115.dp else 140.dp),
                                 )
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(

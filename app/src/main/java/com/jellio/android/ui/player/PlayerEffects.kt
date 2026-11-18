@@ -30,7 +30,18 @@ internal fun PlayerAudioEffects(player: ExoPlayer) {
     }
 
     DisposableEffect(player) {
-        val mediaSession = MediaSession.Builder(context, player).build()
+        val sessionActivityPendingIntent = android.app.PendingIntent.getActivity(
+            context,
+            0,
+            android.content.Intent(context, com.jellio.android.MainActivity::class.java).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+            },
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+        )
+        val mediaSession = MediaSession.Builder(context, player)
+            .setId("jellio_video")
+            .setSessionActivity(sessionActivityPendingIntent)
+            .build()
         onDispose { mediaSession.release() }
     }
 

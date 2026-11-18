@@ -97,6 +97,7 @@ import kotlinx.coroutines.isActive
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 internal fun SpeedMenu(selectedSpeed: Float, onSelect: (Float) -> Unit, onDismiss: () -> Unit) {
     BackHandler(onBack = onDismiss)
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
     val focusRequesters = remember { PLAYBACK_SPEEDS.map { FocusRequester() } }
     val activeIndex = PLAYBACK_SPEEDS.indexOfFirst { it == selectedSpeed }.coerceAtLeast(0)
     LaunchedEffect(Unit) {
@@ -116,10 +117,12 @@ internal fun SpeedMenu(selectedSpeed: Float, onSelect: (Float) -> Unit, onDismis
     ) {
         Column(
             modifier = Modifier
-                .width(280.dp)
+                .fillMaxWidth(0.88f)
+                .widthIn(max = 280.dp)
                 .fillMaxSize()
                 .background(JellioBgElevated)
-                .padding(vertical = 48.dp),
+                .pointerInput(Unit) { detectTapGestures { } }
+                .padding(vertical = if (isCompact) 16.dp else 48.dp),
         ) {
             Text(
                 text = Strings.get("tv_playback_speed"),
@@ -253,6 +256,7 @@ internal fun SleepMenu(
     onDismiss: () -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
     val firstItemFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(60)
@@ -269,10 +273,12 @@ internal fun SleepMenu(
     ) {
         Column(
             modifier = Modifier
-                .width(280.dp)
+                .fillMaxWidth(0.88f)
+                .widthIn(max = 280.dp)
                 .fillMaxSize()
                 .background(JellioBgElevated)
-                .padding(vertical = 48.dp),
+                .pointerInput(Unit) { detectTapGestures { } }
+                .padding(vertical = if (isCompact) 16.dp else 48.dp),
         ) {
             Text(
                 text = Strings.get("tv_sleep_timer"),
@@ -427,6 +433,7 @@ internal fun AudioMenu(
     onDismiss: () -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
     val focusRequesters = remember(tracks) { tracks.map { FocusRequester() } }
     val activeIndex = tracks.indexOfFirst {
         if (selectedStreamIndex == null) it.streamIndex == defaultStreamIndex else it.streamIndex == selectedStreamIndex
@@ -449,10 +456,12 @@ internal fun AudioMenu(
     ) {
         Column(
             modifier = Modifier
-                .width(360.dp)
+                .fillMaxWidth(0.88f)
+                .widthIn(max = 360.dp)
                 .fillMaxSize()
                 .background(JellioBgElevated)
-                .padding(vertical = 48.dp),
+                .pointerInput(Unit) { detectTapGestures { } }
+                .padding(vertical = if (isCompact) 16.dp else 48.dp),
         ) {
             Text(
                 text = Strings.get("tv_audio"),
@@ -478,27 +487,33 @@ internal fun AudioMenu(
                         modifier = Modifier.focusRequester(req),
                     )
                 }
+                if (tracks.isNotEmpty()) {
+                    item {
+                        Box(
+                            Modifier
+                                .padding(horizontal = 24.dp, vertical = 12.dp)
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(Color.White.copy(alpha = 0.12f))
+                        )
+                    }
+                }
+                item {
+                    SubtitleMenuRow(
+                        label = Strings.format("player_dialogue_boost", if (PlayerPrefs.dialogueBoost) Strings.get("state_on") else Strings.get("state_off")),
+                        isSelected = PlayerPrefs.dialogueBoost,
+                        onClick = onToggleDialogueBoost,
+                    )
+                }
+                item {
+                    SyncAdjustRow(
+                        label = Strings.get("player_audio_sync"),
+                        valueMs = audioDelayMs,
+                        stepMs = 50,
+                        onChange = onAudioDelay,
+                    )
+                }
             }
-            if (tracks.isNotEmpty()) {
-                Box(
-                    Modifier
-                        .padding(horizontal = 24.dp, vertical = 12.dp)
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(Color.White.copy(alpha = 0.12f))
-                )
-            }
-            SubtitleMenuRow(
-                label = Strings.format("player_dialogue_boost", if (PlayerPrefs.dialogueBoost) Strings.get("state_on") else Strings.get("state_off")),
-                isSelected = PlayerPrefs.dialogueBoost,
-                onClick = onToggleDialogueBoost,
-            )
-            SyncAdjustRow(
-                label = Strings.get("player_audio_sync"),
-                valueMs = audioDelayMs,
-                stepMs = 50,
-                onChange = onAudioDelay,
-            )
         }
     }
 }
@@ -514,6 +529,7 @@ internal fun SourcePanel(
     onDismiss: () -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
     val firstFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(60)
@@ -551,6 +567,7 @@ internal fun SourcePanel(
             (selectedQuality == null || sourceQuality(source) == selectedQuality) &&
             (selectedEdition == null || com.jellio.android.ui.detail.EditionParser.detectSourceEdition(source, sources) == selectedEdition)
     }.sortedBy { if (it.Id in needsReencode) 1 else 0 }
+    val verticalPad = if (isCompact) 16.dp else 48.dp
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -562,10 +579,12 @@ internal fun SourcePanel(
     ) {
         Column(
             modifier = Modifier
-                .width(460.dp)
+                .fillMaxWidth(0.88f)
+                .widthIn(max = 460.dp)
                 .fillMaxSize()
                 .background(JellioBgElevated)
-                .padding(start = 24.dp, end = 24.dp, top = 48.dp, bottom = 48.dp),
+                .pointerInput(Unit) { detectTapGestures { } }
+                .padding(start = 24.dp, end = 24.dp, top = verticalPad, bottom = verticalPad),
         ) {
             Text(text = Strings.get("detail_streams"), color = JellioText, style = androidx.tv.material3.MaterialTheme.typography.titleMedium)
             LazyColumn(
@@ -651,6 +670,7 @@ internal fun EpisodesPanel(
     onDismiss: () -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
     val firstFocusRequester = remember { FocusRequester() }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val seasonRowState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -664,6 +684,7 @@ internal fun EpisodesPanel(
         kotlinx.coroutines.delay(60)
         runCatching { firstFocusRequester.requestFocus() }
     }
+    val verticalPad = if (isCompact) 16.dp else 48.dp
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -675,10 +696,12 @@ internal fun EpisodesPanel(
     ) {
         Column(
             modifier = Modifier
-                .width(440.dp)
+                .fillMaxWidth(0.88f)
+                .widthIn(max = 440.dp)
                 .fillMaxSize()
                 .background(JellioBgElevated)
-                .padding(start = 24.dp, end = 24.dp, top = 48.dp, bottom = 48.dp),
+                .pointerInput(Unit) { detectTapGestures { } }
+                .padding(start = 24.dp, end = 24.dp, top = verticalPad, bottom = verticalPad),
         ) {
             Text(text = Strings.get("detail_episodes"), color = JellioText, style = androidx.tv.material3.MaterialTheme.typography.titleMedium)
             LazyRow(
@@ -807,6 +830,7 @@ internal fun SubtitleMenu(
     onDismiss: () -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
     val firstFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(60)
@@ -823,10 +847,12 @@ internal fun SubtitleMenu(
     ) {
         Column(
             modifier = Modifier
-                .width(360.dp)
+                .fillMaxWidth(0.88f)
+                .widthIn(max = 360.dp)
                 .fillMaxSize()
                 .background(JellioBgElevated)
-                .padding(vertical = 48.dp),
+                .pointerInput(Unit) { detectTapGestures { } }
+                .padding(vertical = if (isCompact) 16.dp else 48.dp),
         ) {
             Text(
                 text = Strings.get("tv_subtitles"),

@@ -153,6 +153,7 @@ fun PlaybackErrorPanel(
     ) {
         Column(
             modifier = Modifier
+                .padding(horizontal = 20.dp)
                 .widthIn(max = 560.dp)
                 .background(JellioBgElevated, RoundedCornerShape(16.dp))
                 .padding(horizontal = 32.dp, vertical = 28.dp),
@@ -165,20 +166,23 @@ fun PlaybackErrorPanel(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 10.dp),
             )
-            if (onRetry != null) {
-                Text(
-                    text = Strings.get("tv_failover_press_ok"),
-                    color = JellioText,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 18.dp),
+            androidx.compose.foundation.layout.Row(
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(top = 24.dp),
+            ) {
+                if (onRetry != null) {
+                    EndScreenButton(
+                        label = Strings.get("action_retry"),
+                        onClick = onRetry,
+                        primary = true,
+                    )
+                }
+                EndScreenButton(
+                    label = Strings.get("action_back"),
+                    onClick = onBack,
+                    primary = onRetry == null,
                 )
             }
-            Text(
-                text = Strings.get("tv_press_back"),
-                color = JellioTextSecondary,
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(top = 18.dp),
-            )
         }
     }
 }

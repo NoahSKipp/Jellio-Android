@@ -11,10 +11,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.DisposableEffect
@@ -579,8 +583,12 @@ internal fun PlayerSurface(
                 if (state == Player.STATE_READY) PlayStartTrace.markOnce("player ready")
                 isEnded = state == Player.STATE_ENDED
                 isBuffering = state == Player.STATE_BUFFERING || (state == Player.STATE_IDLE && exoError == null)
-                if (isEnded && !looksLikePlaceholder(realPositionMs(), expectedRuntimeMs) && !stoppedTooEarly(realPositionMs(), expectedRuntimeMs)) {
-                    onReportRealDuration(realPositionMs() / 1000.0)
+                val endPosMs = realPositionMs()
+                val placeholder = looksLikePlaceholder(endPosMs, expectedRuntimeMs)
+                if (isEnded && !placeholder && !stoppedTooEarly(endPosMs, expectedRuntimeMs)) {
+                    if (directPlay && !placeholder) {
+                        onReportRealDuration(endPosMs / 1000.0)
+                    }
                     onMarkRealWatchComplete()
                 }
             }
@@ -686,7 +694,9 @@ internal fun PlayerSurface(
         while (isActive) {
             checkPlaceholder()
             if (player.duration > 0 && player.playbackState != Player.STATE_IDLE) {
-                durationMs = streamOffsetMs + player.duration
+                val rawDur = player.duration
+                val isFullContainerDuration = !directPlay && expectedRuntimeMs > 0 && rawDur >= (expectedRuntimeMs * 0.85).toLong()
+                durationMs = if (isFullContainerDuration) rawDur else streamOffsetMs + rawDur
                 val placeholder = looksLikePlaceholder(durationMs, expectedRuntimeMs)
                 if (directPlay && !placeholder) onReportRealDuration(durationMs / 1000.0)
                 if (!seekedToResume && startPositionTicks > 0 && directPlay) {
@@ -701,7 +711,8 @@ internal fun PlayerSurface(
                 }
             }
             if (pendingReloadMs == null) positionMs = realPositionMs()
-            if (durationMs > 0 && positionMs.toDouble() / durationMs.toDouble() >= 0.9 && !looksLikePlaceholder(durationMs, expectedRuntimeMs)) {
+            val placeholderNow = looksLikePlaceholder(durationMs, expectedRuntimeMs)
+            if (durationMs > 0 && positionMs.toDouble() / durationMs.toDouble() >= 0.9 && !placeholderNow) {
                 onMarkRealWatchComplete()
             }
             if (currentUpNextInfo != null && !upNextShown && !upNextDismissed && durationMs > 0) {
@@ -714,7 +725,9 @@ internal fun PlayerSurface(
                         upNextDismissed = true
                         stopAtEnd = true
                     }
-                    onReportRealDuration(positionMs / 1000.0)
+                    if (directPlay && !placeholderNow) {
+                        onReportRealDuration(positionMs / 1000.0)
+                    }
                     onMarkRealWatchComplete()
                 }
             }
@@ -910,13 +923,105 @@ internal fun PlayerSurface(
         }
     }
 
+    val isInPipMode = com.jellio.android.LocalIsInPipMode.current
+    val mainActivity = context as? com.jellio.android.MainActivity
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    var isLocked by remember { mutableStateOf(false) }
+    var resizeMode by remember { mutableStateOf(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT) }
+
+    // Brightness and volume vertical swipe gesture state
+    val audioManager = remember(context) { context.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager }
+    var activeSwipeHud by remember { mutableStateOf<String?>(null) } // "brightness" | "volume" | null
+    var swipeHudPercent by remember { mutableStateOf(0) }
+    var swipeHudStamp by remember { mutableLongStateOf(0L) }
+    var brightnessAccumulator by remember { mutableStateOf(-1f) }
+    var volumeAccumulator by remember { mutableStateOf(-1f) }
+
+    LaunchedEffect(swipeHudStamp) {
+        if (activeSwipeHud != null) {
+            delay(1000)
+            activeSwipeHud = null
+        }
+    }
+
+    // Wire MainActivity PiP callbacks & update PiP params when playing state changes
+    LaunchedEffect(isPlaying, player) {
+        val vSize = player.videoSize
+        val w = if (vSize.width > 0) vSize.width else 16
+        val h = if (vSize.height > 0) vSize.height else 9
+        mainActivity?.updatePipParams(isPlaying = isPlaying, aspectWidth = w, aspectHeight = h)
+    }
+
+    DisposableEffect(mainActivity, player, shownDurationMs) {
+        if (mainActivity != null) {
+            mainActivity.onPipPlayPause = { togglePlay() }
+            mainActivity.onPipSeekDeltaMs = { deltaMs ->
+                userSeek(seekTarget(realPositionMs(), deltaMs, shownDurationMs))
+            }
+        }
+        onDispose {
+            if (mainActivity != null) {
+                mainActivity.onPipPlayPause = null
+                mainActivity.onPipSeekDeltaMs = null
+                mainActivity.updatePipParams(isPlaying = false)
+            }
+        }
+    }
+
+    // Pause playback on ON_STOP when not in Picture-in-Picture mode so video doesn't blast audio in background
+    DisposableEffect(lifecycleOwner, player, mainActivity) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+                val inPip = mainActivity?.isInPictureInPictureMode == true
+                if (!inPip && player.isPlaying) {
+                    player.pause()
+                    if (currentHasReportedStart) {
+                        val ticks = realPositionMs() * TICKS_PER_MS
+                        onReportProgress(ticks, true)
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    fun toggleOrientation() {
+        val act = mainActivity ?: (context as? android.app.Activity) ?: return
+        val current = act.requestedOrientation
+        act.requestedOrientation = if (
+            current == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE ||
+            current == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        ) {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        } else {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+    }
+
+    fun cycleResizeMode() {
+        resizeMode = when (resizeMode) {
+            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
+            else -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(menuOpen, showEndScreen, upNextCardVisible, showResumePrompt, catchUpOpen, pauseOverlayVisible) {
+            .pointerInput(menuOpen, showEndScreen, upNextCardVisible, showResumePrompt, catchUpOpen, pauseOverlayVisible, isLocked, isInPipMode) {
                 detectTapGestures(
                     onTap = {
+                        if (isInPipMode) return@detectTapGestures
                         interaction++
+                        if (isLocked) {
+                            controlsVisible = !controlsVisible
+                            return@detectTapGestures
+                        }
                         if (pauseOverlayVisible) {
                             pauseOverlayVisible = false
                             controlsVisible = true
@@ -927,6 +1032,7 @@ internal fun PlayerSurface(
                         }
                     },
                     onDoubleTap = { offset ->
+                        if (isInPipMode || isLocked) return@detectTapGestures
                         interaction++
                         if (!menuOpen && !showEndScreen && !upNextCardVisible && !showResumePrompt && !catchUpOpen) {
                             val forward = offset.x > size.width / 2f
@@ -939,6 +1045,114 @@ internal fun PlayerSurface(
                         }
                     },
                 )
+            }
+            .pointerInput(menuOpen, showEndScreen, upNextCardVisible, showResumePrompt, catchUpOpen, isLocked, isInPipMode) {
+                if (isInPipMode || isLocked || menuOpen || showEndScreen || upNextCardVisible || showResumePrompt || catchUpOpen) {
+                    return@pointerInput
+                }
+                var dragZone = 0 // 1 = left (brightness), 2 = right (volume), 0 = none
+                var pinchAccum = 1f
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val pressed = event.changes.filter { it.pressed }
+                        if (pressed.isEmpty()) {
+                            dragZone = 0
+                            pinchAccum = 1f
+                            continue
+                        }
+                        if (pressed.size >= 2) {
+                            // Pinch-to-zoom between Fit and Zoom
+                            dragZone = 0
+                            val p0 = pressed[0]
+                            val p1 = pressed[1]
+                            val prevDist = (p0.previousPosition - p1.previousPosition).getDistance()
+                            val currDist = (p0.position - p1.position).getDistance()
+                            if (prevDist > 10f) {
+                                pinchAccum *= (currDist / prevDist)
+                                if (pinchAccum > 1.18f && resizeMode != androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM) {
+                                    resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                    p0.consume()
+                                    p1.consume()
+                                } else if (pinchAccum < 0.85f && resizeMode != androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT) {
+                                    resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                    p0.consume()
+                                    p1.consume()
+                                }
+                            }
+                            continue
+                        }
+                        val change = pressed[0]
+                        val dy = change.position.y - change.previousPosition.y
+                        val dx = change.position.x - change.previousPosition.x
+                        if (dragZone == 0) {
+                            if (kotlin.math.abs(dy) > 14f && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.4f) {
+                                val x = change.position.x
+                                val w = size.width.toFloat().coerceAtLeast(1f)
+                                // Ignore top/bottom system edge swipe zones
+                                val y = change.position.y
+                                val h = size.height.toFloat().coerceAtLeast(1f)
+                                if (y in (h * 0.12f)..(h * 0.85f)) {
+                                    if (x <= w * 0.35f) {
+                                        dragZone = 1
+                                        val act = mainActivity ?: (context as? android.app.Activity)
+                                        val curBright = act?.window?.attributes?.screenBrightness ?: -1f
+                                        brightnessAccumulator = if (curBright in 0.01f..1.0f) {
+                                            curBright
+                                        } else {
+                                            runCatching {
+                                                android.provider.Settings.System.getInt(
+                                                    context.contentResolver,
+                                                    android.provider.Settings.System.SCREEN_BRIGHTNESS,
+                                                ) / 255f
+                                            }.getOrDefault(0.5f).coerceIn(0.01f, 1.0f)
+                                        }
+                                    } else if (x >= w * 0.65f) {
+                                        dragZone = 2
+                                        val am = audioManager
+                                        if (am != null) {
+                                            val maxVol = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                                            val curVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                                            volumeAccumulator = (curVol.toFloat() / maxVol.toFloat()).coerceIn(0f, 1f)
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (kotlin.math.abs(dy) > 0.5f) {
+                            val h = (size.height.toFloat() * 0.65f).coerceAtLeast(150f)
+                            val delta = -dy / h
+                            if (dragZone == 1) {
+                                val nextBright = (brightnessAccumulator + delta).coerceIn(0.01f, 1.0f)
+                                brightnessAccumulator = nextBright
+                                val act = mainActivity ?: (context as? android.app.Activity)
+                                act?.window?.let { win ->
+                                    win.attributes = win.attributes.apply {
+                                        screenBrightness = nextBright
+                                    }
+                                }
+                                activeSwipeHud = "brightness"
+                                swipeHudPercent = (nextBright * 100f).toInt().coerceIn(1, 100)
+                                swipeHudStamp = System.nanoTime()
+                                change.consume()
+                            } else if (dragZone == 2) {
+                                val am = audioManager
+                                if (am != null) {
+                                    val maxVol = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                                    val nextVolFrac = (volumeAccumulator + delta).coerceIn(0f, 1f)
+                                    volumeAccumulator = nextVolFrac
+                                    val targetVol = (nextVolFrac * maxVol).toInt().coerceIn(0, maxVol)
+                                    runCatching {
+                                        am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, targetVol, 0)
+                                    }
+                                    activeSwipeHud = "volume"
+                                    swipeHudPercent = (nextVolFrac * 100f).toInt().coerceIn(0, 100)
+                                    swipeHudStamp = System.nanoTime()
+                                    change.consume()
+                                }
+                            }
+                        }
+                    }
+                }
             }
             .focusRequester(focusRequester)
             .focusable()
@@ -1049,10 +1263,17 @@ internal fun PlayerSurface(
                 }
                 when (event.key) {
                     Key.Back -> {
-                        if (controlsVisible) controlsVisible = false else onBack()
+                        if (isLocked) {
+                            controlsVisible = true
+                        } else if (controlsVisible) {
+                            controlsVisible = false
+                        } else {
+                            onBack()
+                        }
                         true
                     }
                     Key.DirectionLeft, Key.DirectionRight, Key.MediaRewind, Key.MediaFastForward -> {
+                        if (isLocked) return@onKeyEvent true
                         holdSeekTargetMs?.let { target ->
                             seekFlash = SeekFlash(target, holdSeekDeltaMs, System.nanoTime())
                             releaseHoldSeek(target)
@@ -1070,11 +1291,16 @@ internal fun PlayerSurface(
                         true
                     }
                     Key.MediaPlayPause -> {
+                        if (isLocked) return@onKeyEvent true
                         togglePlay()
                         controlsVisible = true
                         true
                     }
                     Key.DirectionCenter, Key.Enter -> {
+                        if (isLocked) {
+                            controlsVisible = true
+                            return@onKeyEvent true
+                        }
                         if (controlsVisible) return@onKeyEvent false
                         togglePlay()
                         controlsVisible = true
@@ -1094,10 +1320,12 @@ internal fun PlayerSurface(
                 PlayerView(it).apply {
                     this.player = player
                     useController = false
+                    this.resizeMode = resizeMode
                 }
             },
             update = { view ->
                 if (view.player !== player) view.player = player
+                if (view.resizeMode != resizeMode) view.resizeMode = resizeMode
                 view.subtitleView?.let { subtitleView ->
                     subtitleView.setStyle(subtitleCaptionStyle(subtitleStyle))
                     subtitleView.setFractionalTextSize(subtitleFractionalTextSize(subtitleStyle))
@@ -1107,346 +1335,425 @@ internal fun PlayerSurface(
             modifier = Modifier.fillMaxSize(),
         )
 
-        if (pauseOverlayVisible && pausedByViewer) {
-            PauseOverlay(info = pauseInfo!!)
-        }
-
-        val problem = exoError
-        if (problem != null) {
-            LaunchedEffect(problem) { controlsVisible = false }
-            PlaybackErrorPanel(problem = problem, onBack = onBack)
-        } else if (isBuffering && pauseInfo != null) {
-            BufferingOverlay(info = pauseInfo!!)
-        } else if (isBuffering) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                PulsingTitle(text = title.ifBlank { Strings.get("tv_loading") })
+        // When in Picture-in-Picture mode, hide all overlays, controls, menus, and prompts
+        if (!isInPipMode) {
+            if (pauseOverlayVisible && pausedByViewer && !isLocked) {
+                PauseOverlay(info = pauseInfo!!)
             }
-        }
 
-        // The quick-jump badge: shown for a moment after the last press,
-        // adding up repeated presses (+30s after three).
-        seekFlash?.let { flash ->
-            SeekFlashBadge(
-                flash = flash,
-                holding = holdSeekTargetMs != null,
-                durationMs = shownDurationMs,
-                onExpired = { seekFlash = null },
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
-        }
-
-        // Switching streams: shown until the new stream has buffered and plays.
-        if (switchingTo != null) {
-            LaunchedEffect(switchingTo, switchingLoaded, player) {
-                if (!switchingLoaded) return@LaunchedEffect
-                val startMs = System.currentTimeMillis()
-                while (isActive) {
-                    val playing = isPlaying || player.isPlaying
-                    val ready = !isBuffering && player.playbackState == Player.STATE_READY
-                    if (playing && ready) break
-                    if (System.currentTimeMillis() - startMs > 15_000L) break
-                    delay(100)
+            val problem = exoError
+            if (problem != null) {
+                LaunchedEffect(problem) { controlsVisible = false }
+                PlaybackErrorPanel(problem = problem, onBack = onBack)
+            } else if (isBuffering && pauseInfo != null) {
+                BufferingOverlay(info = pauseInfo!!)
+            } else if (isBuffering) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    PulsingTitle(text = title.ifBlank { Strings.get("tv_loading") })
                 }
-                delay(150)
-                currentSwitchSettled()
             }
-            SwitchingCard(
-                label = switchingTo,
-                step = Strings.get(if (switchingLoaded) "player_switch_loading" else "player_switch_connecting"),
-                modifier = Modifier.align(Alignment.Center),
-            )
-        }
 
-        if (controlsVisible) {
-            PlayerControls(
-                title = title,
-                subtitle = subtitle,
-                isPlaying = isPlaying,
-                enabled = !menuOpen,
-                positionMs = { positionMs },
-                durationMs = shownDurationMs,
-                hasSubtitleTracks = subtitleTracks.isNotEmpty(),
-                hasAudioTracks = true,
-                hasSourceOptions = sourceOptions.size > 1,
-                hasEpisodes = seasons.isNotEmpty(),
-                speedLabel = formatSpeed(playbackSpeed),
-                sleepTimerActive = sleepTimerEndTimeMs != null || EpisodeSleepTimer.remaining != null,
-                onPlayPause = { togglePlay() },
-                onBack = onBack,
-                onSkip = { deltaMs ->
-                    userSeek(seekTarget(positionMs, deltaMs, shownDurationMs))
-                },
-                onScrubEnd = { target ->
-                    if (target != null) userSeek(target)
-                },
-                onOpenSubtitleMenu = { showSubtitleMenu = true },
-                onOpenSpeedMenu = { showSpeedMenu = true },
-                onOpenSleepMenu = { showSleepMenu = true },
-                episodeNav = episodeNav(isEpisode, syncGroup != null && groupWatch.party.shouldAsk(), previousEpisodeId, upNextInfo?.itemId),
-                onPreviousEpisode = { previousEpisodeId?.let(onPlayPrevious) },
-                onNextEpisode = { upNextInfo?.let { onPlayNext(it.itemId) } },
-                inGroup = syncGroup != null,
-                onOpenReactMenu = { showReactMenu = true },
-                onOpenAudioMenu = { showAudioMenu = true },
-                onOpenSourceMenu = {
-                    showEpisodesPanel = false
-                    showSourcePanel = true
-                },
-                onOpenEpisodesMenu = {
-                    showSourcePanel = false
-                    showEpisodesPanel = true
-                },
-            )
-        }
-
-        // A subtitle offset change re-reads the subtitle track from where
-        // playback is, once the buttons have been left alone for a moment.
-        LaunchedEffect(subtitleResyncSeq) {
-            if (subtitleResyncSeq == 0) return@LaunchedEffect
-            kotlinx.coroutines.delay(600)
-            val pos = player.currentPosition.coerceAtLeast(0L)
-            if (syncDelays.wrapped) {
-                player.seekTo(pos)
-            } else {
-                player.setMediaSource(buildPlayerMediaSource(activeSideloadedTrack), pos)
-                player.prepare()
+            // Sleek floating pill HUD indicator for vertical brightness & volume swipe gestures
+            activeSwipeHud?.let { hudKind ->
+                SwipeGestureHudPill(
+                    kind = hudKind,
+                    percent = swipeHudPercent,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 36.dp),
+                )
             }
-        }
 
-        if (showAudioMenu) {
-            AudioMenu(
-                tracks = audioTracks,
-                selectedStreamIndex = selectedAudioStreamIndex,
-                defaultStreamIndex = defaultAudioStreamIndex,
-                onSelect = { streamIndex ->
-                    showAudioMenu = false
-                    onSelectAudioTrack(streamIndex, realPositionMs() * TICKS_PER_MS)
-                },
-                onToggleDialogueBoost = {
-                    val next = !PlayerPrefs.dialogueBoost
-                    PlayerPrefs.setDialogueBoost(context, next)
-                    onShowToast(Strings.get(if (next) "player_dialogue_boost_enabled" else "player_dialogue_boost_disabled"))
-                },
-                audioDelayMs = audioDelayMs,
-                onAudioDelay = { ms ->
-                    audioDelayMs = ms
-                    syncDelays.audioMs = ms
-                    PlayerPrefs.setAudioDelay(context, ms)
-                    // The first offset adds the sync layer, which needs a reload.
-                    if (!syncDelays.wrapped && ms != 0) subtitleResyncSeq++
-                },
-                onDismiss = { showAudioMenu = false },
-            )
-        }
-
-        if (showSourcePanel && sourceOptions.size > 1) {
-            SourcePanel(
-                sources = sourceOptions,
-                currentMediaSourceId = currentMediaSourceId,
-                onSelect = { source ->
-                    showSourcePanel = false
-                    onSelectSource(source, realPositionMs() * TICKS_PER_MS)
-                },
-                onBlocked = { onShowToast(Strings.get("tv_transcode_blocked")) },
-                onDismiss = { showSourcePanel = false },
-            )
-        }
-
-        if (showEpisodesPanel && seasons.isNotEmpty()) {
-            EpisodesPanel(
-                seasons = seasons,
-                selectedSeasonId = selectedSeasonId,
-                episodes = episodes,
-                currentItemId = currentItemId,
-                onSelectSeason = onSelectSeason,
-                onSelectEpisode = { episodeId ->
-                    showEpisodesPanel = false
-                    if (episodeId != currentItemId) onPlayNext(episodeId)
-                },
-                onDismiss = { showEpisodesPanel = false },
-            )
-        }
-
-        if (showSpeedMenu) {
-            SpeedMenu(
-                selectedSpeed = playbackSpeed,
-                onSelect = { speed ->
-                    showSpeedMenu = false
-                    playbackSpeed = speed
-                },
-                onDismiss = { showSpeedMenu = false },
-            )
-        }
-
-        if (showSleepMenu) {
-            SleepMenu(
-                activeEpisodes = EpisodeSleepTimer.remaining,
-                minutesActive = sleepTimerEndTimeMs != null,
-                onSelect = { minutes ->
-                    showSleepMenu = false
-                    EpisodeSleepTimer.remaining = null
-                    onStartSleepTimer(minutes)
-                },
-                onSelectEpisodes = { count ->
-                    showSleepMenu = false
-                    if (sleepTimerEndTimeMs != null) onCancelSleepTimer()
-                    EpisodeSleepTimer.remaining = count
-                    onShowToast(if (count == 1) Strings.get("player_this_episode") else Strings.format("player_stop_episodes", count))
-                },
-                onCancel = {
-                    showSleepMenu = false
-                    EpisodeSleepTimer.remaining = null
-                    onCancelSleepTimer()
-                },
-                onDismiss = { showSleepMenu = false },
-            )
-        }
-
-        // Auto-skip intros (Settings > Playback): once per intro, the same
-        // as screens/player.js does when it's switched on.
-        LaunchedEffect(activeSkip?.targetSeconds, PlayerPrefs.autoSkipIntro) {
-            val segment = activeSkip ?: return@LaunchedEffect
-            if (PlayerPrefs.autoSkipIntro && segment.kind == SkipKind.INTRO && autoSkippedTo != segment.targetSeconds) {
-                autoSkippedTo = segment.targetSeconds
-                dismissedSkipKind = SkipKind.INTRO
-                userSeek((segment.targetSeconds * 1000).toLong())
-                onShowToast(Strings.get("tv_skipped_intro"))
+            // The quick-jump badge: shown for a moment after the last press,
+            // adding up repeated presses (+30s after three).
+            seekFlash?.let { flash ->
+                SeekFlashBadge(
+                    flash = flash,
+                    holding = holdSeekTargetMs != null,
+                    durationMs = shownDurationMs,
+                    onExpired = { seekFlash = null },
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
             }
-        }
-        if (skipPromptVisible && activeSkip != null) {
-            PlayerPrompt(
-                eyebrow = activeSkip.eyebrow,
-                title = activeSkip.label,
-                actionLabel = if (skipCountdown > 0) Strings.format("player_skip_countdown", skipCountdown) else Strings.get("player_skip"),
-                actionIcon = Icons.Filled.SkipNext,
-                onAction = { userSeek((activeSkip.targetSeconds * 1000).toLong()) },
-                onDismiss = { dismissPrompt() },
-                takeFocus = !controlsVisible,
-                focusKey = activeSkip.kind,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = promptBottom),
-            )
-        }
-        if (nearEndUpNextVisible && upNextInfo != null) {
-            PlayerPrompt(
-                eyebrow = Strings.get("player_up_next"),
-                title = upNextInfo.episodeName.ifBlank { upNextInfo.title },
-                detail = listOfNotNull(upNextInfo.episodeCode, upNextInfo.seriesName).joinToString("  ·  "),
-                thumbnailUrl = upNextInfo.thumbnailUrl,
-                actionLabel = Strings.get("player_play_next_episode"),
-                actionIcon = Icons.Filled.PlayArrow,
-                onAction = {
-                    // This episode counts toward an episode sleep timer as
-                    // if it had played to the end.
-                    EpisodeSleepTimer.countEpisode()
-                    onPlayNext(upNextInfo.itemId)
-                },
-                onDismiss = { dismissPrompt() },
-                takeFocus = !controlsVisible,
-                focusKey = upNextInfo.itemId,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = promptBottom),
-            )
-        }
 
-        if (upNextCardVisible && upNextInfo != null) {
-            UpNextOverlay(
-                info = upNextInfo,
-                secondsRemaining = upNextCountdown,
-                onPlayNow = { onPlayNext(upNextInfo.itemId) },
-                onDismiss = { upNextDismissed = true },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 40.dp),
-            )
-        }
-
-        if (showEndScreen) {
-            EndScreen(
-                finishedTitle = title,
-                finishedSubtitle = subtitle,
-                next = upNextInfo,
-                countdown = if (upNextShown && !upNextDismissed) upNextCountdown else endCountdown,
-                onPlayNext = { upNextInfo?.let { onPlayNext(it.itemId) } },
-                onReplay = onRestart,
-                onBack = onBack,
-                art = pauseInfo?.art.orEmpty(),
-                info = pauseInfo,
-            )
-        }
-
-        if (showReactMenu) {
-            val replyTo = remember { groupWatch.party.replyTarget() }
-            ReactMenu(
-                replyTo = replyTo,
-                onReact = { emoji ->
-                    showReactMenu = false
-                    groupWatch.react(emoji)
-                },
-                onDismiss = { showReactMenu = false },
-            )
-        }
-
-        if (showSubtitleMenu) {
-            SubtitleMenu(
-                tracks = subtitleTracks,
-                selectedIndex = selectedSubtitleIndex,
-                onSelect = { track ->
-                    showSubtitleMenu = false
-                    onSelectSubtitle(track, realPositionMs() * TICKS_PER_MS)
-                },
-                subtitleStyle = subtitleStyle,
-                onSetSubtitleSize = onSetSubtitleSize,
-                onSetSubtitleBackground = onSetSubtitleBackground,
-                onSetSubtitleLook = onSetSubtitleLook,
-                subtitleOffsetMs = subtitleOffsetMs,
-                onSubtitleOffset = { ms -> setSubtitleOffset(ms) },
-                canSyncSubtitles = selectedSubtitleIndex != null && subtitleTracks.firstOrNull { it.streamIndex == selectedSubtitleIndex }?.isTextBased == true,
-                onDismiss = { showSubtitleMenu = false },
-            )
-        }
-
-        if (catchUpOpen) {
-            CatchUpPrompt(
-                groupAtTicks = startPositionTicks,
-                onFollow = { catchUpOpen = false },
-                onSolo = {
-                    catchUpOpen = false
-                    syncScope.launch {
-                        syncPlay.leave()
-                        onRestart()
+            // Switching streams: shown until the new stream has buffered and plays.
+            if (switchingTo != null) {
+                LaunchedEffect(switchingTo, switchingLoaded, player) {
+                    if (!switchingLoaded) return@LaunchedEffect
+                    val startMs = System.currentTimeMillis()
+                    while (isActive) {
+                        val playing = isPlaying || player.isPlaying
+                        val ready = !isBuffering && player.playbackState == Player.STATE_READY
+                        if (playing && ready) break
+                        if (System.currentTimeMillis() - startMs > 15_000L) break
+                        delay(100)
                     }
-                },
-            )
-        }
+                    delay(150)
+                    currentSwitchSettled()
+                }
+                SwitchingCard(
+                    label = switchingTo,
+                    step = Strings.get(if (switchingLoaded) "player_switch_loading" else "player_switch_connecting"),
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
 
-        if (bufferPromptVisible) {
-            BufferSwitchPrompt(
-                onSwitch = { switchForBuffering() },
-                onKeep = {
-                    bufferPromptVisible = false
-                    bufferWatch.snooze(System.currentTimeMillis(), 10 * 60_000L)
-                },
-                onAlways = {
-                    PlayerPrefs.setBufferSwitch(context, "auto")
-                    switchForBuffering()
-                },
-            )
-        }
+            if (controlsVisible) {
+                PlayerControls(
+                    title = title,
+                    subtitle = subtitle,
+                    isPlaying = isPlaying,
+                    enabled = !menuOpen,
+                    positionMs = { positionMs },
+                    durationMs = shownDurationMs,
+                    hasSubtitleTracks = subtitleTracks.isNotEmpty(),
+                    hasAudioTracks = true,
+                    hasSourceOptions = sourceOptions.size > 1,
+                    hasEpisodes = seasons.isNotEmpty(),
+                    speedLabel = formatSpeed(playbackSpeed),
+                    sleepTimerActive = sleepTimerEndTimeMs != null || EpisodeSleepTimer.remaining != null,
+                    onPlayPause = { togglePlay() },
+                    onBack = onBack,
+                    onSkip = { deltaMs ->
+                        userSeek(seekTarget(positionMs, deltaMs, shownDurationMs))
+                    },
+                    onScrubEnd = { target ->
+                        if (target != null) userSeek(target)
+                    },
+                    onOpenSubtitleMenu = { showSubtitleMenu = true },
+                    onOpenSpeedMenu = { showSpeedMenu = true },
+                    onOpenSleepMenu = { showSleepMenu = true },
+                    episodeNav = episodeNav(isEpisode, syncGroup != null && groupWatch.party.shouldAsk(), previousEpisodeId, upNextInfo?.itemId),
+                    onPreviousEpisode = { previousEpisodeId?.let(onPlayPrevious) },
+                    onNextEpisode = { upNextInfo?.let { onPlayNext(it.itemId) } },
+                    inGroup = syncGroup != null,
+                    onOpenReactMenu = { showReactMenu = true },
+                    onOpenAudioMenu = { showAudioMenu = true },
+                    onOpenSourceMenu = {
+                        showEpisodesPanel = false
+                        showSourcePanel = true
+                    },
+                    onOpenEpisodesMenu = {
+                        showSourcePanel = false
+                        showEpisodesPanel = true
+                    },
+                    supportsPip = mainActivity?.supportsPip() == true,
+                    onEnterPip = {
+                        val vSize = player.videoSize
+                        val w = if (vSize.width > 0) vSize.width else 16
+                        val h = if (vSize.height > 0) vSize.height else 9
+                        mainActivity?.enterPipNow(w, h)
+                    },
+                    onToggleOrientation = { toggleOrientation() },
+                    isLocked = isLocked,
+                    onToggleLock = {
+                        isLocked = !isLocked
+                        controlsVisible = true
+                    },
+                    resizeMode = resizeMode,
+                    onCycleResizeMode = { cycleResizeMode() },
+                )
+            }
 
-        if (showResumePrompt) {
-            ResumePrompt(
-                percent = resumePercent,
-                resumeTicks = startPositionTicks,
-                onResume = {
-                    resumePromptDismissed = true
-                    player.play()
-                },
-                onRestart = {
-                    resumePromptDismissed = true
-                    onRestart()
-                },
-            )
-        }
+            // A subtitle offset change re-reads the subtitle track from where
+            // playback is, once the buttons have been left alone for a moment.
+            LaunchedEffect(subtitleResyncSeq) {
+                if (subtitleResyncSeq == 0) return@LaunchedEffect
+                kotlinx.coroutines.delay(600)
+                val pos = player.currentPosition.coerceAtLeast(0L)
+                if (syncDelays.wrapped) {
+                    player.seekTo(pos)
+                } else {
+                    player.setMediaSource(buildPlayerMediaSource(activeSideloadedTrack), pos)
+                    player.prepare()
+                }
+            }
 
-        if (toastMessage != null) {
-            PlayerToast(message = toastMessage, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 104.dp))
+            if (showAudioMenu) {
+                AudioMenu(
+                    tracks = audioTracks,
+                    selectedStreamIndex = selectedAudioStreamIndex,
+                    defaultStreamIndex = defaultAudioStreamIndex,
+                    onSelect = { streamIndex ->
+                        showAudioMenu = false
+                        onSelectAudioTrack(streamIndex, realPositionMs() * TICKS_PER_MS)
+                    },
+                    onToggleDialogueBoost = {
+                        val next = !PlayerPrefs.dialogueBoost
+                        PlayerPrefs.setDialogueBoost(context, next)
+                        onShowToast(Strings.get(if (next) "player_dialogue_boost_enabled" else "player_dialogue_boost_disabled"))
+                    },
+                    audioDelayMs = audioDelayMs,
+                    onAudioDelay = { ms ->
+                        audioDelayMs = ms
+                        syncDelays.audioMs = ms
+                        PlayerPrefs.setAudioDelay(context, ms)
+                        // The first offset adds the sync layer, which needs a reload.
+                        if (!syncDelays.wrapped && ms != 0) subtitleResyncSeq++
+                    },
+                    onDismiss = { showAudioMenu = false },
+                )
+            }
+
+            if (showSourcePanel && sourceOptions.size > 1) {
+                SourcePanel(
+                    sources = sourceOptions,
+                    currentMediaSourceId = currentMediaSourceId,
+                    onSelect = { source ->
+                        showSourcePanel = false
+                        onSelectSource(source, realPositionMs() * TICKS_PER_MS)
+                    },
+                    onBlocked = { onShowToast(Strings.get("tv_transcode_blocked")) },
+                    onDismiss = { showSourcePanel = false },
+                )
+            }
+
+            if (showEpisodesPanel && seasons.isNotEmpty()) {
+                EpisodesPanel(
+                    seasons = seasons,
+                    selectedSeasonId = selectedSeasonId,
+                    episodes = episodes,
+                    currentItemId = currentItemId,
+                    onSelectSeason = onSelectSeason,
+                    onSelectEpisode = { episodeId ->
+                        showEpisodesPanel = false
+                        if (episodeId != currentItemId) onPlayNext(episodeId)
+                    },
+                    onDismiss = { showEpisodesPanel = false },
+                )
+            }
+
+            if (showSpeedMenu) {
+                SpeedMenu(
+                    selectedSpeed = playbackSpeed,
+                    onSelect = { speed ->
+                        showSpeedMenu = false
+                        playbackSpeed = speed
+                    },
+                    onDismiss = { showSpeedMenu = false },
+                )
+            }
+
+            if (showSleepMenu) {
+                SleepMenu(
+                    activeEpisodes = EpisodeSleepTimer.remaining,
+                    minutesActive = sleepTimerEndTimeMs != null,
+                    onSelect = { minutes ->
+                        showSleepMenu = false
+                        EpisodeSleepTimer.remaining = null
+                        onStartSleepTimer(minutes)
+                    },
+                    onSelectEpisodes = { count ->
+                        showSleepMenu = false
+                        if (sleepTimerEndTimeMs != null) onCancelSleepTimer()
+                        EpisodeSleepTimer.remaining = count
+                        onShowToast(if (count == 1) Strings.get("player_this_episode") else Strings.format("player_stop_episodes", count))
+                    },
+                    onCancel = {
+                        showSleepMenu = false
+                        EpisodeSleepTimer.remaining = null
+                        onCancelSleepTimer()
+                    },
+                    onDismiss = { showSleepMenu = false },
+                )
+            }
+
+            // Auto-skip intros (Settings > Playback): once per intro, the same
+            // as screens/player.js does when it's switched on.
+            LaunchedEffect(activeSkip?.targetSeconds, PlayerPrefs.autoSkipIntro) {
+                val segment = activeSkip ?: return@LaunchedEffect
+                if (PlayerPrefs.autoSkipIntro && segment.kind == SkipKind.INTRO && autoSkippedTo != segment.targetSeconds) {
+                    autoSkippedTo = segment.targetSeconds
+                    dismissedSkipKind = SkipKind.INTRO
+                    userSeek((segment.targetSeconds * 1000).toLong())
+                    onShowToast(Strings.get("tv_skipped_intro"))
+                }
+            }
+            if (skipPromptVisible && activeSkip != null && !isLocked) {
+                PlayerPrompt(
+                    eyebrow = activeSkip.eyebrow,
+                    title = activeSkip.label,
+                    actionLabel = if (skipCountdown > 0) Strings.format("player_skip_countdown", skipCountdown) else Strings.get("player_skip"),
+                    actionIcon = Icons.Filled.SkipNext,
+                    onAction = { userSeek((activeSkip.targetSeconds * 1000).toLong()) },
+                    onDismiss = { dismissPrompt() },
+                    takeFocus = !controlsVisible,
+                    focusKey = activeSkip.kind,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = promptBottom),
+                )
+            }
+            if (nearEndUpNextVisible && upNextInfo != null && !isLocked) {
+                PlayerPrompt(
+                    eyebrow = Strings.get("player_up_next"),
+                    title = upNextInfo.episodeName.ifBlank { upNextInfo.title },
+                    detail = listOfNotNull(upNextInfo.episodeCode, upNextInfo.seriesName).joinToString("  ·  "),
+                    thumbnailUrl = upNextInfo.thumbnailUrl,
+                    actionLabel = Strings.get("player_play_next_episode"),
+                    actionIcon = Icons.Filled.PlayArrow,
+                    onAction = {
+                        // This episode counts toward an episode sleep timer as
+                        // if it had played to the end.
+                        EpisodeSleepTimer.countEpisode()
+                        onPlayNext(upNextInfo.itemId)
+                    },
+                    onDismiss = { dismissPrompt() },
+                    takeFocus = !controlsVisible,
+                    focusKey = upNextInfo.itemId,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = promptBottom),
+                )
+            }
+
+            if (upNextCardVisible && upNextInfo != null) {
+                UpNextOverlay(
+                    info = upNextInfo,
+                    secondsRemaining = upNextCountdown,
+                    onPlayNow = { onPlayNext(upNextInfo.itemId) },
+                    onDismiss = { upNextDismissed = true },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 40.dp),
+                )
+            }
+
+            if (showEndScreen) {
+                EndScreen(
+                    finishedTitle = title,
+                    finishedSubtitle = subtitle,
+                    next = upNextInfo,
+                    countdown = if (upNextShown && !upNextDismissed) upNextCountdown else endCountdown,
+                    onPlayNext = { upNextInfo?.let { onPlayNext(it.itemId) } },
+                    onReplay = onRestart,
+                    onBack = onBack,
+                    art = pauseInfo?.art.orEmpty(),
+                    info = pauseInfo,
+                )
+            }
+
+            if (showReactMenu) {
+                val replyTo = remember { groupWatch.party.replyTarget() }
+                ReactMenu(
+                    replyTo = replyTo,
+                    onReact = { emoji ->
+                        showReactMenu = false
+                        groupWatch.react(emoji)
+                    },
+                    onDismiss = { showReactMenu = false },
+                )
+            }
+
+            if (showSubtitleMenu) {
+                SubtitleMenu(
+                    tracks = subtitleTracks,
+                    selectedIndex = selectedSubtitleIndex,
+                    onSelect = { track ->
+                        showSubtitleMenu = false
+                        onSelectSubtitle(track, realPositionMs() * TICKS_PER_MS)
+                    },
+                    subtitleStyle = subtitleStyle,
+                    onSetSubtitleSize = onSetSubtitleSize,
+                    onSetSubtitleBackground = onSetSubtitleBackground,
+                    onSetSubtitleLook = onSetSubtitleLook,
+                    subtitleOffsetMs = subtitleOffsetMs,
+                    onSubtitleOffset = { ms -> setSubtitleOffset(ms) },
+                    canSyncSubtitles = selectedSubtitleIndex != null && subtitleTracks.firstOrNull { it.streamIndex == selectedSubtitleIndex }?.isTextBased == true,
+                    onDismiss = { showSubtitleMenu = false },
+                )
+            }
+
+            if (catchUpOpen) {
+                CatchUpPrompt(
+                    groupAtTicks = startPositionTicks,
+                    onFollow = { catchUpOpen = false },
+                    onSolo = {
+                        catchUpOpen = false
+                        syncScope.launch {
+                            syncPlay.leave()
+                            onRestart()
+                        }
+                    },
+                )
+            }
+
+            if (bufferPromptVisible) {
+                BufferSwitchPrompt(
+                    onSwitch = { switchForBuffering() },
+                    onKeep = {
+                        bufferPromptVisible = false
+                        bufferWatch.snooze(System.currentTimeMillis(), 10 * 60_000L)
+                    },
+                    onAlways = {
+                        PlayerPrefs.setBufferSwitch(context, "auto")
+                        switchForBuffering()
+                    },
+                )
+            }
+
+            if (showResumePrompt) {
+                ResumePrompt(
+                    percent = resumePercent,
+                    resumeTicks = startPositionTicks,
+                    onResume = {
+                        resumePromptDismissed = true
+                        player.play()
+                    },
+                    onRestart = {
+                        resumePromptDismissed = true
+                        onRestart()
+                    },
+                )
+            }
+
+            if (toastMessage != null) {
+                PlayerToast(message = toastMessage, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 104.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwipeGestureHudPill(
+    kind: String,
+    percent: Int,
+    modifier: Modifier = Modifier,
+) {
+    val icon = when {
+        kind == "brightness" -> androidx.compose.material.icons.Icons.Filled.BrightnessMedium
+        percent == 0 -> androidx.compose.material.icons.Icons.AutoMirrored.Filled.VolumeOff
+        else -> androidx.compose.material.icons.Icons.AutoMirrored.Filled.VolumeUp
+    }
+    Box(
+        modifier = modifier
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(999.dp))
+            .background(com.jellio.android.ui.theme.JellioBgElevated.copy(alpha = 0.92f))
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+    ) {
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+        ) {
+            androidx.tv.material3.Icon(
+                imageVector = icon,
+                contentDescription = kind,
+                tint = com.jellio.android.ui.theme.JellioSecondary,
+                modifier = Modifier.size(20.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .size(width = 110.dp, height = 6.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp))
+                    .background(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.22f)),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(end = ((1f - (percent / 100f).coerceIn(0f, 1f)) * 110f).dp)
+                        .background(
+                            com.jellio.android.ui.theme.JellioSecondary,
+                            androidx.compose.foundation.shape.RoundedCornerShape(3.dp),
+                        ),
+                )
+            }
+            androidx.tv.material3.Text(
+                text = "$percent%",
+                color = com.jellio.android.ui.theme.JellioText,
+                style = androidx.tv.material3.MaterialTheme.typography.labelLarge,
+            )
         }
     }
 }

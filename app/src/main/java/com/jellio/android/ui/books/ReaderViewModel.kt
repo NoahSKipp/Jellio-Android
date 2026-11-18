@@ -21,6 +21,7 @@ import com.jellio.android.data.books.PdfBookEngine
 import com.jellio.android.data.books.ReadingNowPlayingRequest
 import com.jellio.android.data.books.ReadingSessionRequest
 import com.jellio.android.data.books.UpdateSeriesPrefsRequest
+import com.jellio.android.data.model.BaseItemDto
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -314,6 +315,13 @@ class ReaderViewModel @Inject constructor(
                     MangaReadingDirection.LTR -> MangaReadingMode.LTR
                     else -> MangaReadingMode.RTL
                 }
+                val resolvedSeriesTitle = engine.comicInfo?.series ?: metadata?.Title
+                val resolvedSeriesKey = resolvedSeriesTitle?.takeIf { it.isNotBlank() }?.let {
+                    BooksRepository.mangaSeriesKey(it)
+                }
+                val (prevLocal, nextLocal) = withContext(Dispatchers.IO) {
+                    resolveLocalSiblingChapters(itemId, resolvedSeriesTitle, engine.comicInfo?.number)
+                }
                 _uiState.update {
                     it.copy(
                         mode = ReaderContentMode.MANGA,
@@ -324,13 +332,64 @@ class ReaderViewModel @Inject constructor(
                         mangaPageCount = total,
                         mangaCurrentPage = initialPage,
                         mangaReadingMode = defaultMode,
-                        mangaSeriesTitle = engine.comicInfo?.series,
+                        mangaSeriesTitle = resolvedSeriesTitle,
+                        mangaSeriesKey = resolvedSeriesKey,
+                        mangaChapterNumber = engine.comicInfo?.number?.toFloatOrNull(),
+                        prevChapter = prevLocal,
+                        nextChapter = nextLocal,
                         progress = if (total > 0) (initialPage + 1).toDouble() / total else 0.0,
                     )
                 }
                 startHeartbeat()
             }
         }
+    }
+
+    private suspend fun resolveLocalSiblingChapters(
+        currentItemId: String,
+        seriesTitleHint: String?,
+        chapterNumberHint: String?,
+    ): Pair<MangaStreamChapterDto?, MangaStreamChapterDto?> {
+        val uid = booksRepository.currentUserId() ?: return null to null
+        val views = runCatching { booksRepository.getBookshelfLibraries(uid) }.getOrNull().orEmpty()
+        if (views.isEmpty()) return null to null
+        val allComics = views.flatMap { lib ->
+            runCatching { booksRepository.getBookshelfItems(uid, lib.Id, "manga") }.getOrNull().orEmpty()
+        }.distinctBy { BooksRepository.normalizeId(it.Id) }
+
+        val normCurrent = BooksRepository.normalizeId(currentItemId)
+        val currentDto = allComics.firstOrNull { BooksRepository.normalizeId(it.Id) == normCurrent }
+        val seriesRaw = currentDto?.SeriesName?.takeIf { it.isNotBlank() }
+            ?: seriesTitleHint?.takeIf { it.isNotBlank() }
+            ?: currentDto?.Name
+            ?: return null to null
+        val targetKey = BooksRepository.mangaSeriesKey(seriesRaw)
+
+        val siblings = allComics.filter { item ->
+            val itemSeries = item.SeriesName?.takeIf { it.isNotBlank() } ?: item.Name.orEmpty()
+            BooksRepository.mangaSeriesKey(itemSeries) == targetKey
+        }.sortedWith(
+            compareBy<BaseItemDto> { it.IndexNumber ?: Int.MAX_VALUE }
+                .thenBy { it.Name.orEmpty() },
+        )
+        if (siblings.size <= 1) return null to null
+        val idx = siblings.indexOfFirst { BooksRepository.normalizeId(it.Id) == normCurrent }
+        if (idx < 0) return null to null
+
+        fun BaseItemDto.toSiblingChapter(order: Int): MangaStreamChapterDto = MangaStreamChapterDto(
+            Id = Id,
+            ChapterId = 0,
+            MangaId = 0,
+            SeriesTitle = SeriesName ?: seriesRaw,
+            SeriesKey = targetKey,
+            Name = Name ?: "Chapter ${IndexNumber ?: (order + 1)}",
+            Number = IndexNumber?.toFloat() ?: (order + 1).toFloat(),
+            SourceOrder = order,
+        )
+
+        val prev = if (idx > 0) siblings[idx - 1].toSiblingChapter(idx - 1) else null
+        val next = if (idx < siblings.lastIndex) siblings[idx + 1].toSiblingChapter(idx + 1) else null
+        return prev to next
     }
 
     private suspend fun loadStreamMangaChapter(
@@ -677,6 +736,30 @@ class ReaderViewModel @Inject constructor(
         _uiState.update { it.copy(studyState = it.studyState?.copy(highlightNote = note)) }
     }
 
+    fun updateStudySelectedText(text: String) {
+        val study = _uiState.value.studyState ?: return
+        val firstWord = text.trim()
+            .split(Regex("""\s+"""))
+            .firstOrNull()
+            ?.trim { !it.isLetterOrDigit() }
+            .orEmpty()
+        _uiState.update {
+            it.copy(
+                studyState = study.copy(
+                    selectedText = text,
+                    isDefining = firstWord.isNotEmpty(),
+                    isTranslating = text.isNotBlank(),
+                ),
+            )
+        }
+        if (firstWord.isNotEmpty()) {
+            lookupWord(firstWord)
+        }
+        if (text.isNotBlank()) {
+            translateSelection(text.trim(), study.targetLang)
+        }
+    }
+
     fun updateStudyTargetLang(lang: String) {
         val study = _uiState.value.studyState ?: return
         _uiState.update { it.copy(studyState = study.copy(targetLang = lang, isTranslating = true)) }
@@ -876,6 +959,7 @@ class ReaderViewModel @Inject constructor(
                 ReaderContentMode.EPUB -> EpubBookEngine.formatLocator(st.currentSpineIndex, 0)
                 else -> "page:$currentPage"
             }
+            val isFinished = st.progress >= 0.98
             CoroutineScope(SupervisorJob() + Dispatchers.IO + NonCancellable).launch {
                 booksRepository.saveReadingProgress(itemId, locator, st.progress, totalPages.takeIf { it > 0 })
                 booksRepository.reportReadingSession(
@@ -885,12 +969,15 @@ class ReaderViewModel @Inject constructor(
                         PagesRead = pagesRead,
                         CurrentPage = currentPage,
                         PageCount = totalPages.takeIf { it > 0 },
-                        Finished = st.progress >= 0.98,
+                        Finished = isFinished,
                         MangaId = st.mangaId,
                         ReadSeconds = elapsedSec,
                         ChapterNumber = st.mangaChapterNumber,
                     ),
                 )
+                if (isFinished && st.kind == "manga") {
+                    booksRepository.syncTracker(st.mangaSeriesKey, st.mangaId)
+                }
                 booksRepository.clearNowReading(itemId)
             }
         }

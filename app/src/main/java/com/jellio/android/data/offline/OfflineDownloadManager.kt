@@ -47,6 +47,15 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @JsonClass(generateAdapter = true)
+data class OfflineAudiobookTrack(
+    val trackId: String,
+    val title: String = "",
+    val durationTicks: Long = 0L,
+    val indexNumber: Int? = null,
+    val localFilePath: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
 data class OfflineDownloadItem(
     val id: String,
     val userId: String,
@@ -61,6 +70,7 @@ data class OfflineDownloadItem(
     val localFilePath: String? = null,
     val coverPath: String? = null,
     val trackPaths: List<String> = emptyList(),
+    val audiobookTracks: List<OfflineAudiobookTrack> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
     // Auxiliary metadata for offline playback / reading / conversion slots:
     val streamChapterId: Int? = null,
@@ -87,6 +97,9 @@ data class OfflineSyncMutation(
     val method: String, // "POST" | "PUT" | "DELETE"
     val path: String, // relative path e.g. "Jellio/reading/progress/{id}"
     val bodyJson: String? = null,
+    val kind: String? = null,
+    val itemId: String? = null,
+    val trackId: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
 )
 
@@ -201,7 +214,8 @@ class OfflineDownloadManager @Inject constructor(
         if (entry.status != OfflineDownloadItem.STATUS_COMPLETED) return null
         val normalizedTrack = normalizeId(trackId)
         val expectedName = "track-$normalizedTrack.audio"
-        val fromList = entry.trackPaths.firstOrNull { File(it).name == expectedName }
+        val fromTracks = entry.audiobookTracks.firstOrNull { normalizeId(it.trackId) == normalizedTrack }?.localFilePath
+        val fromList = fromTracks ?: entry.trackPaths.firstOrNull { File(it).name == expectedName }
         val file = fromList?.let(::File) ?: File(itemDir(entry.userId, entry.id), expectedName)
         return file.takeIf { it.exists() && it.length() > 0L }
     }
@@ -302,6 +316,14 @@ class OfflineDownloadManager @Inject constructor(
         }
         val resolvedTracks = tracks.ifEmpty { listOf(item) }
         val trackIds = resolvedTracks.map { normalizeId(it.Id) }
+        val audiobookTracks = resolvedTracks.mapIndexed { idx, track ->
+            OfflineAudiobookTrack(
+                trackId = normalizeId(track.Id),
+                title = track.Name ?: "Track ${idx + 1}",
+                durationTicks = track.RunTimeTicks ?: 0L,
+                indexNumber = track.IndexNumber ?: (idx + 1),
+            )
+        }
         val entry = OfflineDownloadItem(
             id = normalizeId(item.Id),
             userId = uid,
@@ -310,6 +332,7 @@ class OfflineDownloadManager @Inject constructor(
             subtitle = item.AlbumArtist ?: item.Artists?.firstOrNull() ?: item.People?.firstOrNull()?.Name.orEmpty(),
             status = OfflineDownloadItem.STATUS_QUEUED,
             trackIds = trackIds,
+            audiobookTracks = audiobookTracks,
             itemSnapshot = item,
             tracksSnapshot = resolvedTracks,
         )
@@ -415,6 +438,9 @@ class OfflineDownloadManager @Inject constructor(
         path: String,
         bodyJson: String? = null,
         userIdOverride: String? = null,
+        kind: String? = null,
+        itemId: String? = null,
+        trackId: String? = null,
     ) {
         val uid = resolveUserId(userIdOverride)
         val mutation = OfflineSyncMutation(
@@ -422,6 +448,9 @@ class OfflineDownloadManager @Inject constructor(
             method = method.uppercase(Locale.US),
             path = path.trimStart('/'),
             bodyJson = bodyJson,
+            kind = kind,
+            itemId = itemId,
+            trackId = trackId,
         )
         stateMutex.withLock {
             val current = readSyncQueueLocked().toMutableList()
@@ -441,11 +470,47 @@ class OfflineDownloadManager @Inject constructor(
         } else {
             userDataUpdateAdapter.toJson(body)
         }
-        queueMutation("POST", "UserItems/${normalizeId(itemId)}/UserData", json)
+        queueMutation(
+            method = "POST",
+            path = "UserItems/${normalizeId(itemId)}/UserData",
+            bodyJson = json,
+            kind = "video",
+            itemId = normalizeId(itemId),
+        )
         if (played) {
             onProgressUpdated(itemId, 1.0, "video")
         }
     }
+
+    suspend fun queueAudiobookProgressMutation(
+        itemId: String,
+        trackId: String?,
+        positionTicks: Long,
+        played: Boolean = false,
+        userIdOverride: String? = null,
+    ) {
+        val targetId = normalizeId(trackId?.takeIf { it.isNotBlank() } ?: itemId)
+        val body = UserDataUpdate(PlaybackPositionTicks = if (played) 0L else positionTicks.coerceAtLeast(0L))
+        val json = if (played) {
+            """{"PlaybackPositionTicks":0,"Played":true}"""
+        } else {
+            userDataUpdateAdapter.toJson(body)
+        }
+        queueMutation(
+            method = "POST",
+            path = "UserItems/$targetId/UserData",
+            bodyJson = json,
+            userIdOverride = userIdOverride,
+            kind = "audiobook",
+            itemId = normalizeId(itemId),
+            trackId = targetId,
+        )
+        if (played) {
+            onProgressUpdated(itemId, 1.0, "audiobook")
+        }
+    }
+
+    suspend fun syncPendingProgress(): Int = replaySyncQueue()
 
     suspend fun replaySyncQueue(): Int = withContext(Dispatchers.IO) {
         val server = sessionManager.serverAddress() ?: return@withContext 0
@@ -456,15 +521,21 @@ class OfflineDownloadManager @Inject constructor(
         var sentCount = 0
         val completedSeqs = HashSet<String>()
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
-        for (mutation in pending) {
-            val url = "${server.trimEnd('/')}/${mutation.path.trimStart('/')}"
+        for (entry in pending) {
+            val resolvedPath = if (entry.kind == "audiobook" && !entry.itemId.isNullOrBlank()) {
+                val targetId = normalizeId(entry.trackId?.takeIf { it.isNotBlank() } ?: entry.itemId)
+                "UserItems/$targetId/UserData"
+            } else {
+                entry.path.trimStart('/')
+            }
+            val url = "${server.trimEnd('/')}/$resolvedPath"
             val reqBuilder = Request.Builder().url(url)
-            val body = mutation.bodyJson?.toRequestBody(jsonMediaType)
-            when (mutation.method) {
+            val body = entry.bodyJson?.toRequestBody(jsonMediaType)
+            when (entry.method) {
                 "POST" -> reqBuilder.post(body ?: "".toRequestBody(null))
                 "PUT" -> reqBuilder.put(body ?: "".toRequestBody(null))
                 "DELETE" -> if (body != null) reqBuilder.delete(body) else reqBuilder.delete()
-                else -> reqBuilder.method(mutation.method, body)
+                else -> reqBuilder.method(entry.method, body)
             }
             val success = try {
                 okHttpClient.newCall(reqBuilder.build()).execute().use { resp ->
@@ -474,8 +545,8 @@ class OfflineDownloadManager @Inject constructor(
                 break
             }
             if (!success) break
-            completedSeqs.add(mutation.seq)
-            if (mutation.method == "POST") sentCount++
+            completedSeqs.add(entry.seq)
+            if (entry.method == "POST") sentCount++
         }
 
         if (completedSeqs.isNotEmpty()) {
@@ -723,10 +794,22 @@ class OfflineDownloadManager @Inject constructor(
             ?: throw IOException("No server configured")
 
         val tracks = item.tracksSnapshot.ifEmpty {
-            listOf(BaseItemDto(Id = item.id, Name = item.title))
+            if (item.audiobookTracks.isNotEmpty()) {
+                item.audiobookTracks.mapIndexed { idx, t ->
+                    BaseItemDto(
+                        Id = t.trackId,
+                        Name = t.title.ifBlank { "Track ${idx + 1}" },
+                        RunTimeTicks = t.durationTicks.takeIf { it > 0L },
+                        IndexNumber = t.indexNumber ?: (idx + 1),
+                    )
+                }
+            } else {
+                listOf(BaseItemDto(Id = item.id, Name = item.title))
+            }
         }
         val trackCount = tracks.size.coerceAtLeast(1)
         val savedPaths = mutableListOf<String>()
+        val savedTrackMeta = mutableListOf<OfflineAudiobookTrack>()
         var cumulativeBytes = 0L
 
         for ((index, track) in tracks.withIndex()) {
@@ -744,6 +827,15 @@ class OfflineDownloadManager @Inject constructor(
             }
             cumulativeBytes += trackFile.length()
             savedPaths.add(trackFile.absolutePath)
+            savedTrackMeta.add(
+                OfflineAudiobookTrack(
+                    trackId = normalizedTrackId,
+                    title = track.Name ?: "Track ${index + 1}",
+                    durationTicks = track.RunTimeTicks ?: 0L,
+                    indexNumber = track.IndexNumber ?: (index + 1),
+                    localFilePath = trackFile.absolutePath,
+                ),
+            )
         }
 
         val coverId = item.itemSnapshot?.AlbumId ?: item.id
@@ -761,6 +853,7 @@ class OfflineDownloadManager @Inject constructor(
                 localFilePath = savedPaths.firstOrNull(),
                 coverPath = coverFile?.absolutePath,
                 trackPaths = savedPaths,
+                audiobookTracks = savedTrackMeta,
                 errorMessage = null,
             )
         }
@@ -850,7 +943,19 @@ class OfflineDownloadManager @Inject constructor(
         val newExt = when {
             header[0] == '%'.code.toByte() && header[1] == 'P'.code.toByte() &&
                 header[2] == 'D'.code.toByte() && header[3] == 'F'.code.toByte() -> "pdf"
-            header[0] == 'P'.code.toByte() && header[1] == 'K'.code.toByte() -> "epub"
+            header[0] == 'P'.code.toByte() && header[1] == 'K'.code.toByte() -> {
+                val isEpub = runCatching {
+                    java.util.zip.ZipFile(file).use { z ->
+                        val hasContainer = z.getEntry("META-INF/container.xml") != null
+                        val mimeEntry = z.getEntry("mimetype")
+                        val hasEpubMime = mimeEntry != null &&
+                            z.getInputStream(mimeEntry).use { it.readBytes().toString(Charsets.UTF_8) }
+                                .contains("epub", ignoreCase = true)
+                        hasContainer || hasEpubMime
+                    }
+                }.getOrDefault(false)
+                if (isEpub) "epub" else "cbz"
+            }
             else -> return file
         }
         val renamed = File(file.parentFile, "book.$newExt")

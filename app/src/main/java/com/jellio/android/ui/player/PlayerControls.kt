@@ -77,6 +77,13 @@ import com.jellio.android.ui.theme.JellioSecondary
 import com.jellio.android.ui.theme.JellioText
 import com.jellio.android.ui.theme.JellioTextSecondary
 
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.PictureInPictureAlt
+import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.media3.ui.AspectRatioFrameLayout
+
 @Composable
 internal fun PlayerControls(
     title: String,
@@ -106,6 +113,13 @@ internal fun PlayerControls(
     onNextEpisode: () -> Unit = {},
     inGroup: Boolean = false,
     onOpenReactMenu: () -> Unit = {},
+    supportsPip: Boolean = false,
+    onEnterPip: () -> Unit = {},
+    onToggleOrientation: () -> Unit = {},
+    isLocked: Boolean = false,
+    onToggleLock: () -> Unit = {},
+    resizeMode: Int = AspectRatioFrameLayout.RESIZE_MODE_FIT,
+    onCycleResizeMode: () -> Unit = {},
 ) {
     val isCompact = com.jellio.android.ui.common.isCompactScreen()
     val horizontalPad = if (isCompact) 20.dp else 48.dp
@@ -113,6 +127,47 @@ internal fun PlayerControls(
     val playSize = if (isCompact) 72.dp else 96.dp
     val skipSize = if (isCompact) 52.dp else 68.dp
     val epSize = if (isCompact) 44.dp else 56.dp
+
+    if (isLocked) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Surface(
+                onClick = onToggleLock,
+                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = JellioBgElevated.copy(alpha = 0.85f),
+                    contentColor = JellioText,
+                    focusedContainerColor = Color.White.copy(alpha = 0.28f),
+                    focusedContentColor = JellioText,
+                ),
+                border = ClickableSurfaceDefaults.border(
+                    focusedBorder = Border(
+                        border = BorderStroke(2.dp, Color.White),
+                        shape = RoundedCornerShape(999.dp),
+                    )
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = if (isCompact) 24.dp else 36.dp)
+                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(999.dp)),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                ) {
+                    Icon(imageVector = Icons.Filled.Lock, contentDescription = "Unlock", modifier = Modifier.size(18.dp))
+                    Text(text = "Tap to Unlock", style = androidx.tv.material3.MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+        return
+    }
+
+    val resizeLabel = when (resizeMode) {
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Zoom"
+        AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"
+        else -> "Fit"
+    }
 
     Box(modifier = Modifier.fillMaxSize().focusProperties { canFocus = enabled }) {
         val playPauseFocusRequester = remember { FocusRequester() }
@@ -122,9 +177,10 @@ internal fun PlayerControls(
             }
         }
 
-        // Top bar with Back button for touch users
+        // Top bar with Back button and quick mobile actions (Lock, Resize, Rotate, PiP)
         Row(
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
@@ -137,6 +193,37 @@ internal fun PlayerControls(
                 size = 44.dp,
                 onClick = onBack,
             )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                TransportButton(
+                    icon = Icons.Filled.LockOpen,
+                    label = "Lock screen",
+                    size = 44.dp,
+                    onClick = onToggleLock,
+                )
+                TransportButton(
+                    icon = Icons.Filled.AspectRatio,
+                    label = resizeLabel,
+                    size = 44.dp,
+                    onClick = onCycleResizeMode,
+                )
+                TransportButton(
+                    icon = Icons.Filled.ScreenRotation,
+                    label = "Rotate screen",
+                    size = 44.dp,
+                    onClick = onToggleOrientation,
+                )
+                if (supportsPip) {
+                    TransportButton(
+                        icon = Icons.Filled.PictureInPictureAlt,
+                        label = "Picture in Picture",
+                        size = 44.dp,
+                        onClick = onEnterPip,
+                    )
+                }
+            }
         }
 
         Row(
@@ -238,6 +325,17 @@ internal fun PlayerControls(
                             label = Strings.get("settings_sleep_timer"),
                             active = sleepTimerActive,
                             onClick = onOpenSleepMenu,
+                        )
+                        PlayerPillButton(
+                            icon = Icons.Filled.AspectRatio,
+                            label = resizeLabel,
+                            active = resizeMode != AspectRatioFrameLayout.RESIZE_MODE_FIT,
+                            onClick = onCycleResizeMode,
+                        )
+                        PlayerPillButton(
+                            icon = Icons.Filled.LockOpen,
+                            label = "Lock",
+                            onClick = onToggleLock,
                         )
                         if (inGroup) {
                             PlayerPillButton(icon = Icons.Filled.EmojiEmotions, label = Strings.get("player_react"), onClick = onOpenReactMenu)

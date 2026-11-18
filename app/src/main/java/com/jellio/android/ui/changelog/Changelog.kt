@@ -108,9 +108,10 @@ val CHANGELOG_RELEASES = listOf(
         title = "What's New in Jellio",
         subtitle = "Version 1.0.0",
         features = listOf(
-            ChangelogFeature(Icons.Filled.AutoAwesome, "Jellio for Android Phones & Tablets", "Adapted for touchscreens and portrait or landscape displays with a responsive bottom navigation bar, mobile-friendly player controls, Picture-in-Picture, and background audio playback."),
-            ChangelogFeature(Icons.Filled.PlayCircle, "Stream Warmup, Failover & Watch Party", "Instant stream warmup, automatic backup source failover, intro and credits skipping, live TV, and full Watch Party sync with Jellio Web."),
-            ChangelogFeature(Icons.Filled.Sync, "Friends, Shared Watchlists & Ani-Sync", "Browse with friends, share watchlist recommendations, customize your Home screen, and sync anime and manga progress per user."),
+            ChangelogFeature(Icons.Filled.AutoAwesome, "Jellio for Android Phones & Tablets", "Adaptive touch interface with a floating glassmorphic pill bottom bar on phones, sidebar navigation on tablets and landscape screens, Studio Hubs, Top Picks, seasonal effects, and Picture-in-Picture."),
+            ChangelogFeature(Icons.Filled.PlayCircle, "Touch Video Player, Stream Warmup & Watch Party", "Swipe gestures for brightness and volume, double-tap seek, pinch-to-zoom, touch lock, rotation toggle, Ready stream warmup, automatic failover, Skip Intro/Credits, Live TV, and Watch Party sync."),
+            ChangelogFeature(Icons.Filled.DynamicFeed, "Books, Manga, Audiobooks & Language Study", "Reflowable EPUB reader with inline images, highlights, notes, and TextToSpeech read-aloud; native PDF reader; CBZ and Suwayomi manga reader; Wiktionary/DeepL flashcards; and an M4B/multi-track audiobook player with background lock-screen controls."),
+            ChangelogFeature(Icons.Filled.Sync, "Offline Downloads, Friends & Ani-Sync", "Download movies, episodes, books, manga chapters, and audiobooks for offline use with automatic progress sync, plus shared friend watchlists and two-way Ani-Sync for AniList, MyAnimeList, Shikimori, and Simkl."),
         ),
     ),
 )

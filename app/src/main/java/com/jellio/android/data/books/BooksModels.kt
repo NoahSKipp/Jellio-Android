@@ -545,3 +545,9 @@ data class ClaimConversionResponseDto(
     val Max: Int = 2,
     val Message: String? = null,
 )
+
+@JsonClass(generateAdapter = true)
+data class TrackerSyncRequest(
+    val Key: String? = null,
+    val MangaId: Int? = null,
+)

@@ -451,14 +451,36 @@ class PlayerViewModel @Inject constructor(
                     val snapshot = offlineVideoEntry.itemSnapshot ?: catching { repository.getItemDetails(session.userId, itemId) }.getOrNull()
                     val isEpisode = snapshot?.Type == "Episode" && snapshot.SeriesName != null
                     val startTicks = startPositionTicks ?: snapshot?.UserData?.PlaybackPositionTicks ?: 0L
+                    val offlineTitle = if (isEpisode) snapshot?.SeriesName.orEmpty().ifBlank { offlineVideoEntry.title } else (snapshot?.Name ?: offlineVideoEntry.title)
+                    val offlineArt = offlineVideoEntry.coverPath?.let { path ->
+                        listOf(com.jellio.android.ui.common.ArtCandidate(url = path, portrait = true))
+                    } ?: emptyList()
+                    val offlinePauseInfo = PauseOverlayInfo(
+                        art = offlineArt,
+                        logoUrl = null,
+                        title = offlineTitle,
+                        rating = snapshot?.CommunityRating,
+                        year = snapshot?.ProductionYear?.toString(),
+                        officialRating = snapshot?.OfficialRating,
+                        isEpisode = isEpisode,
+                        episodeCode = if (isEpisode && snapshot?.ParentIndexNumber != null && snapshot.IndexNumber != null) {
+                            com.jellio.android.data.i18n.seasonEpisodeTag(snapshot.ParentIndexNumber, snapshot.IndexNumber)
+                        } else {
+                            null
+                        },
+                        episodeTitle = if (isEpisode) (snapshot?.Name ?: offlineVideoEntry.subtitle) else offlineVideoEntry.subtitle.takeIf { it.isNotBlank() },
+                        overview = snapshot?.Overview,
+                    )
                     _uiState.value = PlayerUiState(
                         expectedRuntimeMs = (snapshot?.RunTimeTicks ?: 0L) / 10_000L,
                         isLoading = false,
                         streamUrl = android.net.Uri.fromFile(offlineVideoFile).toString(),
                         mediaSourceId = offlineVideoEntry.id,
                         startPositionTicks = startTicks,
-                        title = if (isEpisode) snapshot?.SeriesName.orEmpty() else (snapshot?.Name ?: offlineVideoEntry.title),
+                        title = offlineTitle,
                         subtitle = offlineVideoEntry.subtitle,
+                        artworkUrl = offlineVideoEntry.coverPath,
+                        pauseInfo = offlinePauseInfo,
                         directPlay = true,
                         isEpisode = isEpisode,
                     )
