@@ -294,7 +294,10 @@ class MainActivity : ComponentActivity() {
         com.jellio.android.data.prefs.DisplayPreferences.init(this)
         com.jellio.android.data.playback.DeviceDecoderCaps.attach(this)
         StartupPrefs.start(this)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         ContextCompat.registerReceiver(
             this,
             pipReceiver,

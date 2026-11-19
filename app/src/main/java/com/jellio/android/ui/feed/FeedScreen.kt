@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -109,18 +110,25 @@ fun FeedScreen(
                 val counts = remember(uiState.entries) { uiState.entries.groupingBy(::feedType).eachCount() }
                 val visible = remember(uiState.entries, hiddenTypes) { uiState.entries.filter { feedType(it) !in hiddenTypes } }
                 val groups = remember(visible, com.jellio.android.data.prefs.DisplayPreferences.displayLanguage) { groupByDay(visible) }
-                Column(modifier = Modifier.fillMaxSize().padding(top = 28.dp)) {
+                val isCompact = com.jellio.android.ui.common.isCompactScreen()
+                val horizontalPad = if (isCompact) 16.dp else 48.dp
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                        .padding(top = if (isCompact) 12.dp else 28.dp),
+                ) {
                     Text(
                         text = com.jellio.android.data.i18n.Strings.get("tv_feed"),
                         color = JellioText,
-                        fontSize = 30.sp,
+                        fontSize = if (isCompact) 24.sp else 30.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(start = 48.dp),
+                        modifier = Modifier.padding(start = horizontalPad),
                     )
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 48.dp),
-                        modifier = Modifier.padding(top = 14.dp, bottom = 18.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = horizontalPad),
+                        modifier = Modifier.padding(top = 12.dp, bottom = 14.dp),
                     ) {
                         items(FEED_TYPES, key = { it.key }) { type ->
                             val off = type.key in hiddenTypes
@@ -131,7 +139,7 @@ fun FeedScreen(
                         }
                     }
                     Row(modifier = Modifier.fillMaxSize()) {
-                        Box(modifier = Modifier.width(420.dp).fillMaxHeight()) {
+                        Box(modifier = if (isCompact) Modifier.fillMaxSize() else Modifier.width(420.dp).fillMaxHeight()) {
                             if (visible.isEmpty()) {
                                 Text(
                                     text = com.jellio.android.data.i18n.Strings.get("tv_feed_empty_filtered"),

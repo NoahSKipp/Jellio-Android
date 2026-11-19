@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -338,7 +339,7 @@ fun LiveTvScreen(
     val topPad = if (isCompact) 20.dp else 32.dp
 
     Box(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().padding(top = topPad, start = horizontalPad, end = horizontalPad)) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(top = topPad, start = horizontalPad, end = horizontalPad)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (isCompact) 12.dp else 20.dp)) {
                 Text(text = Strings.get("nav_live_tv"), style = MaterialTheme.typography.titleLarge)
                 if (uiState.channels.isNotEmpty() || uiState.links.isNotEmpty()) {

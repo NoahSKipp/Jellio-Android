@@ -53,9 +53,9 @@ import coil3.compose.AsyncImagePainter
 import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.data.model.serviceColor
 import com.jellio.android.data.session.Session
-import com.jellio.android.ui.common.ScreenSpinner
 import com.jellio.android.ui.common.TvVerticalRowBringIntoViewSpec
 import com.jellio.android.data.model.HomeSection
+import com.jellio.android.ui.home.HomeSkeleton
 import com.jellio.android.ui.home.PosterRow
 import com.jellio.android.ui.home.RowHeaderHeight
 import com.jellio.android.ui.home.HeaderOverlap
@@ -111,12 +111,7 @@ fun ServiceScreen(
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         when {
-            uiState.isLoading -> Box(Modifier.fillMaxSize()) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Center)) {
-                    ScreenSpinner()
-                    Text(text = com.jellio.android.ui.i18n.string("status_loading"), color = JellioTextSecondary, modifier = Modifier.padding(top = 16.dp))
-                }
-            }
+            uiState.isLoading -> HomeSkeleton(modifier = Modifier.fillMaxSize())
             uiState.error != null -> com.jellio.android.ui.common.ErrorState(
                 message = com.jellio.android.ui.i18n.formatString("service_load_error", serviceName),
                 failure = uiState.error,

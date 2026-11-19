@@ -19,10 +19,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -122,7 +127,14 @@ fun SidebarNav(
             // Solid: library heroes run under it. Same colour as every
             // screen's background, so it still reads as one surface.
             .background(JellioBg)
-            .padding(vertical = 20.dp, horizontal = 10.dp)
+            .windowInsetsPadding(
+                androidx.compose.foundation.layout.WindowInsets.safeDrawing.only(
+                    androidx.compose.foundation.layout.WindowInsetsSides.Top +
+                        androidx.compose.foundation.layout.WindowInsetsSides.Bottom +
+                        androidx.compose.foundation.layout.WindowInsetsSides.Start,
+                ),
+            )
+            .padding(vertical = 16.dp, horizontal = 10.dp)
             .onFocusChanged { state ->
                 expanded = state.hasFocus
                 onFocusChange(state.hasFocus)

@@ -19,8 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -181,38 +179,6 @@ fun MobileBottomNav(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    DropdownMenu(
-                        expanded = librariesMenuOpen,
-                        onDismissRequest = { librariesMenuOpen = false },
-                        modifier = Modifier
-                            .background(JellioBgElevated)
-                            .border(1.dp, JellioBorder, RoundedCornerShape(14.dp)),
-                    ) {
-                        mediaLibraries.forEach { libRoute ->
-                            val active = libRoute == selected
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = libRoute.label(),
-                                        color = if (active) JellioSecondary else JellioText,
-                                        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = libRoute.icon(),
-                                        contentDescription = null,
-                                        tint = if (active) JellioSecondary else JellioTextSecondary,
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                },
-                                onClick = {
-                                    librariesMenuOpen = false
-                                    onSelect(libRoute)
-                                },
-                            )
-                        }
-                    }
                 }
                 BottomNavPillTab(
                     route = downloads,
@@ -232,6 +198,96 @@ fun MobileBottomNav(
                     onClick = { onSelect(profile) },
                     modifier = Modifier.weight(1f),
                 )
+            }
+        }
+    }
+
+    if (librariesMenuOpen) {
+        BrowseLibrariesSheet(
+            libraries = mediaLibraries,
+            selected = selected,
+            onSelect = { libRoute ->
+                librariesMenuOpen = false
+                onSelect(libRoute)
+            },
+            onDismiss = { librariesMenuOpen = false },
+        )
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun BrowseLibrariesSheet(
+    libraries: List<JellioRoute>,
+    selected: JellioRoute,
+    onSelect: (JellioRoute) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = JellioBgElevated,
+        contentColor = JellioText,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "Browse Libraries",
+                color = JellioText,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            val rows = remember(libraries) { libraries.chunked(2) }
+            rows.forEach { pair ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    pair.forEach { libRoute ->
+                        val active = libRoute == selected
+                        Surface(
+                            onClick = { onSelect(libRoute) },
+                            color = if (active) Color.White.copy(alpha = 0.14f) else JellioBg,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .border(
+                                    width = 1.dp,
+                                    color = if (active) JellioSecondary else JellioBorder,
+                                    shape = RoundedCornerShape(14.dp),
+                                ),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                            ) {
+                                Icon(
+                                    imageVector = libRoute.icon(),
+                                    contentDescription = null,
+                                    tint = if (active) JellioSecondary else JellioTextSecondary,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                                Text(
+                                    text = libRoute.label(),
+                                    color = if (active) JellioSecondary else JellioText,
+                                    fontSize = 14.sp,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                    if (pair.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
             }
         }
     }
