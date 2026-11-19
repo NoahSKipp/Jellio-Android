@@ -27,6 +27,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -185,6 +186,7 @@ class BookshelfViewModel @Inject constructor(
 
     private var rawComicItems: List<BaseItemDto> = emptyList()
     private var discoverJob: Job? = null
+    private var discoverSearchDebounceJob: Job? = null
     private val mangaDiscoverCache = HashMap<String, List<MangaDiscoverDto>>()
     private val bookDiscoverCache = HashMap<String, List<BookDiscoverResultDto>>()
 
@@ -989,9 +991,20 @@ class BookshelfViewModel @Inject constructor(
 
     fun setDiscoverQuery(query: String) {
         _uiState.update { it.copy(discoverQuery = query) }
+        discoverSearchDebounceJob?.cancel()
+        if (query.isBlank()) {
+            _uiState.update { it.copy(bookSearchResults = emptyList(), mangaSearchResponse = null) }
+            loadDiscoverFeed()
+            return
+        }
+        discoverSearchDebounceJob = viewModelScope.launch {
+            delay(400L)
+            runDiscoverSearch()
+        }
     }
 
     fun setBookDiscoverFilter(source: String, value: String? = null) {
+        discoverSearchDebounceJob?.cancel()
         _uiState.update {
             it.copy(
                 bookDiscoverSource = source,
@@ -1004,6 +1017,7 @@ class BookshelfViewModel @Inject constructor(
     }
 
     fun setMangaDiscoverSort(sort: String) {
+        discoverSearchDebounceJob?.cancel()
         _uiState.update {
             it.copy(
                 mangaDiscoverSort = sort,
@@ -1015,6 +1029,7 @@ class BookshelfViewModel @Inject constructor(
     }
 
     fun setMangaDiscoverGenres(genres: Set<String>) {
+        discoverSearchDebounceJob?.cancel()
         _uiState.update {
             it.copy(
                 mangaDiscoverGenres = genres,
@@ -1026,6 +1041,7 @@ class BookshelfViewModel @Inject constructor(
     }
 
     fun toggleMangaDiscoverGenre(genre: String) {
+        discoverSearchDebounceJob?.cancel()
         _uiState.update { state ->
             val next = if (genre in state.mangaDiscoverGenres) {
                 state.mangaDiscoverGenres - genre
@@ -1042,6 +1058,7 @@ class BookshelfViewModel @Inject constructor(
     }
 
     fun setMangaDiscoverCountry(country: String?) {
+        discoverSearchDebounceJob?.cancel()
         _uiState.update {
             it.copy(
                 mangaDiscoverCountry = country,
@@ -1053,6 +1070,7 @@ class BookshelfViewModel @Inject constructor(
     }
 
     fun runDiscoverSearch() {
+        discoverSearchDebounceJob?.cancel()
         val state = _uiState.value
         val q = state.discoverQuery.trim()
         if (q.isEmpty()) {
@@ -1064,22 +1082,46 @@ class BookshelfViewModel @Inject constructor(
         _uiState.update { it.copy(isDiscoverLoading = true) }
         discoverJob = viewModelScope.launch {
             if (state.discoverMediaTab == BookshelfTab.MANGA) {
-                booksRepository.searchManga(q)
-                    .onSuccess { resp ->
-                        val covers = resolveMangaSearchCovers(resp)
-                        _uiState.update {
-                            it.copy(
-                                mangaSearchResponse = resp,
-                                discoverProxyCoverByKey = it.discoverProxyCoverByKey + covers,
-                                isDiscoverLoading = false,
-                            )
-                        }
+                val primaryGenre = state.mangaDiscoverGenres.toList().sorted().firstOrNull()
+                val (searchRes, discoverRes) = coroutineScope {
+                    val s = async { booksRepository.searchManga(q) }
+                    val d = async {
+                        booksRepository.discoverManga(
+                            sort = state.mangaDiscoverSort,
+                            genre = primaryGenre,
+                            country = state.mangaDiscoverCountry,
+                            query = q,
+                        )
                     }
-                    .onFailure { err ->
-                        _uiState.update {
-                            it.copy(isDiscoverLoading = false, statusMessage = err.message ?: "Manga search failed")
-                        }
-                    }
+                    s.await() to d.await()
+                }
+                val qLower = q.lowercase()
+                val resp = searchRes.getOrNull()?.let { raw ->
+                    raw.copy(Sources = raw.Sources.filter { it.Results.isNotEmpty() })
+                }
+                val rawDiscover = discoverRes.getOrNull().orEmpty()
+                val matchingDiscover = rawDiscover.filter { item ->
+                    item.Title.lowercase().contains(qLower) ||
+                        item.AltTitle.orEmpty().lowercase().contains(qLower) ||
+                        item.Author.orEmpty().lowercase().contains(qLower)
+                }
+                val resolvedDiscover = if (matchingDiscover.isNotEmpty()) matchingDiscover else emptyList()
+                val searchCovers = if (resp != null) resolveMangaSearchCovers(resp) else emptyMap()
+                val discoverCovers = if (resolvedDiscover.isNotEmpty()) resolveMangaDiscoverCovers(resolvedDiscover) else emptyMap()
+                val errMsg = if (resp == null && discoverRes.isFailure) {
+                    searchRes.exceptionOrNull()?.message ?: discoverRes.exceptionOrNull()?.message ?: "Manga search failed"
+                } else {
+                    null
+                }
+                _uiState.update {
+                    it.copy(
+                        mangaSearchResponse = resp ?: MangaSearchResponseDto(Sources = emptyList()),
+                        mangaDiscoverResults = resolvedDiscover,
+                        discoverProxyCoverByKey = it.discoverProxyCoverByKey + searchCovers + discoverCovers,
+                        isDiscoverLoading = false,
+                        statusMessage = errMsg ?: it.statusMessage,
+                    )
+                }
             } else {
                 val mediaType = if (state.discoverMediaTab == BookshelfTab.AUDIOBOOK) "audiobook" else "ebook"
                 booksRepository.searchBooks(q, mediaType)

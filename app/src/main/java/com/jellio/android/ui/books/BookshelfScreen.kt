@@ -641,7 +641,7 @@ private fun BookshelfMainGrid(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        if (continueList.isNotEmpty()) {
+        if (continueList.isNotEmpty() && state.searchQuery.isBlank()) {
             item(key = "continue_section", span = { GridItemSpan(maxLineSpan) }, contentType = "continue_section") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
@@ -1878,8 +1878,20 @@ private fun DiscoverAndRequestSheet(
                     contentPadding = PaddingValues(bottom = 24.dp),
                 ) {
                     val searchResp = state.mangaSearchResponse
-                    if (searchResp != null && searchResp.Sources.isNotEmpty()) {
-                        searchResp.Sources.forEach { source ->
+                    val nonEmptySources = searchResp?.Sources?.filter { it.Results.isNotEmpty() }.orEmpty()
+                    val activeQuery = state.discoverQuery.trim()
+                    val shownDiscover = if (activeQuery.isNotEmpty()) {
+                        val qLower = activeQuery.lowercase()
+                        state.mangaDiscoverResults.filter { item ->
+                            item.Title.lowercase().contains(qLower) ||
+                                item.AltTitle.orEmpty().lowercase().contains(qLower) ||
+                                item.Author.orEmpty().lowercase().contains(qLower)
+                        }
+                    } else {
+                        state.mangaDiscoverResults
+                    }
+                    if (nonEmptySources.isNotEmpty()) {
+                        nonEmptySources.forEach { source ->
                             item(key = "src_hdr_${source.SourceId}") {
                                 Text(
                                     "${source.SourceName} (${source.Lang})",
@@ -1903,12 +1915,18 @@ private fun DiscoverAndRequestSheet(
                                 )
                             }
                         }
-                    } else if (state.mangaDiscoverResults.isEmpty()) {
+                    } else if (shownDiscover.isEmpty()) {
                         item {
-                            EmptyShelfPlaceholder("No manga matched the current filters.")
+                            EmptyShelfPlaceholder(
+                                if (activeQuery.isNotEmpty()) {
+                                    "No manga found for \"$activeQuery\"."
+                                } else {
+                                    "No manga matched the current filters."
+                                },
+                            )
                         }
                     } else {
-                        items(state.mangaDiscoverResults, key = { it.Id }) { item ->
+                        items(shownDiscover, key = { it.Id }) { item ->
                             val titleKey = BooksRepository.mangaSeriesKey(item.Title)
                             val altKey = item.AltTitle?.takeIf { it.isNotBlank() }?.let { BooksRepository.mangaSeriesKey(it) }
                             val inLibrary = titleKey in libraryMangaKeys || (altKey != null && altKey in libraryMangaKeys)

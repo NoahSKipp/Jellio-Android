@@ -23,13 +23,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -445,12 +448,14 @@ private fun ReaderTopBar(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        color = JellioBg.copy(alpha = 0.9f),
+        color = JellioBg.copy(alpha = 0.92f),
         modifier = modifier.fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
+                .displayCutoutPadding()
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -507,12 +512,13 @@ private fun ReaderBottomBar(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        color = JellioBg.copy(alpha = 0.9f),
+        color = JellioBg.copy(alpha = 0.92f),
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             when (state.mode) {
