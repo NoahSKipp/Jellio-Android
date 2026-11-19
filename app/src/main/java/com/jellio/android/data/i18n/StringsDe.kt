@@ -994,5 +994,24 @@ internal object StringsDe {
         m["player_start_over_error"] = "Neustart fehlgeschlagen. Versuche es erneut."
         m["player_subtitle_switch_error"] = "Untertitel konnten nicht gewechselt werden. Versuche es erneut."
         m["player_audio_switch_error"] = "Die Tonspur konnte nicht gewechselt werden. Versuche es erneut."
+
+        // Synced missing keys and Reader/Mihon onboarding strings
+        m["action_back"] = "Zurück"
+        m["settings_home_screen"] = "Startbildschirm"
+        m["settings_customize_home"] = "Startseite anpassen"
+        m["anisync_last_synced"] = "Zuletzt synchronisiert: {0}"
+        m["anisync_never_synced"] = "Noch nie synchronisiert"
+        m["settings_cat_reader"] = "Reader & Manga"
+        m["settings_mihon_title"] = "Aus Mihon / Tachiyomi importieren"
+        m["settings_mihon_desc"] = "Gehe in Mihon zu Einstellungen > Daten und Speicher > Backup erstellen und wähle hier die .tachibk- oder .proto.gz-Datei aus, um deine Manga-Bibliothek und deinen Lesefortschritt zu importieren."
+        m["settings_mihon_choose"] = "Mihon-Backup auswählen"
+        m["onboarding_reader_title"] = "Reader- & Manga-Einrichtung"
+        m["onboarding_reader_sub"] = "Bringe deine Manga-Bibliothek aus Mihon mit und starte mit Büchern, Manga, Hörbüchern und Vokabeln."
+        m["onboarding_mihon_import"] = "Aus Mihon oder Tachiyomi importieren"
+        m["onboarding_mihon_import_desc"] = "Lade ein .tachibk- oder .proto.gz-Backup hoch, um deine Manga-Bibliothek, Kategorien und deinen Lesefortschritt zu übernehmen."
+        m["onboarding_choose_mihon_file"] = "Backup-Datei wählen"
+        m["onboarding_no_file_selected"] = "Keine Datei ausgewählt"
+        m["onboarding_vocab_title"] = "Nachschlagen & Vokabeln"
+        m["onboarding_vocab_desc"] = "Halte beim Lesen von EPUBs oder PDFs ein Wort gedrückt, um Definitionen nachzuschlagen und Karteikarten unter Reader > Vocab zu speichern."
     }
 }

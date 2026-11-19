@@ -994,5 +994,24 @@ internal object StringsIt {
         m["player_start_over_error"] = "Impossibile ricominciare dall'inizio. Riprova."
         m["player_subtitle_switch_error"] = "Impossibile cambiare i sottotitoli. Riprova."
         m["player_audio_switch_error"] = "Impossibile cambiare la traccia audio. Riprova."
+
+        // Synced missing keys and Reader/Mihon onboarding strings
+        m["action_back"] = "Indietro"
+        m["settings_home_screen"] = "Schermata Home"
+        m["settings_customize_home"] = "Personalizza Home"
+        m["anisync_last_synced"] = "Ultima sincronizzazione: {0}"
+        m["anisync_never_synced"] = "Mai sincronizzato"
+        m["settings_cat_reader"] = "Lettore e Manga"
+        m["settings_mihon_title"] = "Importa da Mihon / Tachiyomi"
+        m["settings_mihon_desc"] = "In Mihon, vai su Impostazioni > Dati e archiviazione > Crea backup, quindi seleziona qui il file .tachibk o .proto.gz per importare libreria e progressi."
+        m["settings_mihon_choose"] = "Scegli backup Mihon"
+        m["onboarding_reader_title"] = "Configurazione Lettore e Manga"
+        m["onboarding_reader_sub"] = "Importa la tua libreria manga da Mihon e inizia con Libri, Manga, Audiolibri e Vocabolario."
+        m["onboarding_mihon_import"] = "Importa da Mihon o Tachiyomi"
+        m["onboarding_mihon_import_desc"] = "Carica un backup .tachibk o .proto.gz per trasferire libreria manga, categorie e progressi di lettura."
+        m["onboarding_choose_mihon_file"] = "Scegli file di backup"
+        m["onboarding_no_file_selected"] = "Nessun file selezionato"
+        m["onboarding_vocab_title"] = "Definizioni e Vocabolario"
+        m["onboarding_vocab_desc"] = "Tieni premuta una parola mentre leggi EPUB o PDF per cercarne la definizione e salvare flashcard in Reader > Vocab."
     }
 }

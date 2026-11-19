@@ -994,5 +994,24 @@ internal object StringsFr {
         m["player_start_over_error"] = "Impossible de reprendre depuis le début. Réessayez."
         m["player_subtitle_switch_error"] = "Impossible de changer les sous-titres. Réessayez."
         m["player_audio_switch_error"] = "Impossible de changer la piste audio. Réessayez."
+
+        // Synced missing keys and Reader/Mihon onboarding strings
+        m["action_back"] = "Retour"
+        m["settings_home_screen"] = "Écran d'accueil"
+        m["settings_customize_home"] = "Personnaliser l'accueil"
+        m["anisync_last_synced"] = "Dernière synchronisation : {0}"
+        m["anisync_never_synced"] = "Jamais synchronisé"
+        m["settings_cat_reader"] = "Lecteur et Manga"
+        m["settings_mihon_title"] = "Importer depuis Mihon / Tachiyomi"
+        m["settings_mihon_desc"] = "Dans Mihon, allez dans Paramètres > Données et stockage > Sauvegarder, puis sélectionnez le fichier .tachibk ou .proto.gz ici pour importer votre bibliothèque et votre progression."
+        m["settings_mihon_choose"] = "Choisir une sauvegarde Mihon"
+        m["onboarding_reader_title"] = "Configuration Lecteur et Manga"
+        m["onboarding_reader_sub"] = "Importez votre bibliothèque manga depuis Mihon et profitez des Livres, Mangas, Livres audio et du Vocabulaire."
+        m["onboarding_mihon_import"] = "Importer depuis Mihon ou Tachiyomi"
+        m["onboarding_mihon_import_desc"] = "Téléversez une sauvegarde .tachibk ou .proto.gz pour transférer votre bibliothèque de mangas, vos catégories et votre progression."
+        m["onboarding_choose_mihon_file"] = "Choisir le fichier de sauvegarde"
+        m["onboarding_no_file_selected"] = "Aucun fichier sélectionné"
+        m["onboarding_vocab_title"] = "Définitions et Vocabulaire"
+        m["onboarding_vocab_desc"] = "Appuyez longuement sur un mot dans un EPUB ou PDF pour consulter sa définition et enregistrer des cartes dans Reader > Vocab."
     }
 }
