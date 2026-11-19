@@ -205,12 +205,13 @@ private fun FeedList(
     // Entering the list from the filters lands on the newest entry, not the one nearest the focused chip.
     val firstEntry = androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() }
     val first = groups.firstOrNull()?.entries?.firstOrNull()
+    val bottomBarPadding = if (isCompact) com.jellio.android.ui.nav.LocalBottomBarPadding.current else 0.dp
     LazyColumn(
         state = rememberLazyListState(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
             start = horizontalPad,
             end = horizontalPad,
-            bottom = if (isCompact) com.jellio.android.ui.nav.MobileBottomNavHeight + 20.dp else 32.dp,
+            bottom = if (isCompact) bottomBarPadding + 20.dp else 32.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxSize().focusRestorer(firstEntry),

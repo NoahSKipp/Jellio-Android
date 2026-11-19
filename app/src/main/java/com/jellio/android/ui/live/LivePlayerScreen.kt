@@ -165,7 +165,11 @@ fun LivePlayerScreen(
             .setId("jellio_live")
             .setSessionActivity(sessionActivityPendingIntent)
             .build()
-        onDispose { mediaSession.release() }
+        com.jellio.android.ui.audiobook.MediaSessionRegistry.setVideoSession(context, mediaSession)
+        onDispose {
+            com.jellio.android.ui.audiobook.MediaSessionRegistry.setVideoSession(context, null)
+            mediaSession.release()
+        }
     }
 
     var isPlaying by remember(player) { mutableStateOf(false) }
@@ -234,9 +238,18 @@ fun LivePlayerScreen(
             dataSource.setUserAgent(headers?.get("User-Agent") ?: "Jellio-Android/$APP_VERSION")
             val mime = if (headers == null) MimeTypes.VIDEO_MP2T else uiState.mimeType
             val chName = uiState.channel?.name.orEmpty()
+            val progTitle = uiState.channel?.now?.title?.takeIf { it.isNotBlank() }
+            val logoUrl = uiState.channel?.logoUrl?.takeIf { it.isNotBlank() }
             val metadata = MediaMetadata.Builder()
                 .setTitle(chName)
                 .setDisplayTitle(chName)
+                .setSubtitle(progTitle)
+                .setArtist(progTitle ?: "Live TV")
+                .apply {
+                    logoUrl?.let { raw ->
+                        runCatching { android.net.Uri.parse(raw) }.getOrNull()?.let { setArtworkUri(it) }
+                    }
+                }
                 .build()
             player.setMediaItem(
                 MediaItem.Builder()

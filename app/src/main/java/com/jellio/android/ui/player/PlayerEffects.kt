@@ -42,7 +42,11 @@ internal fun PlayerAudioEffects(player: ExoPlayer) {
             .setId("jellio_video")
             .setSessionActivity(sessionActivityPendingIntent)
             .build()
-        onDispose { mediaSession.release() }
+        com.jellio.android.ui.audiobook.MediaSessionRegistry.setVideoSession(context, mediaSession)
+        onDispose {
+            com.jellio.android.ui.audiobook.MediaSessionRegistry.setVideoSession(context, null)
+            mediaSession.release()
+        }
     }
 
     // Turned down while a sound sent from the dashboard plays.

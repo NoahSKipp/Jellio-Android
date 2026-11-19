@@ -376,8 +376,11 @@ private fun JellioApp(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
         onResult = {},
     )
-    LaunchedEffect(activeAudiobookId != null) {
-        if (activeAudiobookId != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+    val needsMediaNotificationPermission = activeAudiobookId != null ||
+        route is JellioRoute.Player ||
+        route is JellioRoute.LivePlayer
+    LaunchedEffect(needsMediaNotificationPermission) {
+        if (needsMediaNotificationPermission && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             val granted = androidx.core.content.ContextCompat.checkSelfPermission(
                 context,
                 android.Manifest.permission.POST_NOTIFICATIONS,
