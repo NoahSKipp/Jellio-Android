@@ -911,11 +911,11 @@ internal fun PlayerSurface(
     LaunchedEffect(controlsVisible) {
         if (!controlsVisible) {
             // The focused button just left; keep the remote on the player.
-            focusRequester.requestFocus()
+            runCatching { focusRequester.requestFocus() }
         }
     }
 
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 
     LaunchedEffect(toastId) {
         if (toastMessage != null) {

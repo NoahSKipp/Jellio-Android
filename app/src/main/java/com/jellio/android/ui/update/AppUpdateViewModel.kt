@@ -199,8 +199,16 @@ class AppUpdateViewModel @Inject constructor(
             .setTitle("Jellio Android $version")
             .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        val id = downloadManager.enqueue(request)
+        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+        if (downloadManager == null) {
+            _uiState.value = state.copy(downloading = false, error = "update_error_download")
+            return
+        }
+        val id = runCatching { downloadManager.enqueue(request) }.getOrNull()
+        if (id == null) {
+            _uiState.value = state.copy(downloading = false, error = "update_error_download")
+            return
+        }
         _uiState.value = state.copy(downloading = true, error = null)
         downloadJob?.cancel()
         downloadJob = viewModelScope.launch {

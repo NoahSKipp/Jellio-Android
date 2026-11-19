@@ -1,6 +1,7 @@
 package com.jellio.android.data.offline
 
 import android.content.Context
+import android.util.Log
 import com.jellio.android.data.books.AnnotationDto
 import com.jellio.android.data.books.BooksApi
 import com.jellio.android.data.books.ClaimConversionRequest
@@ -15,6 +16,7 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -132,7 +134,10 @@ class OfflineDownloadManager @Inject constructor(
             .build()
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e("OfflineDownloadManager", "Unhandled coroutine error", throwable)
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
     private val stateMutex = Mutex()
     private val queueWakeLock = Any()
 
@@ -528,20 +533,22 @@ class OfflineDownloadManager @Inject constructor(
             } else {
                 entry.path.trimStart('/')
             }
-            val url = "${server.trimEnd('/')}/$resolvedPath"
-            val reqBuilder = Request.Builder().url(url)
-            val body = entry.bodyJson?.toRequestBody(jsonMediaType)
-            when (entry.method) {
-                "POST" -> reqBuilder.post(body ?: "".toRequestBody(null))
-                "PUT" -> reqBuilder.put(body ?: "".toRequestBody(null))
-                "DELETE" -> if (body != null) reqBuilder.delete(body) else reqBuilder.delete()
-                else -> reqBuilder.method(entry.method, body)
-            }
             val success = try {
+                val url = "${server.trimEnd('/')}/$resolvedPath"
+                val reqBuilder = Request.Builder().url(url)
+                val body = entry.bodyJson?.toRequestBody(jsonMediaType)
+                when (entry.method) {
+                    "POST" -> reqBuilder.post(body ?: "".toRequestBody(null))
+                    "PUT" -> reqBuilder.put(body ?: "".toRequestBody(null))
+                    "DELETE" -> if (body != null) reqBuilder.delete(body) else reqBuilder.delete()
+                    else -> reqBuilder.method(entry.method, body)
+                }
                 okHttpClient.newCall(reqBuilder.build()).execute().use { resp ->
                     resp.isSuccessful || resp.code in 400..499
                 }
-            } catch (_: IOException) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
                 break
             }
             if (!success) break
@@ -638,14 +645,14 @@ class OfflineDownloadManager @Inject constructor(
         val playSessionId = playbackInfo?.PlaySessionId ?: "jellio-offline-${System.currentTimeMillis()}"
 
         val needsTranscode = quality != "original" && mediaSource?.SupportsDirectPlay != true
+        val transcodingUrl = mediaSource?.TranscodingUrl?.takeIf { it.isNotBlank() }
         val videoUrl = when {
             !needsTranscode -> {
                 val msQuery = if (!mediaSourceId.isNullOrBlank()) "&MediaSourceId=$mediaSourceId" else ""
                 "$server/Videos/${item.id}/stream?static=true$msQuery"
             }
-            !mediaSource?.TranscodingUrl.isNullOrBlank() -> {
-                val raw = mediaSource!!.TranscodingUrl!!
-                if (raw.startsWith("http", ignoreCase = true)) raw else "$server/${raw.trimStart('/')}"
+            transcodingUrl != null -> {
+                if (transcodingUrl.startsWith("http", ignoreCase = true)) transcodingUrl else "$server/${transcodingUrl.trimStart('/')}"
             }
             else -> {
                 val msQuery = if (!mediaSourceId.isNullOrBlank()) "&MediaSourceId=$mediaSourceId" else ""

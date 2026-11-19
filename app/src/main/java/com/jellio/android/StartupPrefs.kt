@@ -1,8 +1,10 @@
 package com.jellio.android
 
 import android.content.Context
+import android.util.Log
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -14,11 +16,14 @@ import kotlinx.coroutines.withContext
 object StartupPrefs {
     private val started = AtomicBoolean(false)
     private val ready = CountDownLatch(1)
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e("StartupPrefs", "Unhandled coroutine error", throwable)
+    }
 
     fun start(context: Context) {
         if (!started.compareAndSet(false, true)) return
         val app = context.applicationContext
-        CoroutineScope(Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO + exceptionHandler).launch {
             try {
                 com.jellio.android.data.prefs.QuickHubPreferences.init(app)
                 com.jellio.android.data.prefs.PlayerPrefs.init(app)

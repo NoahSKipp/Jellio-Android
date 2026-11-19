@@ -1,9 +1,11 @@
 package com.jellio.android.data.nowplaying
 
+import android.util.Log
 import com.jellio.android.data.catching
 import com.jellio.android.data.model.NowPlayingSessionDto
 import com.jellio.android.data.network.JellyfinApi
 import com.jellio.android.data.session.Session
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,7 +23,10 @@ import javax.inject.Singleton
 class NowPlayingManager @Inject constructor(
     private val api: JellyfinApi,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e("NowPlayingManager", "Unhandled coroutine error", throwable)
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
     private var pollJob: Job? = null
     private var lastSession: Session? = null
 

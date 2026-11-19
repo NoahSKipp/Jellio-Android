@@ -1,12 +1,14 @@
 package com.jellio.android.data.session
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,8 +57,12 @@ class SessionManager @Inject constructor(
         generated
     }
 
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e("SessionManager", "Unhandled coroutine error", throwable)
+    }
+
     init {
-        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+        CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler).launch {
             context.dataStore.data.collect { prefs ->
                 val server = clean(prefs[Keys.SERVER_ADDRESS]) ?: cachedServerAddress
                 val token = prefs[Keys.ACCESS_TOKEN] ?: cachedAccessToken

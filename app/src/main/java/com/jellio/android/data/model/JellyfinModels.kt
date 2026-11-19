@@ -746,34 +746,37 @@ data class FeedEntryDto(
     val PartyTitleCount: Int = 0,
 )
 
-@com.squareup.moshi.JsonClass(generateAdapter = true)
+@JsonClass(generateAdapter = true)
 data class UserDataUpdate(val PlaybackPositionTicks: Long)
 
-@com.squareup.moshi.JsonClass(generateAdapter = true)
+@JsonClass(generateAdapter = true)
 data class QuickConnectResultDto(
     val Code: String? = null,
     val Secret: String? = null,
     val Authenticated: Boolean = false,
 )
 
-@com.squareup.moshi.JsonClass(generateAdapter = true)
+@JsonClass(generateAdapter = true)
 data class QuickConnectAuthBody(
     val Secret: String,
 )
 
 // Jellio/search/suggestions: related library titles for a search that
 // found nothing (SearchSuggestionsController.cs).
+@JsonClass(generateAdapter = true)
 data class SearchSuggestionsDto(
     val MatchedTitle: String? = null,
     val Rows: List<SuggestionRowDto> = emptyList(),
 )
 
+@JsonClass(generateAdapter = true)
 data class SuggestionRowDto(
     val Kind: String = "",
     val Name: String? = null,
     val Items: List<BaseItemDto> = emptyList(),
 )
 
+@JsonClass(generateAdapter = true)
 data class FuzzySearchResponseDto(
     val Items: List<BaseItemDto> = emptyList(),
     val CorrectedQuery: String? = null,

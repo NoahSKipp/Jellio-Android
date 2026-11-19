@@ -6,6 +6,7 @@
 -keep class kotlin.Metadata { *; }
 -keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*
 -keep class com.jellio.android.data.model.** { *; }
+-keep class com.jellio.android.data.playback.** { *; }
 -keep class com.jellio.android.data.books.** { *; }
 -keep class com.jellio.android.data.offline.** { *; }
 -keep class com.jellio.android.data.cache.** { *; }
@@ -19,6 +20,9 @@
     @com.squareup.moshi.ToJson <methods>;
 }
 -keep class * extends com.squareup.moshi.JsonAdapter { *; }
+-keep class **JsonAdapter { *; }
+-keep class kotlin.reflect.jvm.internal.** { *; }
+-dontwarn kotlin.reflect.**
 -dontwarn com.squareup.moshi.**
 
 # Retrofit: service interfaces are proxied and suspend functions read the

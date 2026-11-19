@@ -1,5 +1,6 @@
 package com.jellio.android.data.syncplay
 
+import android.util.Log
 import com.jellio.android.data.catching
 import com.jellio.android.data.model.GroupWatchMessageDto
 import com.jellio.android.data.model.PartyControlBody
@@ -9,6 +10,7 @@ import com.jellio.android.data.model.PartyReadyBody
 import com.jellio.android.data.model.PartyRequestDto
 import com.jellio.android.data.model.PartyStateDto
 import com.jellio.android.data.network.JellyfinApi
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -49,7 +51,10 @@ class PartyManager @Inject constructor(
     private val api: JellyfinApi,
     private val syncPlay: SyncPlayManager,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e("PartyManager", "Unhandled coroutine error", throwable)
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + exceptionHandler)
 
     private val _state = MutableStateFlow<PartyStateDto?>(null)
     val state: StateFlow<PartyStateDto?> = _state.asStateFlow()

@@ -173,7 +173,7 @@ internal fun PlayerControls(
         val playPauseFocusRequester = remember { FocusRequester() }
         LaunchedEffect(enabled) {
             if (enabled) {
-                playPauseFocusRequester.requestFocus()
+                runCatching { playPauseFocusRequester.requestFocus() }
             }
         }
 

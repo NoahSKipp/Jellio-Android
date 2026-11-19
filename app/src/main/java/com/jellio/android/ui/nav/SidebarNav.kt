@@ -104,7 +104,7 @@ fun SidebarNav(
         label = "sidebarShadowAlpha",
     )
 
-    LaunchedEffect(Unit) { restoreFocusRequester?.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { restoreFocusRequester?.requestFocus() } }
 
     // A closing panel hands focus back here before the rail is focusable
     // again; take it once it is.
@@ -131,7 +131,7 @@ fun SidebarNav(
                 onEnter = {
                     if (focusable && enabled) {
                         if (requestedFocusDirection == FocusDirection.Left) {
-                            (restoreFocusRequester ?: homeFocusRequester).requestFocus()
+                            runCatching { (restoreFocusRequester ?: homeFocusRequester).requestFocus() }
                         }
                     } else {
                         FocusRequester.Cancel

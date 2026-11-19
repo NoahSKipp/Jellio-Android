@@ -1,8 +1,10 @@
 package com.jellio.android.data.session
 
+import android.util.Log
 import com.jellio.android.data.network.APP_VERSION
 import com.jellio.android.data.network.JellyfinApi
 import com.jellio.android.data.network.buildEmbyAuthorizationHeader
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,7 +29,10 @@ class SessionGuard @Inject constructor(
     private val api: Provider<JellyfinApi>,
 ) {
     private val detector = SessionLossDetector()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e("SessionGuard", "Unhandled coroutine error", throwable)
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
 
     private val _expired = MutableStateFlow<ExpiredSession?>(null)
     val expired: StateFlow<ExpiredSession?> = _expired.asStateFlow()

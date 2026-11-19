@@ -1,5 +1,7 @@
 package com.jellio.android.data
 
+import android.util.Log
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -11,7 +13,10 @@ import javax.inject.Singleton
 // cancel all of them at once.
 @Singleton
 class PrefetchScope @Inject constructor() {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e("PrefetchScope", "Unhandled coroutine error", throwable)
+    }
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
 
     fun cancelAll() {
         scope.coroutineContext.cancelChildren()

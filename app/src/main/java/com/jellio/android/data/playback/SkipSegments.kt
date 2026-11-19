@@ -3,6 +3,7 @@ package com.jellio.android.data.playback
 import com.jellio.android.data.model.ChapterInfoDto
 import com.jellio.android.data.model.IntroSkipperSegmentsDto
 import com.jellio.android.data.model.MediaSegmentDto
+import com.squareup.moshi.JsonClass
 
 private const val TICKS_PER_SECOND = 10_000_000.0
 
@@ -47,10 +48,10 @@ fun nativeSkipSegments(items: List<MediaSegmentDto>): SkipSegments? {
 
 // GET /Jellio/segments/{id}: the plugin's merge of Media Segments and Intro
 // Skipper; the first Intro and Outro become the skip ranges.
-@com.squareup.moshi.JsonClass(generateAdapter = true)
+@JsonClass(generateAdapter = true)
 data class JellioSegmentDto(val Type: String? = null, val StartMs: Long = 0, val EndMs: Long = 0)
 
-@com.squareup.moshi.JsonClass(generateAdapter = true)
+@JsonClass(generateAdapter = true)
 data class JellioSegmentsDto(val Segments: List<JellioSegmentDto> = emptyList(), val Source: String? = null)
 
 fun JellioSegmentsDto.toSkipSegments(): SkipSegments? {

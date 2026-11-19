@@ -78,7 +78,7 @@ object NetworkModule {
             val targetPathSegments = target.pathSegments.filter { it.isNotEmpty() }
             if (targetPathSegments.isNotEmpty()) {
                 val originalPathSegments = original.url.pathSegments
-                newUrlBuilder.encodedPath("")
+                newUrlBuilder.encodedPath("/")
                 for (segment in targetPathSegments) {
                     newUrlBuilder.addPathSegment(segment)
                 }

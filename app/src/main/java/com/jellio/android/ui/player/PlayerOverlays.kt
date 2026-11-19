@@ -637,7 +637,7 @@ internal fun PlayerPrompt(
 @Composable
 internal fun ResumePrompt(percent: Int?, resumeTicks: Long, onResume: () -> Unit, onRestart: () -> Unit, modifier: Modifier = Modifier) {
     val resumeFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { resumeFocusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { resumeFocusRequester.requestFocus() } }
     Box(
         modifier = modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
         contentAlignment = Alignment.Center,
