@@ -63,6 +63,8 @@ import com.jellio.android.ui.profile.ProfileScreen
 import com.jellio.android.ui.search.SearchScreen
 import com.jellio.android.ui.seasonal.SeasonalEffectsOverlay
 import com.jellio.android.ui.seasonal.SeasonalEffectsViewModel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import com.jellio.android.ui.seasonal.SeasonalSkyOverlay
 import com.jellio.android.ui.service.ServiceScreen
 import com.jellio.android.ui.settings.SettingsScreen
@@ -204,7 +206,11 @@ private fun JellioApp(
     var quickHubInitialTab by remember { mutableStateOf(QuickHubTab.NOW_PLAYING) }
     val nowPlayingSessions by appViewModel.nowPlayingManager.sessions.collectAsState()
     val nowPlayingLocalPaused by appViewModel.nowPlayingManager.localPaused.collectAsState()
-    val audiobookState by appViewModel.audiobookController.state.collectAsState()
+    val activeAudiobookId by remember(appViewModel.audiobookController) {
+        appViewModel.audiobookController.state
+            .map { if (it.isActive) it.bookItem?.Id else null }
+            .distinctUntilChanged()
+    }.collectAsState(initial = null)
     val downloadsList by appViewModel.offlineDownloadManager.downloads.collectAsState()
     var showChangelog by remember { mutableStateOf(false) }
     var showOnboarding by remember { mutableStateOf(false) }
@@ -350,9 +356,34 @@ private fun JellioApp(
         }
     }
 
+    val notifPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+        onResult = {},
+    )
+    LaunchedEffect(activeAudiobookId != null) {
+        if (activeAudiobookId != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.POST_NOTIFICATIONS,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                runCatching { notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+            }
+        }
+    }
+
     LaunchedEffect(deepLinkItemId) {
         val itemId = deepLinkItemId ?: return@LaunchedEffect
-        if (itemId.startsWith("detail:")) onNavigateToDetail(itemId.removePrefix("detail:")) else onPlayId(itemId, false)
+        when {
+            itemId == "audiobook:active" -> {
+                val activeId = activeAudiobookId
+                if (!activeId.isNullOrBlank() && route !is JellioRoute.AudiobookPlayer) {
+                    push(JellioRoute.AudiobookPlayer(activeId))
+                }
+            }
+            itemId.startsWith("detail:") -> onNavigateToDetail(itemId.removePrefix("detail:"))
+            else -> onPlayId(itemId, false)
+        }
         onDeepLinkConsumed()
     }
 
@@ -372,7 +403,7 @@ private fun JellioApp(
 
     val layoutMode = com.jellio.android.ui.common.rememberWindowLayoutMode()
     val useBottomNav = layoutMode == com.jellio.android.ui.common.WindowLayoutMode.COMPACT_PORTRAIT
-    val miniPlayerVisible = !route.isImmersive() && audiobookState.isActive && audiobookState.bookItem != null
+    val miniPlayerVisible = !route.isImmersive() && activeAudiobookId != null
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (!route.isImmersive()) {

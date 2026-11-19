@@ -368,6 +368,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_AUDIOBOOK, false) == true) {
+            intent.removeExtra(EXTRA_OPEN_AUDIOBOOK)
+            deepLinkItemId.value = "audiobook:active"
+            return
+        }
         val uri = intent?.data ?: return
         if (uri.host != "jellio.tv") return
         // Launcher entries open the title's page. /play links from older
@@ -378,6 +383,7 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        const val EXTRA_OPEN_AUDIOBOOK = "com.jellio.android.EXTRA_OPEN_AUDIOBOOK"
         private const val ACTION_PIP_CONTROL = "com.jellio.android.ACTION_PIP_CONTROL"
         private const val EXTRA_PIP_CONTROL_TYPE = "pip_control_type"
         private const val PIP_CONTROL_PLAY_PAUSE = 1

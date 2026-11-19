@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.annotation.OptIn
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.snapshotFlow
+import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
@@ -125,6 +126,7 @@ class AudiobookPlayerController @Inject constructor(
 
     private var player: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
+    private var playbackService: AudiobookPlaybackService? = null
 
     private var loadJob: Job? = null
     private var positionTickerJob: Job? = null
@@ -335,9 +337,9 @@ class AudiobookPlayerController @Inject constructor(
         )
 
         ensurePlayerCreated(speed)
-        startPlaybackForegroundService()
         startBackgroundTickers()
         loadTrack(index = resumeTrackIdx, offsetMs = resumeOffsetMs, autoPlay = true)
+        startPlaybackForegroundService()
     }
 
     fun togglePlayPause() {
@@ -592,15 +594,39 @@ class AudiobookPlayerController @Inject constructor(
         }
     }
 
+    fun attachPlaybackService(service: AudiobookPlaybackService) {
+        playbackService = service
+        service.syncSession(mediaSession)
+    }
+
+    fun detachPlaybackService(service: AudiobookPlaybackService) {
+        if (playbackService === service) {
+            playbackService = null
+        }
+    }
+
+    fun getActiveMediaSession(): MediaSession? = mediaSession
+
     fun getOrCreateMediaSession(): MediaSession? {
         ensurePlayerCreated(_state.value.playbackSpeed)
         return mediaSession
     }
 
     private fun startPlaybackForegroundService() {
+        val session = mediaSession
+        val service = playbackService
+        if (service != null) {
+            service.syncSession(session)
+            return
+        }
+        val intent = Intent(context, AudiobookPlaybackService::class.java)
         runCatching {
-            val intent = Intent(context, AudiobookPlaybackService::class.java)
             context.startService(intent)
+        }.onFailure { err ->
+            Log.w("AudiobookPlayer", "startService failed, retrying foreground service", err)
+            runCatching {
+                ContextCompat.startForegroundService(context, intent)
+            }
         }
     }
 
@@ -703,6 +729,7 @@ class AudiobookPlayerController @Inject constructor(
 
         val sessionActivityIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_OPEN_AUDIOBOOK, true)
         }
         val pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT or
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
@@ -715,6 +742,7 @@ class AudiobookPlayerController @Inject constructor(
                 .setSessionActivity(pendingIntent)
                 .build()
         }.getOrNull()
+        playbackService?.syncSession(mediaSession)
     }
 
     private val playerListener = object : Player.Listener {
@@ -1144,6 +1172,7 @@ class AudiobookPlayerController @Inject constructor(
         sleepDeadlineMs = null
         sleepArmedChapterIndex = null
 
+        playbackService?.syncSession(null)
         mediaSession?.release()
         mediaSession = null
         player?.let { exo ->
@@ -1161,6 +1190,12 @@ class AudiobookPlayerController @Inject constructor(
 
         if (resetState) {
             _state.value = AudiobookPlaybackState()
+            runCatching {
+                val stopIntent = Intent(context, AudiobookPlaybackService::class.java).apply {
+                    action = AudiobookPlaybackService.ACTION_STOP
+                }
+                context.startService(stopIntent)
+            }
         }
     }
 

@@ -74,13 +74,15 @@ fun MobileBottomNav(
         buildList {
             items.filter { it is JellioRoute.LibraryTab || it is JellioRoute.LiveTv }.forEach { add(it) }
             items.firstOrNull { it is JellioRoute.Feed }?.let { add(it) }
+            add(downloads)
         }.distinct()
     }
 
     var librariesMenuOpen by remember { mutableStateOf(false) }
     val isLibraryOrMoreSelected = selected is JellioRoute.LibraryTab ||
         selected is JellioRoute.LiveTv ||
-        selected is JellioRoute.Feed
+        selected is JellioRoute.Feed ||
+        selected is JellioRoute.Downloads
 
     Box(
         contentAlignment = Alignment.BottomCenter,
@@ -129,14 +131,6 @@ fun MobileBottomNav(
                     onClick = { onSelect(search) },
                     modifier = Modifier.weight(1f),
                 )
-                BottomNavPillTab(
-                    route = bookshelf,
-                    labelOverride = "Reader",
-                    isSelected = selected is JellioRoute.Bookshelf || selected is JellioRoute.Vocab,
-                    enabled = enabled,
-                    onClick = { onSelect(bookshelf) },
-                    modifier = Modifier.weight(1f),
-                )
                 Box(
                     modifier = Modifier.weight(1f),
                     contentAlignment = Alignment.Center,
@@ -145,6 +139,7 @@ fun MobileBottomNav(
                         is JellioRoute.LibraryTab -> selected.label()
                         is JellioRoute.LiveTv -> selected.label()
                         is JellioRoute.Feed -> selected.label()
+                        is JellioRoute.Downloads -> "Offline"
                         else -> "Browse"
                     }
                     Column(
@@ -181,11 +176,11 @@ fun MobileBottomNav(
                     }
                 }
                 BottomNavPillTab(
-                    route = downloads,
-                    labelOverride = "Offline",
-                    isSelected = selected is JellioRoute.Downloads,
+                    route = bookshelf,
+                    labelOverride = "Reader",
+                    isSelected = selected is JellioRoute.Bookshelf || selected is JellioRoute.Vocab,
                     enabled = enabled,
-                    onClick = { onSelect(downloads) },
+                    onClick = { onSelect(bookshelf) },
                     modifier = Modifier.weight(1f),
                 )
                 BottomNavPillTab(
@@ -250,6 +245,7 @@ private fun BrowseLibrariesSheet(
                 ) {
                     pair.forEach { libRoute ->
                         val active = libRoute == selected
+                        val label = if (libRoute is JellioRoute.Downloads) "Offline" else libRoute.label()
                         Surface(
                             onClick = { onSelect(libRoute) },
                             color = if (active) Color.White.copy(alpha = 0.14f) else JellioBg,
@@ -274,7 +270,7 @@ private fun BrowseLibrariesSheet(
                                     modifier = Modifier.size(22.dp),
                                 )
                                 Text(
-                                    text = libRoute.label(),
+                                    text = label,
                                     color = if (active) JellioSecondary else JellioText,
                                     fontSize = 14.sp,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
