@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -45,15 +45,16 @@ fun StudioHubRow(
     Column(modifier = Modifier.padding(bottom = RowSpacing)) {
         RowTitle(text = com.jellio.android.data.i18n.Strings.get("tv_studio_hubs"))
         val firstTile = androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() }
+        val horizontalPadding = responsiveRowStartPadding()
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.jellio.android.ui.common.rememberTvHorizontalBringIntoViewSpec()) {
             LazyRow(
                 state = rememberTvRowState(),
-                contentPadding = PaddingValues(horizontal = RowStartPadding),
+                contentPadding = PaddingValues(horizontal = horizontalPadding),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.rowEntry(firstTile),
             ) {
-                items(services, key = { it }) { service ->
-                    RowEntryTarget(if (service == services.first()) firstTile else null) {
+                itemsIndexed(services, key = { index, service -> "${service}_$index" }) { index, service ->
+                    RowEntryTarget(if (index == 0) firstTile else null) {
                         StudioHubTile(name = service, logoUrl = logoUrl(service), onClick = { onServiceClick(service) })
                     }
                 }

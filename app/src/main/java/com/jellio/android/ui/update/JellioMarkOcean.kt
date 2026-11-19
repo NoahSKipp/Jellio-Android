@@ -161,6 +161,7 @@ fun JellioMarkOcean(modifier: Modifier = Modifier) {
                 compositingStrategy = CompositingStrategy.Offscreen
             },
     ) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
         val scale = size.width / ViewBoxSize
 
         trianglePath.reset()
@@ -184,7 +185,7 @@ fun JellioMarkOcean(modifier: Modifier = Modifier) {
         val radialBrush = Brush.radialGradient(
             colorStops = *JellioMarkRadialGradientStops.map { it.offset to Color(it.color).copy(alpha = it.alpha) }.toTypedArray(),
             center = Offset(112f * scale, 104f * scale),
-            radius = 104f * scale,
+            radius = (104f * scale).coerceAtLeast(1f),
         )
         drawRect(brush = radialBrush, blendMode = BlendMode.SrcAtop)
 
@@ -198,7 +199,7 @@ fun JellioMarkOcean(modifier: Modifier = Modifier) {
 private fun DrawScope.drawCaustics(clockMs: Float, scale: Float) {
     val paint = Paint().apply {
         blendMode = BlendMode.SrcAtop
-        asFrameworkPaint().maskFilter = BlurMaskFilter(26f * scale, BlurMaskFilter.Blur.NORMAL)
+        asFrameworkPaint().maskFilter = BlurMaskFilter((26f * scale).coerceAtLeast(1f), BlurMaskFilter.Blur.NORMAL)
     }
     JellioMarkCaustics.forEach { c ->
         val t = ((clockMs + c.delayMs) % CausticDurationMs) / CausticDurationMs

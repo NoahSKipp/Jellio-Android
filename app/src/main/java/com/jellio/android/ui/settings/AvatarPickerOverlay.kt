@@ -73,7 +73,7 @@ fun AvatarPickerOverlay(
     BackHandler(onBack = onDismiss)
     val context = LocalContext.current
     val firstEntryFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstEntryFocusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { firstEntryFocusRequester.requestFocus() } }
     val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult

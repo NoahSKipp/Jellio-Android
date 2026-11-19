@@ -122,7 +122,7 @@ fun RowListModal(
     LaunchedEffect(displayedItems.isNotEmpty()) {
         if (!initialFocusRequested && displayedItems.isNotEmpty()) {
             initialFocusRequested = true
-            listFocusRequester.requestFocus()
+            runCatching { listFocusRequester.requestFocus() }
         }
     }
     // A page of its own: the row's title over a poster grid, like a

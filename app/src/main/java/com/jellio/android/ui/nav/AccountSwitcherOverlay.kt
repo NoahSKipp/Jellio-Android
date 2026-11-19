@@ -73,7 +73,7 @@ fun AccountSwitcherOverlay(
     BackHandler(onBack = onDismiss)
 
     val viewProfileFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { viewProfileFocusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { viewProfileFocusRequester.requestFocus() } }
 
     Box(
         modifier = modifier

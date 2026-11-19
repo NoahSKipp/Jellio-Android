@@ -148,15 +148,16 @@ fun PosterRow(
             }
         }
 
+        val horizontalPadding = responsiveRowStartPadding()
         CompositionLocalProvider(LocalBringIntoViewSpec provides rememberTvHorizontalBringIntoViewSpec()) {
             LazyRow(
                 state = rowState,
-                contentPadding = PaddingValues(horizontal = RowStartPadding),
+                contentPadding = PaddingValues(horizontal = horizontalPadding),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = (if (rowFocusRequester != null) Modifier.focusRequester(rowFocusRequester) else Modifier)
                     .rowEntry(firstCard),
             ) {
-                itemsIndexed(displayItems, key = { _, item -> item.Id }, contentType = { _, _ -> "poster_card" }) { index, item ->
+                itemsIndexed(displayItems, key = { index, item -> "${item.Id}_$index" }, contentType = { _, _ -> "poster_card" }) { index, item ->
                     val onCardClick = remember(item, onItemClick) { { onItemClick(item) } }
                     val onCardOptions = remember(item, onItemOptions) { onItemOptions?.let { opts -> { opts(item) } } }
                     val restoreHere = item.Id == restoreItemId
@@ -208,9 +209,13 @@ fun RowTitle(text: String, modifier: Modifier = Modifier) {
         fontWeight = FontWeight.SemiBold,
         color = JellioText,
         maxLines = 1,
-        modifier = modifier.padding(start = RowStartPadding, bottom = 14.dp),
+        modifier = modifier.padding(start = responsiveRowStartPadding(), bottom = 14.dp),
     )
 }
+
+@Composable
+internal fun responsiveRowStartPadding(): Dp =
+    if (com.jellio.android.ui.common.isCompactScreen()) 16.dp else RowStartPadding
 
 internal val RowStartPadding = 52.dp
 internal val RowSpacing = 24.dp

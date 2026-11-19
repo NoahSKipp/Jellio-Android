@@ -54,6 +54,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -222,7 +223,7 @@ fun SettingsScreen(
     }
     val isCompact = com.jellio.android.ui.common.isCompactScreen()
     if (isCompact) {
-        Column(modifier = Modifier.fillMaxSize().padding(top = 16.dp, start = 16.dp, end = 16.dp)) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(top = 16.dp, start = 16.dp, end = 16.dp)) {
             Text(text = string("settings_title"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
             androidx.compose.foundation.lazy.LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1247,7 +1248,7 @@ fun SettingsScreen(
     val showAvatarPicker by viewModel.showAvatarPicker.collectAsState()
     var wasShowingAvatarPicker by remember { mutableStateOf(false) }
     LaunchedEffect(showAvatarPicker) {
-        if (wasShowingAvatarPicker && !showAvatarPicker) changeAvatarFocusRequester.requestFocus()
+        if (wasShowingAvatarPicker && !showAvatarPicker) runCatching { changeAvatarFocusRequester.requestFocus() }
         wasShowingAvatarPicker = showAvatarPicker
     }
     if (showAvatarPicker) {
@@ -1372,7 +1373,7 @@ private fun QuickHubButtonPickerOverlay(
     onDismiss: () -> Unit,
 ) {
     val firstRowFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstRowFocusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { firstRowFocusRequester.requestFocus() } }
     SidePanel(title = string("settings_quick_hub_button"), width = 440.dp, onDismiss = onDismiss) {
         LazyColumn {
             items(com.jellio.android.data.prefs.QuickHubButton.entries) { btn ->
@@ -1429,7 +1430,7 @@ private fun QuickHubTriggerPickerOverlay(
     onDismiss: () -> Unit,
 ) {
     val firstRowFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstRowFocusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { firstRowFocusRequester.requestFocus() } }
     SidePanel(title = string("settings_quick_hub_trigger"), width = 420.dp, onDismiss = onDismiss) {
         LazyColumn {
             items(com.jellio.android.data.prefs.QuickHubTrigger.entries) { trg ->
@@ -1453,7 +1454,7 @@ private fun DisplayLanguagePickerOverlay(
     onDismiss: () -> Unit,
 ) {
     val firstRowFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstRowFocusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { firstRowFocusRequester.requestFocus() } }
     SidePanel(title = string("settings_display_language"), width = 360.dp, onDismiss = onDismiss) {
         LazyColumn {
             items(com.jellio.android.data.prefs.AppLanguage.entries) { lang ->
@@ -1475,7 +1476,7 @@ private fun FriendRequestsPickerOverlay(
     onDismiss: () -> Unit,
 ) {
     val firstRowFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstRowFocusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { firstRowFocusRequester.requestFocus() } }
     SidePanel(title = string("friends_setting_requests"), width = 360.dp, onDismiss = onDismiss) {
         LanguagePickerRow(
             label = string("friends_requests_everyone"),
@@ -1501,7 +1502,7 @@ private fun LanguagePickerOverlay(
     onDismiss: () -> Unit,
 ) {
     val firstRowFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstRowFocusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { firstRowFocusRequester.requestFocus() } }
     SidePanel(title = title, width = 360.dp, onDismiss = onDismiss) {
         LazyColumn {
             if (isSubtitle) {

@@ -308,6 +308,7 @@ class HomeViewModel @Inject constructor(
                     }
                     // The reader's own Watchlist: anime they follow stays in.
                     val comingSoon = comingSoonDeferred.await().orEmpty()
+                        .distinctBy { "${it.ItemId}_${it.Date.orEmpty()}" }
                     val comingSoonItems = catching { repository.getItemsInfo(session.userId, comingSoon.map { it.ItemId }) }
                         .getOrDefault(emptyMap())
                         .mapKeys { normalizeId(it.key) }
@@ -483,11 +484,18 @@ class HomeViewModel @Inject constructor(
                         val recs = orNullOnFailure { buildRecommendationRows(recommendationSource, recExclude) }
                         recommendationsDone = true
                         if (recs == null) {
-                            recommendationRows = previousSections("rec:").filter { it.key != COMMUNITY_ROW_KEY }
+                            recommendationRows = previousSections("rec:")
+                                .filter { it.key != COMMUNITY_ROW_KEY }
+                                .distinctBy { it.key }
                             publish()
                             return@async
                         }
-                        recommendationRows = recs.map { it.copy(key = "rec:${it.title}") }
+                        val seenRecKeys = mutableSetOf<String>()
+                        recommendationRows = recs.mapIndexed { index, section ->
+                            val baseKey = "rec:${section.title}"
+                            val uniqueKey = if (seenRecKeys.add(baseKey)) baseKey else "${baseKey}_$index"
+                            section.copy(key = uniqueKey)
+                        }
                         publish()
                     }
 

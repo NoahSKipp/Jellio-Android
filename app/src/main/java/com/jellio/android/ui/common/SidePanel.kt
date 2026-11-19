@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -56,6 +58,7 @@ fun SidePanel(
                 .then(if (isCompact) Modifier.fillMaxWidth(0.90f) else Modifier.width(width))
                 .fillMaxSize()
                 .background(JellioBgElevated)
+                .then(if (isCompact) Modifier.statusBarsPadding().navigationBarsPadding() else Modifier)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

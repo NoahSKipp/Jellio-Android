@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -384,7 +385,7 @@ private fun JellioApp(
                     if (route.isImmersive()) it
                     else if (useBottomNav) {
                         val bottomPad = if (miniPlayerVisible) MobileBottomNavHeight + 68.dp else MobileBottomNavHeight
-                        it.padding(bottom = bottomPad)
+                        it.navigationBarsPadding().padding(bottom = bottomPad)
                     } else {
                         val bottomPad = if (miniPlayerVisible) 76.dp else 0.dp
                         it.padding(start = SidebarReservedWidth.scaled(), bottom = bottomPad)
@@ -745,7 +746,7 @@ private fun JellioApp(
                 AccountSwitcherOverlay(
                     session = session,
                     onDismiss = {
-                        sidebarFocusRequester.requestFocus()
+                        if (!useBottomNav) runCatching { sidebarFocusRequester.requestFocus() }
                         showAccountSwitcher = false
                     },
                     onViewProfile = { push(JellioRoute.Profile()) },

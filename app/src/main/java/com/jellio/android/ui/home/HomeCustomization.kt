@@ -24,7 +24,7 @@ data class HomeCustomizationDto(
 object HomeCustomization {
     fun effectiveOrder(liveKeys: List<String>, customization: HomeCustomizationDto): List<String> {
         val liveSet = liveKeys.toSet()
-        val ordered = customization.order.filter { liveSet.contains(it) }.toMutableList()
+        val ordered = customization.order.distinct().filter { liveSet.contains(it) }.toMutableList()
         val seen = ordered.toHashSet()
         liveKeys.forEach { key -> if (seen.add(key)) ordered.add(key) }
         return ordered

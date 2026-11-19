@@ -18,7 +18,9 @@ import com.jellio.android.ui.home.HeaderOverlap
 import com.jellio.android.ui.home.ShowcaseHost
 import com.jellio.android.ui.theme.JellioText
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import com.jellio.android.ui.common.isCompactScreen
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -121,21 +123,25 @@ fun LibraryScreen(
                 // The space this screen really gets, which can be less than the display.
                 val screenHeight = maxHeight
                 val density = LocalDensity.current
+                val isCompact = isCompactScreen()
+                val horizontalPad = if (isCompact) 16.dp else 48.dp
                 val rowsViewportHeight = screenHeight * 0.52f
                 val firstItem = featuredRow?.items?.firstOrNull()
                     ?: uiState.mainRow?.items?.firstOrNull()
                     ?: uiState.sections.firstNotNullOfOrNull { it.items.firstOrNull() }
 
-                ShowcaseHost(
-                    highlighted = highlightedItem,
-                    fallback = firstItem,
-                    loadInfo = { item -> viewModel.showcaseInfo(session, item) },
-                    imageUrl = imageUrl,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .fillMaxWidth()
-                        .height(screenHeight - rowsViewportHeight + HeaderOverlap),
-                )
+                if (!isCompact) {
+                    ShowcaseHost(
+                        highlighted = highlightedItem,
+                        fallback = firstItem,
+                        loadInfo = { item -> viewModel.showcaseInfo(session, item) },
+                        imageUrl = imageUrl,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .fillMaxWidth()
+                            .height(screenHeight - rowsViewportHeight + HeaderOverlap),
+                    )
+                }
 
                 val defaultScrollSpec = LocalBringIntoViewSpec.current.scrollAnimationSpec
                 val rowsSpec = remember(density) {
@@ -144,14 +150,22 @@ fun LibraryScreen(
                 CompositionLocalProvider(LocalBringIntoViewSpec provides rowsSpec) {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .fillMaxWidth()
-                            .height(rowsViewportHeight)
-                            .clipToBounds()
-                            .focusRestorer(),
-                        // Room for the last rows to scroll up to the top, as in Nuvio.
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = rowsViewportHeight),
+                        modifier = if (isCompact) {
+                            Modifier
+                                .fillMaxSize()
+                                .clipToBounds()
+                                .focusRestorer()
+                        } else {
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .height(rowsViewportHeight)
+                                .clipToBounds()
+                                .focusRestorer()
+                        },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            bottom = if (isCompact) 24.dp else rowsViewportHeight,
+                        ),
                     ) {
                         item(key = "header") {
                             LibraryHeader(
@@ -206,7 +220,7 @@ fun LibraryScreen(
                                 InlineErrorState(
                                     message = com.jellio.android.ui.i18n.string("rows_load_error"),
                                     onRetry = { viewModel.retry(session) },
-                                    modifier = Modifier.padding(start = 48.dp, top = 8.dp, bottom = 8.dp),
+                                    modifier = Modifier.padding(horizontal = horizontalPad, vertical = 8.dp),
                                 )
                             }
                         }
@@ -235,12 +249,12 @@ fun LibraryScreen(
                     options = LIBRARY_SORT_OPTIONS.map { LibraryFilterOption(com.jellio.android.data.i18n.Strings.get(it.key), it.value) },
                     selectedValue = uiState.selectedSort,
                     onSelect = { value ->
-                        sortFieldFocusRequester.requestFocus()
+                        runCatching { sortFieldFocusRequester.requestFocus() }
                         openFilterField = null
                         if (value != null) viewModel.changeSort(session, value)
                     },
                     onDismiss = {
-                        sortFieldFocusRequester.requestFocus()
+                        runCatching { sortFieldFocusRequester.requestFocus() }
                         openFilterField = null
                     },
                 )
@@ -250,12 +264,12 @@ fun LibraryScreen(
                         uiState.genreOptions.map { LibraryFilterOption(com.jellio.android.data.i18n.genreDisplayName(it), it) },
                     selectedValue = uiState.selectedGenre,
                     onSelect = { value ->
-                        genreFieldFocusRequester.requestFocus()
+                        runCatching { genreFieldFocusRequester.requestFocus() }
                         openFilterField = null
                         viewModel.changeGenre(session, value)
                     },
                     onDismiss = {
-                        genreFieldFocusRequester.requestFocus()
+                        runCatching { genreFieldFocusRequester.requestFocus() }
                         openFilterField = null
                     },
                 )
@@ -265,7 +279,7 @@ fun LibraryScreen(
     }
 }
 
-// The library's name with its sort and genre fields beside it.
+// The library's name with its sort and genre fields beside it (or stacked on compact screens).
 @Composable
 private fun LibraryHeader(
     title: String,
@@ -278,28 +292,60 @@ private fun LibraryHeader(
     sortFieldFocusRequester: FocusRequester,
     genreFieldFocusRequester: FocusRequester,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-    ) {
-        Text(
-            text = title,
-            color = JellioText,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            modifier = Modifier.padding(start = 48.dp, end = 20.dp, bottom = 12.dp),
-        )
-        if (showFilters) {
-            LibraryFilterFields(
-                genres = genres,
-                selectedSort = selectedSort,
-                selectedGenre = selectedGenre,
-                onOpenSort = onOpenSort,
-                onOpenGenre = onOpenGenre,
-                sortFieldFocusRequester = sortFieldFocusRequester,
-                genreFieldFocusRequester = genreFieldFocusRequester,
+    val isCompact = isCompactScreen()
+    if (isCompact) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = title,
+                color = JellioText,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
             )
+            if (showFilters) {
+                LibraryFilterFields(
+                    genres = genres,
+                    selectedSort = selectedSort,
+                    selectedGenre = selectedGenre,
+                    onOpenSort = onOpenSort,
+                    onOpenGenre = onOpenGenre,
+                    sortFieldFocusRequester = sortFieldFocusRequester,
+                    genreFieldFocusRequester = genreFieldFocusRequester,
+                )
+            }
+        }
+    } else {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .statusBarsPadding()
+                .padding(top = 8.dp, bottom = 4.dp),
+        ) {
+            Text(
+                text = title,
+                color = JellioText,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                modifier = Modifier.padding(start = 48.dp, end = 20.dp, bottom = 12.dp),
+            )
+            if (showFilters) {
+                LibraryFilterFields(
+                    genres = genres,
+                    selectedSort = selectedSort,
+                    selectedGenre = selectedGenre,
+                    onOpenSort = onOpenSort,
+                    onOpenGenre = onOpenGenre,
+                    sortFieldFocusRequester = sortFieldFocusRequester,
+                    genreFieldFocusRequester = genreFieldFocusRequester,
+                )
+            }
         }
     }
 }

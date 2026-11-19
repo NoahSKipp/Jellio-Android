@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -77,15 +77,16 @@ fun ComingSoonRow(
     Column(modifier = modifier.padding(bottom = RowSpacing)) {
         RowTitle(text = com.jellio.android.data.i18n.Strings.get("tv_coming_soon"))
         val firstCard = androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() }
+        val horizontalPadding = responsiveRowStartPadding()
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.jellio.android.ui.common.rememberTvHorizontalBringIntoViewSpec()) {
             LazyRow(
                 state = rememberTvRowState(),
-                contentPadding = PaddingValues(horizontal = RowStartPadding),
+                contentPadding = PaddingValues(horizontal = horizontalPadding),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.rowEntry(firstCard),
             ) {
-                items(entries, key = { it.ItemId + (it.Date ?: "") }) { entry ->
-                    RowEntryTarget(if (entry == entries.first()) firstCard else null) {
+                itemsIndexed(entries, key = { index, entry -> "${entry.ItemId}_${entry.Date.orEmpty()}_$index" }) { index, entry ->
+                    RowEntryTarget(if (index == 0) firstCard else null) {
                         val badge = androidx.compose.runtime.remember(entry.Date, com.jellio.android.data.prefs.DisplayPreferences.displayLanguage) {
                             comingSoonDateLabel(entry)
                         }

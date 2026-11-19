@@ -129,9 +129,13 @@ fun SeasonalEffectsOverlay(themeKey: String?, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxSize()) {
         // Static parts go in their own offscreen layer, kept as a texture
         // instead of redrawing full-screen gradients on every scroll frame.
-        Canvas(Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) { drawWash(spec) }
+        Canvas(Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
+            if (size.width <= 0f || size.height <= 0f) return@Canvas
+            drawWash(spec)
+        }
         if (level == MotionLevel.STILL) {
             Canvas(Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
+                if (size.width <= 0f || size.height <= 0f) return@Canvas
                 when (themeKey) {
                     "halloween" -> drawHalloweenStill()
                     "christmas" -> drawChristmasStill()
@@ -166,7 +170,7 @@ private fun DrawScope.drawWash(spec: SeasonalWashSpec) {
             0f to spec.wash1,
             0.55f to Color.Transparent,
             center = Offset(size.width * 0.15f, -size.height * 0.10f),
-            radius = maxOf(size.width * 1.2f, size.height * 0.9f),
+            radius = maxOf(size.width * 1.2f, size.height * 0.9f).coerceAtLeast(1f),
         ),
     )
     drawRect(
@@ -174,7 +178,7 @@ private fun DrawScope.drawWash(spec: SeasonalWashSpec) {
             0f to spec.wash2,
             0.6f to Color.Transparent,
             center = Offset(size.width, size.height * 1.1f),
-            radius = maxOf(size.width * 1.1f, size.height),
+            radius = maxOf(size.width * 1.1f, size.height).coerceAtLeast(1f),
         ),
     )
 }
@@ -210,13 +214,23 @@ private fun HalloweenScene() {
     val moonGlow by moonGlowState
 
     // The moon and the cobwebs never move: drawn once.
-    Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = moonGlow }) { drawMoon() }
+    Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = moonGlow }) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
+        drawMoon()
+    }
     Canvas(Modifier.fillMaxSize()) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
         drawCobweb(Offset.Zero, 1f)
         drawCobweb(Offset(size.width, 0f), -1f)
     }
-    Canvas(Modifier.fillMaxSize().graphicsLayer { translationX = size.width * fogShift }) { drawHalloweenFog() }
-    Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = dread }) { drawDread() }
+    Canvas(Modifier.fillMaxSize().graphicsLayer { translationX = size.width * fogShift }) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
+        drawHalloweenFog()
+    }
+    Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = dread }) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
+        drawDread()
+    }
 
     // REDUCED keeps a third of the creatures: the four near bats, one
     // ghost, one spider, a few embers.
@@ -233,6 +247,7 @@ private fun HalloweenScene() {
     val clock = rememberClock()
 
     Canvas(Modifier.fillMaxSize()) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
         val t = clock.longValue / 1_000_000_000f
         val dp = density
         val w = size.width
@@ -343,13 +358,13 @@ private fun DrawScope.drawHalloweenFog() {
     drawRect(
         Brush.radialGradient(
             0f to Color(0x427C3AED), 1f to Color.Transparent,
-            center = Offset(size.width * 0.2f, size.height * 1.05f), radius = size.width * 0.45f,
+            center = Offset(size.width * 0.2f, size.height * 1.05f), radius = (size.width * 0.45f).coerceAtLeast(1f),
         ),
     )
     drawRect(
         Brush.radialGradient(
             0f to Color(0x2EFF7518), 1f to Color.Transparent,
-            center = Offset(size.width * 0.75f, size.height * 1.05f), radius = size.width * 0.38f,
+            center = Offset(size.width * 0.75f, size.height * 1.05f), radius = (size.width * 0.38f).coerceAtLeast(1f),
         ),
     )
 }
@@ -358,7 +373,7 @@ private fun DrawScope.drawDread() {
     drawRect(
         Brush.radialGradient(
             0.45f to Color.Transparent, 1f to Color(0x80000000),
-            center = Offset(size.width / 2, size.height * 0.4f), radius = maxOf(size.width, size.height) * 0.75f,
+            center = Offset(size.width / 2, size.height * 0.4f), radius = (maxOf(size.width, size.height) * 0.75f).coerceAtLeast(1f),
         ),
     )
 }
@@ -376,7 +391,7 @@ private fun DrawScope.drawPumpkins(t: Float?) {
         drawCircle(
             Brush.radialGradient(
                 listOf(Color(0x8CFF8C1E), Color(0x2EFF7518), Color.Transparent),
-                center = Offset(left + sizePx / 2, top + sizePx * 0.5f), radius = sizePx * 1.1f,
+                center = Offset(left + sizePx / 2, top + sizePx * 0.5f), radius = (sizePx * 1.1f).coerceAtLeast(1f),
             ),
             sizePx * 1.1f, Offset(left + sizePx / 2, top + sizePx * 0.5f), alpha = flicker,
         )
@@ -393,7 +408,7 @@ private fun DrawScope.drawMoonCloud(drift: Float) {
     translate(mc.x + drift * moonR * 0.6f, mc.y + moonR * 0.15f) {
         scale(3f, 0.45f, Offset.Zero) {
             drawCircle(
-                Brush.radialGradient(listOf(Color(0xD90C0812), Color.Transparent), center = Offset.Zero, radius = moonR * 0.5f),
+                Brush.radialGradient(listOf(Color(0xD90C0812), Color.Transparent), center = Offset.Zero, radius = (moonR * 0.5f).coerceAtLeast(1f)),
                 moonR * 0.5f, Offset.Zero,
             )
         }
@@ -444,11 +459,11 @@ private fun DrawScope.drawPumpkin(faceLight: Float) {
 private fun DrawScope.drawMoon() {
     val r = 75f * density
     val c = Offset(size.width - size.width * 0.07f - r, size.height * 0.04f + r)
-    drawCircle(Brush.radialGradient(listOf(Color(0x597A0F1A), Color.Transparent), center = c, radius = r * 3.2f), r * 3.2f, c)
+    drawCircle(Brush.radialGradient(listOf(Color(0x597A0F1A), Color.Transparent), center = c, radius = (r * 3.2f).coerceAtLeast(1f)), r * 3.2f, c)
     drawCircle(
         Brush.radialGradient(
             0f to Color(0xFFFFB88A), 0.38f to Color(0xFFE0562C), 0.72f to Color(0xFF7A1C10), 1f to Color(0xFF3A0C0A),
-            center = Offset(c.x - r * 0.24f, c.y - r * 0.28f), radius = r * 1.5f,
+            center = Offset(c.x - r * 0.24f, c.y - r * 0.28f), radius = (r * 1.5f).coerceAtLeast(1f),
         ),
         r, c,
     )
@@ -513,13 +528,14 @@ private fun Lightning(modifier: Modifier) {
     }
 
     Canvas(modifier.fillMaxSize()) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
         area = size
         val s = strike ?: return@Canvas
         if (flash.value > 0f) {
             drawRect(
                 Brush.radialGradient(
                     listOf(Color(0xFFF3ECFF), Color(0xFFB79BFF), Color(0xFF4B2A9A)),
-                    center = Offset(s.x, 0f), radius = size.width * 0.9f,
+                    center = Offset(s.x, 0f), radius = (size.width * 0.9f).coerceAtLeast(1f),
                 ),
                 alpha = flash.value, blendMode = BlendMode.Screen,
             )
@@ -593,9 +609,15 @@ private fun ChristmasScene() {
     }
     val hearth by hearthState
 
-    Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = hearth }) { drawHearth() }
+    Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = hearth }) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
+        drawHearth()
+    }
     // Garland, the drift, the frost and the wire never move: drawn once.
-    Canvas(Modifier.fillMaxSize()) { drawChristmasDecor() }
+    Canvas(Modifier.fillMaxSize()) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
+        drawChristmasDecor()
+    }
 
     // REDUCED: under half the snow, fewer twinkles.
     val rng = remember { Random(25) }
@@ -616,6 +638,7 @@ private fun ChristmasScene() {
     var bulbs by remember { mutableStateOf<Pair<Float, List<Offset>>?>(null) }
 
     Canvas(Modifier.fillMaxSize()) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
         val t = clock.longValue / 1_000_000_000f
         val dp = density
         val w = size.width
@@ -676,7 +699,7 @@ private fun ChristmasScene() {
 private fun DrawScope.drawHearth() {
     val c = Offset(size.width / 2f, size.height + 120f * density)
     drawRect(
-        Brush.radialGradient(listOf(Color(0x52FF9632), Color(0x1AFF6E1E), Color.Transparent), center = c, radius = size.width * 0.38f),
+        Brush.radialGradient(listOf(Color(0x52FF9632), Color(0x1AFF6E1E), Color.Transparent), center = c, radius = (size.width * 0.38f).coerceAtLeast(1f)),
     )
 }
 
@@ -713,7 +736,7 @@ private fun DrawScope.drawBaubles(t: Float?) {
             drawCircle(
                 Brush.radialGradient(
                     0f to Color(0xE6FFFFFF), 0.25f to color, 1f to Color(0x8C000000),
-                    center = Offset(center.x - r * 0.35f, center.y - r * 0.4f), radius = r * 1.6f,
+                    center = Offset(center.x - r * 0.35f, center.y - r * 0.4f), radius = (r * 1.6f).coerceAtLeast(1f),
                 ),
                 r, center,
             )
@@ -936,6 +959,7 @@ private fun NewYearScene() {
     }
 
     Canvas(Modifier.fillMaxSize()) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
         val nanos = clock.longValue
         val t = nanos / 1_000_000_000f
         val dp = density
@@ -978,7 +1002,7 @@ private fun NewYearScene() {
             val k = ((fireworks.now - g.born) / 0.9f).coerceIn(0f, 1f)
             val r = 260f * dp * (0.5f + 0.65f * k)
             drawCircle(
-                Brush.radialGradient(listOf(g.color.copy(alpha = 0.4f), g.color.copy(alpha = 0.13f), Color.Transparent), center = Offset(g.x, g.y), radius = r),
+                Brush.radialGradient(listOf(g.color.copy(alpha = 0.4f), g.color.copy(alpha = 0.13f), Color.Transparent), center = Offset(g.x, g.y), radius = r.coerceAtLeast(1f)),
                 r, Offset(g.x, g.y), alpha = 0.9f * (1f - k), blendMode = BlendMode.Screen,
             )
         }
@@ -1078,6 +1102,7 @@ private fun ValentineScene() {
     val hearts = if (reduced) allHearts.take(10) else allHearts
     val clock = rememberClock()
     Canvas(Modifier.fillMaxSize()) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
         val t = clock.longValue / 1_000_000_000f
         val dp = density
         hearts.forEachIndexed { i, b ->

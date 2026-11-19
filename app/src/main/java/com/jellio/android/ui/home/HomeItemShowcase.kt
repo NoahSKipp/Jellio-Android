@@ -4,10 +4,13 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,28 +73,56 @@ fun HomeItemShowcase(
     info: ShowcaseInfo?,
     imageUrl: (BaseItemDto, String, Int) -> String,
     modifier: Modifier = Modifier,
+    onClick: ((BaseItemDto) -> Unit)? = null,
 ) {
+    val isCompactPortrait = com.jellio.android.ui.common.rememberWindowLayoutMode() == com.jellio.android.ui.common.WindowLayoutMode.COMPACT_PORTRAIT
+    val clickModifier = if (onClick != null && item != null) {
+        Modifier.clickable { onClick(item) }
+    } else {
+        Modifier
+    }
     BoxWithConstraints(
-        modifier = modifier.fillMaxWidth().background(
-            Brush.verticalGradient(0f to JellioBg, 0.62f to JellioBg, 0.86f to JellioBg.copy(alpha = 0.45f), 1f to Color.Transparent),
-        ),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(clickModifier)
+            .background(
+                if (isCompactPortrait) {
+                    Brush.verticalGradient(0f to JellioBg, 1f to JellioBg)
+                } else {
+                    Brush.verticalGradient(0f to JellioBg, 0.62f to JellioBg, 0.86f to JellioBg.copy(alpha = 0.45f), 1f to Color.Transparent)
+                },
+            ),
     ) {
         if (item == null) return@BoxWithConstraints
         val details = info?.item?.takeIf { it.Id == item.Id } ?: item
         val series = info?.series?.takeIf { info.item.Id == item.Id }
         val isEpisode = details.Type.equals("Episode", ignoreCase = true) || details.Type.equals("Season", ignoreCase = true)
 
-        val isCompactPortrait = com.jellio.android.ui.common.rememberWindowLayoutMode() == com.jellio.android.ui.common.WindowLayoutMode.COMPACT_PORTRAIT
-
         ShowcaseBackdrop(
             item = details,
             series = series,
             imageUrl = imageUrl,
+            applySideMask = !isCompactPortrait,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .fillMaxHeight()
                 .fillMaxWidth(if (isCompactPortrait) 1f else 0.72f),
         )
+
+        if (isCompactPortrait) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to JellioBg.copy(alpha = 0.25f),
+                            0.42f to JellioBg.copy(alpha = 0.35f),
+                            0.78f to JellioBg.copy(alpha = 0.82f),
+                            1f to JellioBg,
+                        ),
+                    ),
+            )
+        }
 
         // The text crossfades from one title to the next; more details for
         // the same title fill in place.
@@ -106,11 +138,12 @@ fun HomeItemShowcase(
                 // A long title or logo shortens the description rather than pushing into them.
                 .align(Alignment.BottomStart)
                 .fillMaxHeight()
+                .then(if (isCompactPortrait) Modifier.statusBarsPadding() else Modifier)
                 .padding(
                     start = if (isCompactPortrait) 16.dp else RowStartPadding,
                     top = if (isCompactPortrait) 12.dp else 24.dp,
                     end = if (isCompactPortrait) 16.dp else 24.dp,
-                    bottom = HeaderOverlap + 16.dp,
+                    bottom = if (isCompactPortrait) 16.dp else HeaderOverlap + 16.dp,
                 )
                 .width(if (isCompactPortrait) maxWidth else maxWidth * 0.42f),
             label = "showcaseText",
@@ -162,6 +195,7 @@ private fun ShowcaseBackdrop(
     series: BaseItemDto?,
     imageUrl: (BaseItemDto, String, Int) -> String,
     modifier: Modifier,
+    applySideMask: Boolean = true,
 ) {
     val candidates = remember(item.Id, series?.Id) { posterBackdropCandidates(item, imageUrl, 1280, series = series) }
     var index by remember(candidates) { mutableIntStateOf(0) }
@@ -173,14 +207,18 @@ private fun ShowcaseBackdrop(
         modifier = modifier
             .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
             .drawWithCache {
-                val sideMask = Brush.horizontalGradient(
-                    0f to Color.Transparent,
-                    0.18f to Color.Black.copy(alpha = 0.1f),
-                    0.42f to Color.Black.copy(alpha = 0.45f),
-                    0.68f to Color.Black.copy(alpha = 0.85f),
-                    1f to Color.Black,
-                    endX = size.width * 0.7f,
-                )
+                val sideMask = if (applySideMask) {
+                    Brush.horizontalGradient(
+                        0f to Color.Transparent,
+                        0.18f to Color.Black.copy(alpha = 0.1f),
+                        0.42f to Color.Black.copy(alpha = 0.45f),
+                        0.68f to Color.Black.copy(alpha = 0.85f),
+                        1f to Color.Black,
+                        endX = size.width * 0.7f,
+                    )
+                } else {
+                    null
+                }
                 val bottomMask = Brush.verticalGradient(
                     0f to Color.Black,
                     0.55f to Color.Black,
@@ -189,7 +227,9 @@ private fun ShowcaseBackdrop(
                 )
                 onDrawWithContent {
                     drawContent()
-                    drawRect(sideMask, blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
+                    if (sideMask != null) {
+                        drawRect(sideMask, blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
+                    }
                     drawRect(bottomMask, blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
                 }
             },
@@ -258,6 +298,7 @@ private fun ShowcaseLogo(
 
 // "Movie • Action • 2h 25m • 2026 • TMDB 8.0" on one line; an episode shows
 // "S1 E3 • Episode name" in place of the type.
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ShowcaseMetadata(details: BaseItemDto, series: BaseItemDto?, isEpisode: Boolean) {
     val parts = remember(details, series, com.jellio.android.data.prefs.DisplayPreferences.displayLanguage) {
@@ -281,17 +322,17 @@ private fun ShowcaseMetadata(details: BaseItemDto, series: BaseItemDto?, isEpiso
             val year = details.ProductionYear?.toString() ?: details.PremiereDate?.take(4)
             if (!year.isNullOrBlank()) {
                 val ongoing = !isEpisode && details.Status.equals("Continuing", ignoreCase = true)
-                add(if (ongoing) "$year–" else year)
+                add(if (ongoing) "$year-" else year)
             }
         }
     }
     val rating = details.CommunityRating ?: series?.CommunityRating?.takeIf { isEpisode }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         parts.forEachIndexed { index, part ->
-            if (index > 0) MetaDot()
+            if (index > 0) MetaDot(modifier = Modifier.align(Alignment.CenterVertically))
             Text(
                 text = part,
                 color = JellioTextSecondary,
@@ -300,14 +341,15 @@ private fun ShowcaseMetadata(details: BaseItemDto, series: BaseItemDto?, isEpiso
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis,
-                modifier = if (index == 1 && isEpisode) Modifier.weight(1f, fill = false) else Modifier,
+                modifier = Modifier.align(Alignment.CenterVertically),
             )
         }
         if (rating != null && rating > 0) {
-            if (parts.isNotEmpty()) MetaDot()
+            if (parts.isNotEmpty()) MetaDot(modifier = Modifier.align(Alignment.CenterVertically))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.align(Alignment.CenterVertically),
             ) {
                 TmdbBadge(width = 28.dp, height = 12.dp)
                 Text(
@@ -324,8 +366,8 @@ private fun ShowcaseMetadata(details: BaseItemDto, series: BaseItemDto?, isEpiso
 }
 
 @Composable
-private fun MetaDot() {
-    Text(text = "•", color = JellioTextSecondary.copy(alpha = 0.6f), fontSize = 13.sp, softWrap = false)
+private fun MetaDot(modifier: Modifier = Modifier) {
+    Text(text = "•", color = JellioTextSecondary.copy(alpha = 0.6f), fontSize = 13.sp, softWrap = false, modifier = modifier)
 }
 
 // Ratings here are TMDB's (Gelato imports them), same badge Jellio Web shows.
@@ -356,6 +398,7 @@ fun ShowcaseHost(
     loadInfo: suspend (BaseItemDto) -> ShowcaseInfo,
     imageUrl: (BaseItemDto, String, Int) -> String,
     modifier: Modifier = Modifier,
+    onClick: ((BaseItemDto) -> Unit)? = null,
 ) {
     val active = highlighted.value ?: fallback
     var shownItem by remember { mutableStateOf<BaseItemDto?>(null) }
@@ -367,7 +410,7 @@ fun ShowcaseHost(
         showcaseInfo = ShowcaseInfo(target, null)
         showcaseInfo = loadInfo(target)
     }
-    HomeItemShowcase(item = shownItem, info = showcaseInfo, imageUrl = imageUrl, modifier = modifier)
+    HomeItemShowcase(item = shownItem, info = showcaseInfo, imageUrl = imageUrl, modifier = modifier, onClick = onClick)
 }
 
 suspend fun loadShowcaseInfo(repository: com.jellio.android.data.JellioRepository, userId: String, item: BaseItemDto): ShowcaseInfo {

@@ -89,7 +89,7 @@ fun LibraryFilterFieldOverlay(
     BackHandler(onBack = onDismiss)
 
     val firstEntryFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(options) { firstEntryFocusRequester.requestFocus() }
+    LaunchedEffect(options) { runCatching { firstEntryFocusRequester.requestFocus() } }
 
     Box(
         modifier = modifier

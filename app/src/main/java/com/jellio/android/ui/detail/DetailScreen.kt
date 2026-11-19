@@ -11,14 +11,18 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -393,6 +397,7 @@ private fun EpisodeOptionsMenu(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetailHero(
     item: BaseItemDto,
@@ -428,37 +433,44 @@ private fun DetailHero(
     var artIndex by remember(candidates) { mutableIntStateOf(0) }
     val art = candidates.getOrNull(artIndex)
     val isCompact = com.jellio.android.ui.common.isCompactScreen()
-    val heroHeight = if (isCompact) 420.dp else HeroHeight.scaled()
-    Box(modifier = Modifier.fillMaxWidth().height(heroHeight)) {
+    val horizontalPad = if (isCompact) 16.dp else 48.dp
+    val minHeroHeight = if (isCompact) 360.dp else maxOf(420.dp, HeroHeight.scaled())
+    Box(modifier = Modifier.fillMaxWidth().heightIn(min = minHeroHeight)) {
         if (art != null) {
             AsyncImage(
                 model = art.url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 onError = { artIndex++ },
-                modifier = Modifier.fillMaxWidth().height(heroHeight).then(if (art.blurred) Modifier.blur(28.dp) else Modifier),
+                modifier = Modifier.matchParentSize().then(if (art.blurred) Modifier.blur(28.dp) else Modifier),
             )
             if (art.blurred) {
-                Box(modifier = Modifier.fillMaxWidth().height(heroHeight).background(JellioBg.copy(alpha = 0.35f)))
+                Box(modifier = Modifier.matchParentSize().background(JellioBg.copy(alpha = 0.35f)))
             }
         }
         Box(
-            modifier = Modifier.fillMaxWidth().height(heroHeight).background(
+            modifier = Modifier.matchParentSize().background(
                 Brush.verticalGradient(listOf(Color.Transparent, JellioBg), startY = 0f, endY = Float.POSITIVE_INFINITY),
             ),
         )
         Box(
-            modifier = Modifier.fillMaxWidth().height(heroHeight).background(
-                Brush.horizontalGradient(listOf(JellioBg.copy(alpha = 0.85f), Color.Transparent), endX = 1100f),
+            modifier = Modifier.matchParentSize().background(
+                Brush.horizontalGradient(listOf(JellioBg.copy(alpha = if (isCompact) 0.55f else 0.85f), Color.Transparent), endX = 1100f),
             ),
         )
 
         Column(
-            modifier = Modifier.align(Alignment.BottomStart).widthIn(max = 920.dp).padding(
-                start = if (isCompact) 20.dp else 56.dp,
-                bottom = if (isCompact) 24.dp else 56.dp,
-                end = if (isCompact) 20.dp else 32.dp,
-            ),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .widthIn(max = 920.dp)
+                .statusBarsPadding()
+                .padding(
+                    start = horizontalPad,
+                    top = if (isCompact) 48.dp else 64.dp,
+                    bottom = if (isCompact) 20.dp else 48.dp,
+                    end = horizontalPad,
+                ),
         ) {
             if (item.Type == "Episode" && item.SeriesId != null && item.SeriesName != null) {
                 Surface(
@@ -512,16 +524,25 @@ private fun DetailHero(
                     contentScale = ContentScale.Fit,
                     alignment = Alignment.CenterStart,
                     onError = { logoIndex++ },
-                    modifier = Modifier.widthIn(max = 520.dp).height(120.dp),
+                    modifier = Modifier.widthIn(max = if (isCompact) 300.dp else 520.dp).height(if (isCompact) 88.dp else 120.dp),
                 )
             } else {
                 Text(text = titleText, style = MaterialTheme.typography.titleLarge, color = JellioText, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
 
-            Row(modifier = Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(
+                modifier = Modifier.padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 val epReleaseLabel = if (item.Type == "Episode") episodeReleaseLabel(item) else null
                 if (epReleaseLabel != null) {
-                    Text(text = epReleaseLabel, color = JellioRarityLegendary, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = epReleaseLabel,
+                        color = JellioRarityLegendary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.align(Alignment.CenterVertically),
+                    )
                 }
                 val year = if (item.Type == "Episode") {
                     formatPremiereDate(item.PremiereDate) ?: item.ProductionYear?.toString()
@@ -529,12 +550,24 @@ private fun DetailHero(
                     item.ProductionYear?.toString()
                 }
                 if (year != null && (epReleaseLabel == null || year != epReleaseLabel)) {
-                    Text(text = year, color = JellioTextSecondary)
+                    Text(text = year, color = JellioTextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
                 }
-                formatRuntime(item.RunTimeTicks).takeIf { it.isNotEmpty() }?.let { Text(text = it, color = JellioTextSecondary) }
-                item.OfficialRating?.let { Text(text = it, color = JellioTextSecondary) }
+                formatRuntime(item.RunTimeTicks).takeIf { it.isNotEmpty() }?.let {
+                    Text(text = it, color = JellioTextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
+                }
+                item.OfficialRating?.let {
+                    Text(text = it, color = JellioTextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
+                }
                 // TMDB's score, labelled like the cards.
-                item.CommunityRating?.let { com.jellio.android.ui.home.RatingChip(it, fontSize = 15.sp, badgeWidth = 28.dp, badgeHeight = 12.dp) }
+                item.CommunityRating?.let {
+                    com.jellio.android.ui.home.RatingChip(
+                        it,
+                        fontSize = 15.sp,
+                        badgeWidth = 28.dp,
+                        badgeHeight = 12.dp,
+                        modifier = Modifier.align(Alignment.CenterVertically),
+                    )
+                }
             }
 
             MediaTechBadgesRow(item = item, modifier = Modifier.padding(top = 10.dp))
@@ -555,10 +588,10 @@ private fun DetailHero(
             }
 
             if (availableEditions.size > 1) {
-                Row(
+                FlowRow(
                     modifier = Modifier.padding(top = 18.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     availableEditions.forEach { edition ->
                         val isSelected = edition == selectedEdition
@@ -595,7 +628,11 @@ private fun DetailHero(
             }
 
             var actionsExpanded by remember(item.Id) { mutableStateOf(false) }
-            Row(modifier = Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(
+                modifier = Modifier.padding(top = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (isCompact) 12.dp else 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Surface(
                     onClick = onPlay,
                     enabled = !state.resolvingPlay,
@@ -614,6 +651,7 @@ private fun DetailHero(
                     ),
                     scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
                     modifier = Modifier
+                        .align(Alignment.CenterVertically)
                         .focusRequester(playButtonFocusRequester)
                         .onFocusChanged { onPlayFocusChanged(it.isFocused) },
                 ) {
@@ -622,7 +660,7 @@ private fun DetailHero(
                         "AudioBook" -> "Listen"
                         else -> state.playLabel
                     }
-                    Row(modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(modifier = Modifier.padding(horizontal = if (isCompact) 24.dp else 32.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
                         Text(text = primaryButtonLabel, modifier = Modifier.padding(start = 8.dp))
                     }
@@ -635,48 +673,46 @@ private fun DetailHero(
                         onClick = onDownload,
                     )
                 }
-                AnimatedVisibility(visible = actionsExpanded, enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (actionsExpanded) {
+                    IconActionButton(
+                        icon = if (state.isWatchlisted) Icons.Filled.BookmarkAdded else Icons.Filled.BookmarkAdd,
+                        active = state.isWatchlisted,
+                        contentDescription = com.jellio.android.ui.i18n.string("nav_watchlist"),
+                        onClick = onToggleWatchlist,
+                    )
+                    if (onAddToFriend != null) {
                         IconActionButton(
-                            icon = if (state.isWatchlisted) Icons.Filled.BookmarkAdded else Icons.Filled.BookmarkAdd,
-                            active = state.isWatchlisted,
-                            contentDescription = com.jellio.android.ui.i18n.string("nav_watchlist"),
-                            onClick = onToggleWatchlist,
+                            icon = Icons.Filled.PersonAdd,
+                            active = false,
+                            contentDescription = com.jellio.android.ui.i18n.string("friends_add_to_friend_watchlist"),
+                            onClick = onAddToFriend,
                         )
-                        if (onAddToFriend != null) {
-                            IconActionButton(
-                                icon = Icons.Filled.PersonAdd,
-                                active = false,
-                                contentDescription = com.jellio.android.ui.i18n.string("friends_add_to_friend_watchlist"),
-                                onClick = onAddToFriend,
-                            )
-                        }
+                    }
+                    IconActionButton(
+                        icon = Icons.Filled.Check,
+                        active = state.isWatched,
+                        contentDescription = com.jellio.android.ui.i18n.string("detail_mark_watched"),
+                        onClick = onToggleWatched,
+                    )
+                    IconActionButton(
+                        icon = Icons.Filled.ThumbUp,
+                        active = state.likes == true,
+                        contentDescription = com.jellio.android.ui.i18n.string("detail_like"),
+                        onClick = onLike,
+                    )
+                    IconActionButton(
+                        icon = Icons.Filled.ThumbDown,
+                        active = state.likes == false,
+                        contentDescription = com.jellio.android.ui.i18n.string("detail_dislike"),
+                        onClick = onDislike,
+                    )
+                    if (onChangeStream != null) {
                         IconActionButton(
-                            icon = Icons.Filled.Check,
-                            active = state.isWatched,
-                            contentDescription = com.jellio.android.ui.i18n.string("detail_mark_watched"),
-                            onClick = onToggleWatched,
+                            icon = Icons.Filled.SwapHoriz,
+                            active = false,
+                            contentDescription = com.jellio.android.ui.i18n.string("detail_change_stream"),
+                            onClick = onChangeStream,
                         )
-                        IconActionButton(
-                            icon = Icons.Filled.ThumbUp,
-                            active = state.likes == true,
-                            contentDescription = com.jellio.android.ui.i18n.string("detail_like"),
-                            onClick = onLike,
-                        )
-                        IconActionButton(
-                            icon = Icons.Filled.ThumbDown,
-                            active = state.likes == false,
-                            contentDescription = com.jellio.android.ui.i18n.string("detail_dislike"),
-                            onClick = onDislike,
-                        )
-                        if (onChangeStream != null) {
-                            IconActionButton(
-                                icon = Icons.Filled.SwapHoriz,
-                                active = false,
-                                contentDescription = com.jellio.android.ui.i18n.string("detail_change_stream"),
-                                onClick = onChangeStream,
-                            )
-                        }
                     }
                 }
                 IconActionButton(
@@ -832,8 +868,9 @@ private fun SeasonsSection(
     var settledFor by rememberSaveable { mutableStateOf<String?>(null) }
     // Bumped on each season the user picks, so the episode row starts at its first card.
     var manualSeasonSwitches by remember { mutableIntStateOf(0) }
+    val horizontalPad = if (com.jellio.android.ui.common.isCompactScreen()) 16.dp else 48.dp
     Column(modifier = Modifier.padding(top = 16.dp)) {
-        Text(text = com.jellio.android.ui.i18n.string("detail_episodes"), style = MaterialTheme.typography.titleMedium, color = JellioText, modifier = Modifier.padding(start = 48.dp, bottom = 12.dp))
+        Text(text = com.jellio.android.ui.i18n.string("detail_episodes"), style = MaterialTheme.typography.titleMedium, color = JellioText, modifier = Modifier.padding(start = horizontalPad, bottom = 12.dp))
         if (state.seasons.isNotEmpty()) {
             val seasonsListState = rememberLazyListState()
             LaunchedEffect(state.selectedSeasonId, state.seasons) {
@@ -845,7 +882,7 @@ private fun SeasonsSection(
                 }
                 if (!fullyVisible) seasonsListState.scrollToItem(idx)
             }
-            LazyRow(state = seasonsListState, contentPadding = PaddingValues(horizontal = 48.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyRow(state = seasonsListState, contentPadding = PaddingValues(horizontal = horizontalPad), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(state.seasons, key = { it.Id }) { season ->
                     val selected = season.Id == state.selectedSeasonId
                     Surface(
@@ -890,7 +927,7 @@ private fun SeasonsSection(
             }
             LazyRow(
                 state = episodesListState,
-                contentPadding = PaddingValues(horizontal = 48.dp, vertical = 12.dp),
+                contentPadding = PaddingValues(horizontal = horizontalPad, vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 items(state.selectedSeasonEpisodes, key = { it.Id }) { episode ->
@@ -1036,11 +1073,12 @@ private fun EpisodeCard(
 
 @Composable
 private fun CastRow(cast: List<PersonDto>, imageUrl: (String, String?, String, Int) -> String, onPersonClick: (String) -> Unit) {
+    val horizontalPad = if (com.jellio.android.ui.common.isCompactScreen()) 16.dp else 48.dp
     Column(modifier = Modifier.padding(top = 24.dp)) {
-        Text(text = com.jellio.android.ui.i18n.string("detail_cast"), style = MaterialTheme.typography.titleMedium, color = JellioText, modifier = Modifier.padding(start = 48.dp, bottom = 12.dp))
+        Text(text = com.jellio.android.ui.i18n.string("detail_cast"), style = MaterialTheme.typography.titleMedium, color = JellioText, modifier = Modifier.padding(start = horizontalPad, bottom = 12.dp))
         val avatarWidth = 140.dp.scaled()
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.jellio.android.ui.common.rememberTvHorizontalBringIntoViewSpec()) {
-            LazyRow(contentPadding = PaddingValues(horizontal = 48.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            LazyRow(contentPadding = PaddingValues(horizontal = horizontalPad), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 items(cast, key = { it.Id }) { person ->
                     Surface(
                         onClick = { onPersonClick(person.Id) },
@@ -1092,11 +1130,12 @@ private fun CastRow(cast: List<PersonDto>, imageUrl: (String, String?, String, I
 private fun TrailersRow(trailers: List<TrailerDto>, onOpen: (String) -> Unit) {
     val playable = remember(trailers) { trailers.mapNotNull { t -> t.Url?.takeIf { it.isNotEmpty() }?.let { t to it } } }
     if (playable.isEmpty()) return
+    val horizontalPad = if (com.jellio.android.ui.common.isCompactScreen()) 16.dp else 48.dp
     Column(modifier = Modifier.padding(top = 24.dp)) {
-        Text(text = com.jellio.android.ui.i18n.string("detail_trailers"), style = MaterialTheme.typography.titleMedium, color = JellioText, modifier = Modifier.padding(start = 48.dp, bottom = 12.dp))
+        Text(text = com.jellio.android.ui.i18n.string("detail_trailers"), style = MaterialTheme.typography.titleMedium, color = JellioText, modifier = Modifier.padding(start = horizontalPad, bottom = 12.dp))
         val trailerCardWidth = 280.dp.scaled()
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides com.jellio.android.ui.common.rememberTvHorizontalBringIntoViewSpec()) {
-            LazyRow(contentPadding = PaddingValues(horizontal = 48.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            LazyRow(contentPadding = PaddingValues(horizontal = horizontalPad), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 items(playable) { (trailer, url) ->
                     Surface(
                         onClick = { onOpen(url) },

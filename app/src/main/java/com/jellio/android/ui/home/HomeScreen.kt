@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -220,53 +221,28 @@ fun HomeScreen(
                 val layoutMode = com.jellio.android.ui.common.rememberWindowLayoutMode()
                 val isPortrait = layoutMode == com.jellio.android.ui.common.WindowLayoutMode.COMPACT_PORTRAIT
                 val isCompact = layoutMode != com.jellio.android.ui.common.WindowLayoutMode.TABLET_OR_WIDE
+                val horizontalPad = if (isCompact) 16.dp else 52.dp
 
                 // The space this screen really gets, which can be less than the display.
                 val screenHeight = maxHeight
                 val density = LocalDensity.current
-                val rowsViewportHeight = if (isPortrait) screenHeight * 0.62f else screenHeight * 0.52f
+                val rowsViewportHeight = screenHeight * 0.52f
                 val topFixtureHeight = screenHeight - rowsViewportHeight
                 val firstRowItem = uiState.rows.firstNotNullOfOrNull { (it as? PosterHomeRow)?.section?.items?.firstOrNull() }
-                ShowcaseHost(
-                    highlighted = highlightedItem,
-                    fallback = firstRowItem,
-                    loadInfo = { item -> viewModel.showcaseInfo(session, item) },
-                    imageUrl = imageUrl,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .fillMaxWidth()
-                        .height(topFixtureHeight + HeaderOverlap),
-                )
-
-                val clockStyle = com.jellio.android.data.prefs.DisplayPreferences.clockStyle
-                val showClock = clockStyle != com.jellio.android.data.prefs.ClockStyle.OFF && !isCompact
-                if (showClock) {
-                    com.jellio.android.ui.common.HomeClock(
-                        style = clockStyle,
+                if (!isPortrait) {
+                    ShowcaseHost(
+                        highlighted = highlightedItem,
+                        fallback = firstRowItem,
+                        loadInfo = { item -> viewModel.showcaseInfo(session, item) },
+                        imageUrl = imageUrl,
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 22.dp, end = 44.dp),
+                            .align(Alignment.TopStart)
+                            .fillMaxWidth()
+                            .height(topFixtureHeight + HeaderOverlap),
                     )
                 }
 
-                if (com.jellio.android.data.prefs.DisplayPreferences.showNowPlayingPill) {
-                    com.jellio.android.ui.nowplaying.QuickHubEntry(
-                        activeCount = nowPlayingActiveCount,
-                        topSession = nowPlayingSessions.firstOrNull(),
-                        localPaused = nowPlayingLocalPaused,
-                        onClick = onOpenNowPlaying,
-                        sessions = nowPlayingSessions,
-                        session = session,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(
-                                top = if (showClock) 74.dp else if (isCompact) 14.dp else 28.dp,
-                                end = if (isCompact) 14.dp else 40.dp,
-                            ),
-                    )
-                }
-
-                // Scrollable rows in the bottom viewport
+                // Scrollable rows (full height with scrollable hero on portrait phones; bottom viewport on TV/tablet)
                 val defaultScrollSpec = LocalBringIntoViewSpec.current.scrollAnimationSpec
                 val verticalRowBringIntoViewSpec = remember(density) {
                     val topInsetPx = with(density) { RowHeaderHeight.toPx() }
@@ -276,12 +252,19 @@ fun HomeScreen(
                 CompositionLocalProvider(LocalBringIntoViewSpec provides verticalRowBringIntoViewSpec) {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .fillMaxWidth()
-                            .height(rowsViewportHeight)
-                            .clipToBounds()
-                            .focusRestorer()
+                        modifier = if (isPortrait) {
+                            Modifier
+                                .fillMaxSize()
+                                .clipToBounds()
+                                .focusRestorer()
+                        } else {
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .height(rowsViewportHeight)
+                                .clipToBounds()
+                                .focusRestorer()
+                        }
                             .dpadFastScroll(listState) {
                                 if (!editMode) {
                                     // Focus lands on the first row that is fully in view.
@@ -291,16 +274,33 @@ fun HomeScreen(
                                     target?.let { runCatching { rowFocus[it.key]?.requestFocus() } }
                                 }
                             },
-                        // Room for the last rows to scroll up to the top, as in Nuvio.
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = rowsViewportHeight),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            bottom = if (isPortrait) 24.dp else rowsViewportHeight,
+                        ),
                     ) {
+                        if (isPortrait && !editMode) {
+                            item(key = "mobile_hero") {
+                                ShowcaseHost(
+                                    highlighted = highlightedItem,
+                                    fallback = firstRowItem,
+                                    loadInfo = { item -> viewModel.showcaseInfo(session, item) },
+                                    imageUrl = imageUrl,
+                                    onClick = onItemClick,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height((screenHeight * 0.44f).coerceIn(320.dp, 420.dp)),
+                                )
+                            }
+                        }
                         if (editMode) {
                             item(key = "customize_bar_top") {
                                 HomeCustomizeBar(
                                     editMode = true,
                                     onToggleEdit = { editMode = !editMode },
                                     onReset = { viewModel.resetCustomization() },
-                                    modifier = Modifier.padding(start = 48.dp, top = 8.dp, bottom = 8.dp),
+                                    modifier = Modifier
+                                        .then(if (isPortrait) Modifier.statusBarsPadding() else Modifier)
+                                        .padding(horizontal = horizontalPad, vertical = 8.dp),
                                 )
                             }
                         }
@@ -378,7 +378,7 @@ fun HomeScreen(
                                         restorePending = true
                                         viewModel.retry(session)
                                     },
-                                    modifier = Modifier.padding(start = 48.dp, top = 8.dp, bottom = 8.dp),
+                                    modifier = Modifier.padding(horizontal = horizontalPad, vertical = 8.dp),
                                 )
                             }
                         }
@@ -388,6 +388,36 @@ fun HomeScreen(
                             item(key = "skeleton-2") { SkeletonRow() }
                         }
                     }
+                }
+
+                val clockStyle = com.jellio.android.data.prefs.DisplayPreferences.clockStyle
+                val showClock = clockStyle != com.jellio.android.data.prefs.ClockStyle.OFF && !isCompact
+                if (showClock) {
+                    com.jellio.android.ui.common.HomeClock(
+                        style = clockStyle,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(top = 22.dp, end = 44.dp),
+                    )
+                }
+
+                if (com.jellio.android.data.prefs.DisplayPreferences.showNowPlayingPill) {
+                    com.jellio.android.ui.nowplaying.QuickHubEntry(
+                        activeCount = nowPlayingActiveCount,
+                        topSession = nowPlayingSessions.firstOrNull(),
+                        localPaused = nowPlayingLocalPaused,
+                        onClick = onOpenNowPlaying,
+                        sessions = nowPlayingSessions,
+                        session = session,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(
+                                top = if (showClock) 74.dp else if (isCompact) 12.dp else 28.dp,
+                                end = if (isCompact) 14.dp else 40.dp,
+                            ),
+                    )
                 }
             }
         }
@@ -566,12 +596,13 @@ private fun HomeRowEditorBar(
     onToggleHidden: () -> Unit,
 ) {
     var hasChildFocus by remember { mutableStateOf(false) }
+    val horizontalPad = if (com.jellio.android.ui.common.isCompactScreen()) 16.dp else 52.dp
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 48.dp)
+            .padding(horizontal = horizontalPad)
             .padding(top = 8.dp, bottom = 4.dp)
             .background(
                 if (hasChildFocus) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.04f),

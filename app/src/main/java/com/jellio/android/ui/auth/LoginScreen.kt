@@ -34,9 +34,13 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.style.TextAlign
+import com.jellio.android.ui.common.isCompactScreen
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -98,7 +102,13 @@ fun LoginScreen(modifier: Modifier = Modifier, viewModel: LoginViewModel = hiltV
         viewModel.cancelQuickConnect()
     }
 
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .systemBarsPadding()
+            .imePadding(),
+        contentAlignment = Alignment.Center,
+    ) {
         when (uiState.mode) {
             // A spinner rather than the form while the server is checked
             // (trying https and http can take a few seconds).
@@ -340,20 +350,43 @@ private fun ProfilePicker(
     onQuickConnect: () -> Unit,
     avatarUrl: (String, String?) -> String,
 ) {
+    val isCompact = isCompactScreen()
+    val containerModifier = if (isCompact) {
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 24.dp)
+    } else {
+        Modifier
+            .fillMaxWidth()
+            .widthIn(max = 680.dp)
+            .padding(horizontal = 24.dp, vertical = 24.dp)
+    }
     Column(
-        modifier = Modifier.width(760.dp),
+        modifier = containerModifier,
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = if (isCompact) Arrangement.Center else Arrangement.Top,
     ) {
-        Text(text = string("auth_who_is_watching"), style = MaterialTheme.typography.titleLarge)
+        Text(
+            text = string("auth_who_is_watching"),
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center,
+        )
         uiState.error?.let { error ->
-            Text(text = error, color = JellioDanger, modifier = Modifier.padding(top = 12.dp))
+            Text(
+                text = error,
+                color = JellioDanger,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 12.dp),
+            )
         }
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 140.dp),
+            columns = if (isCompact) GridCells.Fixed(2) else GridCells.Adaptive(minSize = 140.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
-            contentPadding = PaddingValues(top = 28.dp),
-            modifier = Modifier.fillMaxWidth().height(360.dp),
+            contentPadding = PaddingValues(top = 24.dp, bottom = 16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false),
         ) {
             items(uiState.remembered, key = { "r:" + it.userId }) { profile ->
                 ProfileTile(
@@ -393,7 +426,11 @@ private fun ProfileTile(
     isAddTile: Boolean = false,
     isQuickConnectTile: Boolean = false,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    val avatarSize = if (isCompactScreen()) 104.dp else 112.dp
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         Box {
             Surface(
                 onClick = onClick,
@@ -408,7 +445,7 @@ private fun ProfileTile(
                 border = ClickableSurfaceDefaults.border(
                     focusedBorder = Border(BorderStroke(2.dp, JellioSecondary)),
                 ),
-                modifier = Modifier.size(112.dp),
+                modifier = Modifier.size(avatarSize),
             ) {
                 if (isQuickConnectTile) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -435,11 +472,11 @@ private fun ProfileTile(
                 Surface(
                     onClick = onRemove,
                     shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
-                    colors = ClickableSurfaceDefaults.colors(containerColor = Color.Black.copy(alpha = 0.6f), contentColor = JellioText),
-                    modifier = Modifier.align(Alignment.TopEnd).size(28.dp),
+                    colors = ClickableSurfaceDefaults.colors(containerColor = Color.Black.copy(alpha = 0.72f), contentColor = JellioText),
+                    modifier = Modifier.align(Alignment.TopEnd).size(36.dp),
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Icon(imageVector = Icons.Filled.Close, contentDescription = com.jellio.android.data.i18n.Strings.get("action_forget_profile"), modifier = Modifier.size(14.dp))
+                        Icon(imageVector = Icons.Filled.Close, contentDescription = com.jellio.android.data.i18n.Strings.get("action_forget_profile"), modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -447,9 +484,13 @@ private fun ProfileTile(
         Text(
             text = name,
             color = JellioText,
+            textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp).width(112.dp),
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .fillMaxWidth()
+                .widthIn(max = avatarSize + 24.dp),
         )
     }
 }
@@ -599,7 +640,11 @@ private fun ForgotUsernameForm(
     var username by remember(uiState.forgotPasswordUsername) { mutableStateOf(uiState.forgotPasswordUsername) }
 
     Column(
-        modifier = Modifier.width(420.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 420.dp)
+            .padding(horizontal = 20.dp)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(text = com.jellio.android.data.i18n.Strings.get("auth_reset_password"), style = MaterialTheme.typography.titleLarge)
@@ -635,7 +680,11 @@ private fun ForgotPinForm(
     var confirmPassword by remember { mutableStateOf("") }
 
     Column(
-        modifier = Modifier.width(420.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 420.dp)
+            .padding(horizontal = 20.dp)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(text = com.jellio.android.data.i18n.Strings.get("auth_reset_password"), style = MaterialTheme.typography.titleLarge)
@@ -682,21 +731,24 @@ private fun QuickConnectForm(
     onRetry: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val isCompact = isCompactScreen()
     val focusManager = LocalFocusManager.current
     val cancelRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(Unit, isCompact) {
+        if (isCompact) return@LaunchedEffect
         repeat(15) {
             withFrameNanos {}
             runCatching { cancelRequester.requestFocus() }
-            focusManager.moveFocus(FocusDirection.Next)
+            runCatching { focusManager.moveFocus(FocusDirection.Next) }
         }
     }
-    LaunchedEffect(uiState.quickConnectCode) {
+    LaunchedEffect(uiState.quickConnectCode, isCompact) {
+        if (isCompact) return@LaunchedEffect
         if (uiState.quickConnectCode != null) {
             repeat(15) {
                 withFrameNanos {}
                 runCatching { cancelRequester.requestFocus() }
-                focusManager.moveFocus(FocusDirection.Next)
+                runCatching { focusManager.moveFocus(FocusDirection.Next) }
             }
         }
     }

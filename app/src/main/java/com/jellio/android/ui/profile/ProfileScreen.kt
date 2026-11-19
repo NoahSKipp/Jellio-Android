@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import com.jellio.android.ui.common.isCompactScreen
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Movie
@@ -102,7 +104,7 @@ fun ProfileScreen(
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var focusedBadge by remember { mutableStateOf<BadgeDto?>(null) }
     LaunchedEffect(uiState.isLoading, uiState.error) {
-        if (!uiState.isLoading && uiState.error == null) contentFocusRequester.requestFocus()
+        if (!uiState.isLoading && uiState.error == null) runCatching { contentFocusRequester.requestFocus() }
     }
 
     LaunchedEffect(targetUserId) { viewModel.load(session, userId) }
@@ -120,6 +122,10 @@ fun ProfileScreen(
             runCatching { friendsFocus.requestFocus() }
         }
     }
+
+    val isCompact = isCompactScreen()
+    val horizontalPad = if (isCompact) 16.dp else 48.dp
+    val badgeColumns = if (isCompact) 3 else BADGE_COLUMNS
 
     Box(modifier = modifier.fillMaxSize().background(JellioBg)) {
         when {
@@ -165,7 +171,7 @@ fun ProfileScreen(
                         }
                     }
                     item {
-                        Column(modifier = Modifier.padding(horizontal = 48.dp, vertical = 4.dp)) {
+                        Column(modifier = Modifier.padding(horizontal = horizontalPad, vertical = 4.dp)) {
                             BioSection(
                                 bio = profile?.Bio,
                                 isOwner = uiState.isOwner,
@@ -193,7 +199,7 @@ fun ProfileScreen(
 
                     if (achievements?.IsPrivate == true) {
                         item {
-                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                            Box(Modifier.fillMaxWidth().padding(horizontal = horizontalPad, vertical = 32.dp), contentAlignment = Alignment.Center) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Icon(Icons.Filled.VisibilityOff, contentDescription = null, tint = JellioTextSecondary, modifier = Modifier.size(32.dp))
                                     Text(text = com.jellio.android.data.i18n.Strings.get("profile_is_private"), color = JellioTextSecondary, modifier = Modifier.padding(top = 12.dp))
@@ -212,7 +218,7 @@ fun ProfileScreen(
                                     com.jellio.android.data.i18n.Strings.get("feed_filter_badges") + " ($unlocked)"
                                 },
                                 style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(start = 48.dp, top = 28.dp, bottom = 4.dp),
+                                modifier = Modifier.padding(start = horizontalPad, end = horizontalPad, top = 28.dp, bottom = 4.dp),
                             )
                             // What the focused badge is, and how to earn it.
                             val info = focusedBadge
@@ -222,32 +228,32 @@ fun ProfileScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(start = 48.dp, end = 48.dp, bottom = 8.dp).heightIn(min = 20.dp),
+                                modifier = Modifier.padding(horizontal = horizontalPad).padding(bottom = 8.dp).heightIn(min = 20.dp),
                             )
                         }
                         if (shownBadges.isEmpty()) {
                             item {
-                                Text(text = com.jellio.android.data.i18n.Strings.get("feed_nothing_here"), color = JellioTextSecondary, modifier = Modifier.padding(start = 48.dp))
+                                Text(text = com.jellio.android.data.i18n.Strings.get("feed_nothing_here"), color = JellioTextSecondary, modifier = Modifier.padding(horizontal = horizontalPad))
                             }
                         }
-                        items(shownBadges.chunked(BADGE_COLUMNS)) { rowBadges ->
-                            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 42.dp)) {
+                        items(shownBadges.chunked(badgeColumns)) { rowBadges ->
+                            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = if (isCompact) 11.dp else 42.dp)) {
                                 rowBadges.forEach { badge ->
                                     BadgeTile(badge, onFocused = { focusedBadge = badge }, modifier = Modifier.weight(1f))
                                 }
-                                repeat(BADGE_COLUMNS - rowBadges.size) { Spacer(Modifier.weight(1f)) }
+                                repeat(badgeColumns - rowBadges.size) { Spacer(Modifier.weight(1f)) }
                             }
                         }
                         item {
                             Text(
                                 text = com.jellio.android.data.i18n.Strings.get("tv_recent_activity"),
                                 style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(start = 48.dp, top = 24.dp, bottom = 12.dp),
+                                modifier = Modifier.padding(start = horizontalPad, end = horizontalPad, top = 24.dp, bottom = 12.dp),
                             )
                         }
                         if (achievements.RecentActivity.isEmpty()) {
                             item {
-                                Text(text = com.jellio.android.data.i18n.Strings.get("feed_nothing_here"), color = JellioTextSecondary, modifier = Modifier.padding(start = 48.dp))
+                                Text(text = com.jellio.android.data.i18n.Strings.get("feed_nothing_here"), color = JellioTextSecondary, modifier = Modifier.padding(horizontal = horizontalPad))
                             }
                         } else {
                             items(achievements.RecentActivity) { entry ->
@@ -266,7 +272,7 @@ fun ProfileScreen(
                                 onClick = onLogout,
                                 shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
                                 colors = com.jellio.android.ui.common.dangerButtonColors(),
-                                modifier = Modifier.padding(start = 48.dp, top = 32.dp, bottom = 48.dp),
+                                modifier = Modifier.padding(start = horizontalPad, top = 32.dp, bottom = 48.dp),
                             ) {
                                 Text(text = com.jellio.android.data.i18n.Strings.get("nav_log_out"), modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp))
                             }
@@ -300,21 +306,27 @@ private fun ProfileHeader(
     onFocused: () -> Unit,
     extras: @Composable () -> Unit,
 ) {
+    val isCompact = isCompactScreen()
     var showFallback by remember(bannerUrl) { mutableStateOf(false) }
-    Box(modifier = Modifier.fillMaxWidth().aspectRatio(16f / 6.2f)) {
+    val headerModifier = if (isCompact) {
+        Modifier.fillMaxWidth().heightIn(min = 180.dp)
+    } else {
+        Modifier.fillMaxWidth().aspectRatio(16f / 6.2f)
+    }
+    Box(modifier = headerModifier) {
         if (showFallback) {
-            Box(modifier = Modifier.fillMaxSize().background(JellioBgElevated))
+            Box(modifier = Modifier.matchParentSize().background(JellioBgElevated))
         } else {
             AsyncImage(
                 model = bannerUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 onError = { showFallback = true },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.matchParentSize(),
             )
         }
         Box(
-            modifier = Modifier.fillMaxSize().background(
+            modifier = Modifier.matchParentSize().background(
                 Brush.verticalGradient(
                     0f to Color.Transparent,
                     0.45f to JellioBg.copy(alpha = 0.35f),
@@ -322,9 +334,14 @@ private fun ProfileHeader(
                 ),
             ),
         )
+        val avatarSize = if (isCompact) 84.dp else 104.dp
+        val horizontalPad = if (isCompact) 16.dp else 48.dp
         Row(
             verticalAlignment = Alignment.Bottom,
-            modifier = Modifier.align(Alignment.BottomStart).padding(start = 48.dp, end = 48.dp, bottom = 8.dp),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .statusBarsPadding()
+                .padding(start = horizontalPad, end = horizontalPad, top = if (isCompact) 36.dp else 16.dp, bottom = 8.dp),
         ) {
             Surface(
                 onClick = {},
@@ -341,11 +358,17 @@ private fun ProfileHeader(
                     model = avatarUrl,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(104.dp).clip(CircleShape),
+                    modifier = Modifier.size(avatarSize).clip(CircleShape),
                 )
             }
-            Column(modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)) {
-                Text(text = name, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.padding(start = if (isCompact) 16.dp else 20.dp, bottom = 6.dp)) {
+                Text(
+                    text = name,
+                    style = if (isCompact) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 extras()
             }
         }
@@ -406,11 +429,25 @@ private fun Modifier.clickableIfOwner(isOwner: Boolean, onClick: () -> Unit): Mo
 
 @Composable
 private fun StatsRow(movies: Int, episodes: Int, total: Int, bestBinge: Int) {
-    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 44.dp, vertical = 8.dp)) {
-        StatTile(Icons.Filled.Movie, com.jellio.android.data.i18n.Strings.get("profile_stat_movies"), movies.toString(), Modifier.weight(1f))
-        StatTile(Icons.Filled.Tv, com.jellio.android.data.i18n.Strings.get("profile_stat_episodes"), episodes.toString(), Modifier.weight(1f))
-        StatTile(Icons.Filled.CheckCircle, com.jellio.android.data.i18n.Strings.get("profile_stat_total_watched"), total.toString(), Modifier.weight(1f))
-        StatTile(Icons.Filled.LocalFireDepartment, com.jellio.android.data.i18n.Strings.get("profile_stat_best_binge"), bestBinge.toString(), Modifier.weight(1f))
+    val isCompact = isCompactScreen()
+    if (isCompact) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                StatTile(Icons.Filled.Movie, com.jellio.android.data.i18n.Strings.get("profile_stat_movies"), movies.toString(), Modifier.weight(1f))
+                StatTile(Icons.Filled.Tv, com.jellio.android.data.i18n.Strings.get("profile_stat_episodes"), episodes.toString(), Modifier.weight(1f))
+            }
+            Row(modifier = Modifier.fillMaxWidth()) {
+                StatTile(Icons.Filled.CheckCircle, com.jellio.android.data.i18n.Strings.get("profile_stat_total_watched"), total.toString(), Modifier.weight(1f))
+                StatTile(Icons.Filled.LocalFireDepartment, com.jellio.android.data.i18n.Strings.get("profile_stat_best_binge"), bestBinge.toString(), Modifier.weight(1f))
+            }
+        }
+    } else {
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 44.dp, vertical = 8.dp)) {
+            StatTile(Icons.Filled.Movie, com.jellio.android.data.i18n.Strings.get("profile_stat_movies"), movies.toString(), Modifier.weight(1f))
+            StatTile(Icons.Filled.Tv, com.jellio.android.data.i18n.Strings.get("profile_stat_episodes"), episodes.toString(), Modifier.weight(1f))
+            StatTile(Icons.Filled.CheckCircle, com.jellio.android.data.i18n.Strings.get("profile_stat_total_watched"), total.toString(), Modifier.weight(1f))
+            StatTile(Icons.Filled.LocalFireDepartment, com.jellio.android.data.i18n.Strings.get("profile_stat_best_binge"), bestBinge.toString(), Modifier.weight(1f))
+        }
     }
 }
 
@@ -496,6 +533,7 @@ private fun ActivityRow(
     imageUrl: (String, String?, String, Int) -> String,
     onClick: () -> Unit,
 ) {
+    val horizontalPad = if (isCompactScreen()) 8.dp else 40.dp
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
@@ -505,7 +543,7 @@ private fun ActivityRow(
             focusedContainerColor = Color.White.copy(alpha = 0.18f),
             focusedContentColor = JellioText,
         ),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp, vertical = 2.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPad, vertical = 2.dp),
     ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),

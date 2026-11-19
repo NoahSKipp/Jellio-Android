@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -137,12 +138,13 @@ fun SearchScreen(
     )
 
     val isCompact = com.jellio.android.ui.common.isCompactScreen()
-    val horizontalPad = if (isCompact) 16.dp else 48.dp
+    val horizontalPad = if (isCompact) 16.dp else 52.dp
     val topPad = if (isCompact) 16.dp else 32.dp
 
     Column(
         modifier = modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .padding(top = topPad, start = horizontalPad, end = horizontalPad),
     ) {
         Text(text = com.jellio.android.ui.i18n.string("nav_search"), style = MaterialTheme.typography.titleLarge)
@@ -258,9 +260,10 @@ fun SearchScreen(
                     else -> 4
                 }
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val isCompactPortrait = com.jellio.android.ui.common.rememberWindowLayoutMode() == com.jellio.android.ui.common.WindowLayoutMode.COMPACT_PORTRAIT
                     val scaledPosterWidth = PosterWidth.scaled()
-                    val spacing = 16.dp
-                    val columnCount = maxOf(1, ((maxWidth + spacing) / (scaledPosterWidth + spacing)).toInt())
+                    val spacing = if (isCompactPortrait) 10.dp else 16.dp
+                    val columnCount = if (isCompactPortrait) 3 else maxOf(1, ((maxWidth + spacing) / (scaledPosterWidth + spacing)).toInt())
                     val results = remember(uiState.results) { uiState.results.distinctBy { it.Id } }
                     val similar = remember(uiState.similarResults) { uiState.similarResults.distinctBy { it.Id } }
                     val primaryCount = results.size
@@ -271,7 +274,7 @@ fun SearchScreen(
                         state = gridState,
                         columns = GridCells.Fixed(columnCount),
                         horizontalArrangement = Arrangement.spacedBy(spacing),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(if (isCompactPortrait) 12.dp else 16.dp),
                         contentPadding = PaddingValues(bottom = 48.dp),
                         modifier = Modifier.fillMaxSize().focusRestorer(focusController.requesterFor(0)),
                     ) {
@@ -353,7 +356,7 @@ fun SearchScreen(
                         Text(
                             text = com.jellio.android.ui.i18n.formatString("search_suggest_intro", answer.MatchedTitle ?: uiState.query),
                             color = JellioTextSecondary,
-                            modifier = Modifier.padding(start = 52.dp, top = 8.dp, bottom = 16.dp),
+                            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
                         )
                     }
                     items(answer.Rows.size, key = { "suggest:$it" }) { index ->

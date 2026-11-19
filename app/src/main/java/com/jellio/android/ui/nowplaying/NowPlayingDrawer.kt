@@ -1089,7 +1089,7 @@ private fun GroupWatchTabContent(
                                         DrawerActionButton(
                                             label = Strings.format("party_make_host_name", person.Name),
                                             primary = false,
-                                            onClick = { groupWatchViewModel.makeHost(person.UserId!!) },
+                                            onClick = { person.UserId?.let { groupWatchViewModel.makeHost(it) } },
                                             modifier = Modifier.fillMaxWidth(),
                                         )
                                     }

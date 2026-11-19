@@ -18,19 +18,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -144,6 +147,8 @@ fun OnboardingOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.88f))
+                .systemBarsPadding()
+                .padding(16.dp)
                 .focusProperties { onExit = { FocusRequester.Cancel } },
             contentAlignment = Alignment.Center,
         ) {
@@ -153,11 +158,12 @@ fun OnboardingOverlay(
             // Main Card container
             Column(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .widthIn(max = 720.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(JellioBgElevated)
                     .border(1.dp, JellioBorder, RoundedCornerShape(24.dp))
-                    .padding(horizontal = 28.dp, vertical = 20.dp),
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
             ) {
                 // Header: Logo Mark, Step Counter, and Skip button
                 Row(
@@ -179,7 +185,7 @@ fun OnboardingOverlay(
                                 ),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Tv,
+                                imageVector = Icons.Filled.Smartphone,
                                 contentDescription = null,
                                 tint = Color.Black,
                                 modifier = Modifier.size(20.dp),
@@ -244,7 +250,12 @@ fun OnboardingOverlay(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // Step Body
-                Box(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                ) {
                     when (currentStep) {
                         OnboardingStep.LANGUAGE -> {
                             StepLanguageContent(
@@ -870,6 +881,8 @@ private fun TvHelpExplanationModal(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.70f))
+                .systemBarsPadding()
+                .padding(16.dp)
                 .clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
@@ -879,7 +892,8 @@ private fun TvHelpExplanationModal(
         ) {
             Box(
                 modifier = Modifier
-                    .width(480.dp)
+                    .fillMaxWidth()
+                    .widthIn(max = 480.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(JellioBgElevated)
                     .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
@@ -888,9 +902,9 @@ private fun TvHelpExplanationModal(
                         interactionSource = remember { MutableInteractionSource() },
                         onClick = {},
                     )
-                    .padding(28.dp),
+                    .padding(24.dp),
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -916,7 +930,7 @@ private fun TvHelpExplanationModal(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     val closeFocusRequester = remember { FocusRequester() }
-                    LaunchedEffect(Unit) { closeFocusRequester.requestFocus() }
+                    LaunchedEffect(Unit) { runCatching { closeFocusRequester.requestFocus() } }
 
                     Surface(
                         onClick = onDismiss,
