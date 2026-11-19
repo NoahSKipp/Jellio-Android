@@ -302,12 +302,12 @@ class BookshelfViewModel @Inject constructor(
                         items.forEach { item ->
                             val key = BooksRepository.normalizeId(item.Id)
                             if (!coverMap.containsKey(key)) {
-                                booksRepository.bookCoverUrl(item.Id)?.let { coverMap[key] = it }
+                                booksRepository.bookCoverUrl(item)?.let { coverMap[key] = it }
                             }
                         }
                         val continueCards = continuePairs.map { (item, prog) ->
                             val norm = BooksRepository.normalizeId(item.Id)
-                            val cover = coverMap[norm] ?: booksRepository.bookCoverUrl(item.Id)
+                            val cover = coverMap[norm] ?: booksRepository.bookCoverUrl(item)
                             if (cover != null) coverMap[norm] = cover
                             val author = info[norm]?.Authors
                                 ?: item.People?.firstOrNull()?.Name
@@ -418,15 +418,13 @@ class BookshelfViewModel @Inject constructor(
                         items.forEach { item ->
                             val norm = BooksRepository.normalizeId(item.Id)
                             if (!coverMap.containsKey(norm)) {
-                                val coverTarget = item.AlbumId ?: item.Id
-                                booksRepository.bookCoverUrl(coverTarget)?.let { coverMap[norm] = it }
+                                booksRepository.bookCoverUrl(item)?.let { coverMap[norm] = it }
                             }
                         }
 
                         val listeningCards = resumeAudiobooks.map { item ->
                             val norm = BooksRepository.normalizeId(item.Id)
-                            val coverTarget = item.AlbumId ?: item.Id
-                            val cover = coverMap[norm] ?: booksRepository.bookCoverUrl(coverTarget)
+                            val cover = coverMap[norm] ?: booksRepository.bookCoverUrl(item)
                             if (cover != null) coverMap[norm] = cover
                             val pct = (item.UserData?.PlayedPercentage ?: 0.0) / 100.0
                             ContinueReadingCardModel(
@@ -502,7 +500,8 @@ class BookshelfViewModel @Inject constructor(
             if (existing != null) {
                 byKey[key] = existing.copy(localChapters = sortedChapters)
             } else {
-                val cover = booksRepository.bookCoverUrl(first.Id)
+                val coverItem = sortedChapters.firstOrNull { !it.ImageTags?.get("Primary").isNullOrBlank() } ?: first
+                val cover = booksRepository.bookCoverUrl(coverItem)
                 if (cover != null) coverMap[key] = cover
                 val readCount = sortedChapters.count { ch ->
                     val norm = BooksRepository.normalizeId(ch.Id)

@@ -242,7 +242,7 @@ fun HomeItemShowcase(
                             )
                             androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
                             Text(
-                                text = com.jellio.android.data.i18n.Strings.get("card_menu_details"),
+                                text = com.jellio.android.data.i18n.Strings.get("details_title"),
                                 color = JellioText,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,

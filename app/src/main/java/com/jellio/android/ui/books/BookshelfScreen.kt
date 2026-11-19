@@ -767,13 +767,19 @@ private fun ContinueReadingCard(
                     .clip(RoundedCornerShape(8.dp))
                     .background(JellioBg),
             ) {
-                if (!card.coverUrl.isNullOrBlank()) {
+                var coverFailed by remember(card.coverUrl) { mutableStateOf(false) }
+                if (!card.coverUrl.isNullOrBlank() && !coverFailed) {
                     AsyncImage(
                         model = card.coverUrl,
                         contentDescription = card.title,
                         contentScale = ContentScale.Crop,
+                        onError = { coverFailed = true },
                         modifier = Modifier.fillMaxSize(),
                     )
+                } else {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.MenuBook, contentDescription = null, tint = JellioTextTertiary, modifier = Modifier.size(22.dp))
+                    }
                 }
                 Box(
                     modifier = Modifier
@@ -850,11 +856,13 @@ private fun BookShelfGridCard(
                     .aspectRatio(0.68f)
                     .background(JellioBg),
             ) {
-                if (!coverUrl.isNullOrBlank()) {
+                var coverFailed by remember(coverUrl) { mutableStateOf(false) }
+                if (!coverUrl.isNullOrBlank() && !coverFailed) {
                     AsyncImage(
                         model = coverUrl,
                         contentDescription = title,
                         contentScale = ContentScale.Crop,
+                        onError = { coverFailed = true },
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {

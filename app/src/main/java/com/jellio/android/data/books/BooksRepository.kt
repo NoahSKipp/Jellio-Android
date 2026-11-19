@@ -615,6 +615,29 @@ class BooksRepository @Inject constructor(
 
     // --- URL builders ---
 
+    suspend fun bookCoverUrl(item: BaseItemDto): String? {
+        val uid = currentUserId() ?: "default"
+        val offlineCover = offlineDownloads.getCompletedCoverFile(item.Id, uid)
+            ?: item.AlbumId?.let { offlineDownloads.getCompletedCoverFile(it, uid) }
+        if (offlineCover != null) return offlineCover.toURI().toString()
+        val server = sessionManager.serverAddress()?.trimEnd('/') ?: return null
+        val token = sessionManager.accessToken()
+        val primaryTag = item.ImageTags?.get("Primary")
+        if (!primaryTag.isNullOrBlank()) {
+            val base = "$server/Items/${item.Id}/Images/Primary?maxWidth=500&quality=90&tag=$primaryTag"
+            return if (!token.isNullOrEmpty()) "$base&ApiKey=$token&api_key=$token" else base
+        }
+        val albumId = item.AlbumId
+        val albumTag = item.AlbumPrimaryImageTag
+        if (!albumId.isNullOrBlank() && !albumTag.isNullOrBlank()) {
+            val base = "$server/Items/$albumId/Images/Primary?maxWidth=500&quality=90&tag=$albumTag"
+            return if (!token.isNullOrEmpty()) "$base&ApiKey=$token&api_key=$token" else base
+        }
+        val targetId = albumId ?: item.Id
+        return "$server/Jellio/books/item/${normalizeId(targetId)}/cover" +
+            if (!token.isNullOrEmpty()) "?ApiKey=$token&api_key=$token" else ""
+    }
+
     suspend fun bookCoverUrl(itemId: String): String? {
         val uid = currentUserId() ?: "default"
         val offlineCover = offlineDownloads.getCompletedCoverFile(itemId, uid)

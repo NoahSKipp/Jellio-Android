@@ -1194,7 +1194,7 @@ class AudiobookPlayerController @Inject constructor(
                 return jellioRepository.imageUrl(server, book.AlbumId, book.AlbumPrimaryImageTag, "Primary", 600, token)
             }
         }
-        return booksRepository.bookCoverUrl(book.Id)
+        return booksRepository.bookCoverUrl(book)
     }
 
     private fun resolveAuthor(book: BaseItemDto): String =
