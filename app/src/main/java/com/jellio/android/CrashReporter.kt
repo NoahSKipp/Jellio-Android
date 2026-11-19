@@ -35,9 +35,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
+import com.jellio.android.ui.common.ClickableSurfaceDefaults
 import com.jellio.android.ui.common.Surface
 import com.jellio.android.ui.common.primaryButtonColors
-import com.jellio.android.ui.common.secondaryButtonColors
 import com.jellio.android.ui.theme.JellioBgElevated
 import com.jellio.android.ui.theme.JellioText
 import com.jellio.android.ui.theme.JellioTextSecondary
@@ -177,7 +177,12 @@ fun CrashReportOverlay(
                 }
                 Surface(
                     onClick = onDismiss,
-                    colors = secondaryButtonColors(),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color.White.copy(alpha = 0.08f),
+                        contentColor = JellioText,
+                        focusedContainerColor = Color.White.copy(alpha = 0.2f),
+                        focusedContentColor = JellioText,
+                    ),
                 ) {
                     Text(
                         text = "Dismiss",
