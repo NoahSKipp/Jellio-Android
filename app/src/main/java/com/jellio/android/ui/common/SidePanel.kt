@@ -56,6 +56,11 @@ fun SidePanel(
                 .then(if (isCompact) Modifier.fillMaxWidth(0.90f) else Modifier.width(width))
                 .fillMaxSize()
                 .background(JellioBgElevated)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                )
                 .padding(top = if (isCompact) 24.dp else 48.dp, bottom = if (isCompact) 24.dp else 48.dp),
         ) {
             Text(

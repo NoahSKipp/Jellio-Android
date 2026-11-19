@@ -2,8 +2,6 @@ package com.jellio.android.ui.common
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.tv.material3.ClickableSurfaceColors
-import androidx.tv.material3.ClickableSurfaceDefaults
 import com.jellio.android.ui.theme.JellioBg
 import com.jellio.android.ui.theme.JellioBgElevated
 import com.jellio.android.ui.theme.JellioDanger

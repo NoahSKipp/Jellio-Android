@@ -80,10 +80,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.Border
-import androidx.tv.material3.ClickableSurfaceDefaults
+import com.jellio.android.ui.common.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
+import com.jellio.android.ui.common.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.jellio.android.data.model.BaseItemDto
@@ -166,14 +166,6 @@ fun DetailScreen(
             }
         }
     }
-    var heroHasFocus by remember { mutableStateOf(false) }
-    val blockScrollWhileHeroFocused = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
-                if (heroHasFocus) available else Offset.Zero
-        }
-    }
-
     Box(modifier = modifier.fillMaxSize().background(JellioBg)) {
         when {
             uiState.isLoading -> {
@@ -205,18 +197,10 @@ fun DetailScreen(
                 LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(bottom = 48.dp),
-                    modifier = Modifier.fillMaxSize().nestedScroll(blockScrollWhileHeroFocused).focusRestorer(),
+                    modifier = Modifier.fillMaxSize().focusRestorer(),
                 ) {
                     item {
-                        LaunchedEffect(heroHasFocus) {
-                            if (heroHasFocus) {
-                                snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-                                    .collect { (index, offset) ->
-                                        if (index != 0 || offset != 0) listState.scrollToItem(0)
-                                    }
-                            }
-                        }
-                        Box(modifier = Modifier.onFocusChanged { heroHasFocus = it.hasFocus }) {
+                        Box {
                             CompositionLocalProvider(LocalBringIntoViewSpec provides NoOpBringIntoViewSpec) {
                                 DetailHero(
                                     item = item,

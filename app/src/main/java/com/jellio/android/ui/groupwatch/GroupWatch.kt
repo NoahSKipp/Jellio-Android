@@ -3,6 +3,8 @@ package com.jellio.android.ui.groupwatch
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -38,9 +40,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.Border
-import androidx.tv.material3.ClickableSurfaceDefaults
+import com.jellio.android.ui.common.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
+import com.jellio.android.ui.common.Surface
 import androidx.tv.material3.Text
 import com.jellio.android.data.catching
 import com.jellio.android.data.model.GroupWatchSendBody
@@ -495,7 +497,12 @@ fun SidePanelOverlay(title: String, onDismiss: () -> Unit, content: @Composable 
         modifier = Modifier
             .fillMaxSize()
             .focusProperties { onExit = { FocusRequester.Cancel } }
-            .background(Color.Black.copy(alpha = 0.7f)),
+            .background(Color.Black.copy(alpha = 0.7f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -504,6 +511,11 @@ fun SidePanelOverlay(title: String, onDismiss: () -> Unit, content: @Composable 
                 .heightIn(max = 460.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(JellioBgElevated)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                )
                 .padding(horizontal = 24.dp, vertical = 16.dp)
                 .focusRequester(panelFocus)
                 .focusGroup()

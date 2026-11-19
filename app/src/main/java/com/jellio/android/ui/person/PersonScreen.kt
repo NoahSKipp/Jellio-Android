@@ -62,10 +62,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.Border
-import androidx.tv.material3.ClickableSurfaceDefaults
+import com.jellio.android.ui.common.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
+import com.jellio.android.ui.common.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.jellio.android.data.model.DepartmentTab
@@ -129,14 +129,6 @@ fun PersonScreen(
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val heroFocusRequester = remember { FocusRequester() }
-    var heroHasFocus by remember { mutableStateOf(false) }
-
-    val blockScrollWhileHeroFocused = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
-                if (heroHasFocus) available else Offset.Zero
-        }
-    }
 
     BackHandler(onBack = onBack)
 
@@ -148,15 +140,6 @@ fun PersonScreen(
         if (uiState.details != null) {
             listState.scrollToItem(0)
             runCatching { heroFocusRequester.requestFocus() }
-        }
-    }
-
-    LaunchedEffect(heroHasFocus) {
-        if (heroHasFocus) {
-            snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-                .collect { (index, offset) ->
-                    if (index != 0 || offset != 0) listState.scrollToItem(0)
-                }
         }
     }
 
@@ -187,13 +170,12 @@ fun PersonScreen(
                     state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .nestedScroll(blockScrollWhileHeroFocused)
                         .focusRestorer(),
                     contentPadding = PaddingValues(bottom = 64.dp),
                 ) {
                     // 1. Hero Header Section
                     item {
-                        Box(modifier = Modifier.onFocusChanged { heroHasFocus = it.hasFocus }) {
+                        Box {
                             CompositionLocalProvider(LocalBringIntoViewSpec provides NoOpBringIntoViewSpec) {
                                 PersonHeroHeader(
                                     details = details,

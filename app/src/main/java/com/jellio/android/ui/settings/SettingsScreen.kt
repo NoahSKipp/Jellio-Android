@@ -95,9 +95,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.Border
-import androidx.tv.material3.ClickableSurfaceDefaults
+import com.jellio.android.ui.common.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
+import com.jellio.android.ui.common.Surface
 import androidx.tv.material3.Text
 import androidx.compose.ui.platform.LocalContext
 import com.jellio.android.BuildConfig
@@ -988,6 +988,11 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .background(Color.Black.copy(alpha = 0.65f))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { genreToDelete = null },
+                                    )
                                     .onPreviewKeyEvent { event ->
                                         if (ignoreInitialKeyUp) {
                                             if (event.type == KeyEventType.KeyUp) {
@@ -1013,7 +1018,13 @@ fun SettingsScreen(
                                     onClick = {},
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(20.dp),
+                                        modifier = Modifier
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null,
+                                                onClick = {},
+                                            )
+                                            .padding(20.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                     ) {
                                         Text(

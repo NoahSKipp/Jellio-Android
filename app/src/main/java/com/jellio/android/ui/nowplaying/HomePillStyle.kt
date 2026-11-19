@@ -6,7 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
-import androidx.tv.material3.ClickableSurfaceDefaults
+import com.jellio.android.ui.common.ClickableSurfaceDefaults
 import com.jellio.android.ui.theme.JellioText
 
 // Shared by the Now Playing and Quick Hub pills so the two stay identical.

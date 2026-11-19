@@ -67,9 +67,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.ClickableSurfaceDefaults
+import com.jellio.android.ui.common.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
-import androidx.tv.material3.Surface
+import com.jellio.android.ui.common.Surface
 import androidx.tv.material3.Text
 import com.jellio.android.ui.theme.JellioBg
 import com.jellio.android.ui.theme.JellioBgElevated
@@ -237,6 +237,7 @@ internal fun PlayerControls(
                     label = Strings.get("player_previous_episode"),
                     size = epSize,
                     onClick = onPreviousEpisode,
+                    enabled = episodeNav.hasPrevious,
                     modifier = Modifier.focusProperties { canFocus = episodeNav.hasPrevious }.alpha(if (episodeNav.hasPrevious) 1f else 0f),
                 )
             }
@@ -255,6 +256,7 @@ internal fun PlayerControls(
                     label = Strings.get("player_next_episode"),
                     size = epSize,
                     onClick = onNextEpisode,
+                    enabled = episodeNav.hasNext,
                     modifier = Modifier.focusProperties { canFocus = episodeNav.hasNext }.alpha(if (episodeNav.hasNext) 1f else 0f),
                 )
             }
@@ -354,9 +356,11 @@ internal fun TransportButton(
     size: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         shape = ClickableSurfaceDefaults.shape(CircleShape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Black.copy(alpha = 0.45f),

@@ -3,6 +3,8 @@ package com.jellio.android.ui.live
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,9 +34,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.ClickableSurfaceDefaults
+import com.jellio.android.ui.common.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
+import com.jellio.android.ui.common.Surface
 import androidx.tv.material3.Text
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -136,6 +138,11 @@ internal fun PairingOverlay(pairing: LivePairing, onNewCode: () -> Unit, onClose
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.75f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClose,
+            )
             .padding(16.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -148,6 +155,11 @@ internal fun PairingOverlay(pairing: LivePairing, onNewCode: () -> Unit, onClose
                     .widthIn(max = 460.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(JellioBgElevated)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    )
                     .verticalScroll(rememberScrollState())
                     .padding(24.dp),
             ) {
@@ -158,7 +170,15 @@ internal fun PairingOverlay(pairing: LivePairing, onNewCode: () -> Unit, onClose
             Row(
                 horizontalArrangement = Arrangement.spacedBy(40.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clip(RoundedCornerShape(24.dp)).background(JellioBgElevated).padding(40.dp),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(JellioBgElevated)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    )
+                    .padding(40.dp),
             ) {
                 QrBox()
                 DetailsColumn(modifier = Modifier.width(460.dp))

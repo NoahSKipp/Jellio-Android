@@ -11,11 +11,14 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.tv.material3.Border
 import com.jellio.android.data.prefs.AppLanguage
 import com.jellio.android.data.prefs.DisplayPreferences
@@ -64,10 +67,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.material3.ClickableSurfaceDefaults
+import com.jellio.android.ui.common.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
+import com.jellio.android.ui.common.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.jellio.android.data.model.UserDto
@@ -259,6 +262,8 @@ private fun ServerAddressForm(
             onValueChange = { serverAddress = it },
             label = string("auth_server_address") + " (" + string("auth_server_hint") + ")",
             modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+            keyboardActions = KeyboardActions(onGo = { onContinue(serverAddress) }),
         )
 
         // Protocol autofill explanation callout
@@ -459,6 +464,7 @@ private fun ManualLoginForm(
     var serverAddress by remember(uiState.serverAddress) { mutableStateOf(uiState.serverAddress) }
     var username by remember(uiState.manualPrefillUsername) { mutableStateOf(uiState.manualPrefillUsername) }
     var password by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
 
     Column(
         modifier = Modifier
@@ -515,6 +521,8 @@ private fun ManualLoginForm(
             onValueChange = { serverAddress = it },
             label = string("auth_server_address") + " (" + string("auth_server_hint") + ")",
             modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
         )
         Spacer(modifier = Modifier.height(14.dp))
         JellioTextField(
@@ -522,6 +530,8 @@ private fun ManualLoginForm(
             onValueChange = { username = it },
             label = string("auth_username"),
             modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
         )
         Spacer(modifier = Modifier.height(14.dp))
         JellioTextField(
@@ -530,6 +540,10 @@ private fun ManualLoginForm(
             label = string("auth_password"),
             isPassword = true,
             modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = {
+                if (!uiState.isLoading) onLogin(serverAddress, username, password)
+            }),
         )
         uiState.error?.let { error ->
             Text(

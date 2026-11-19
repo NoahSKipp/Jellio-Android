@@ -7,8 +7,15 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroidSize
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.positionChanged
+import kotlin.math.abs
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -822,6 +829,60 @@ private fun PdfReaderBody(
     }
 }
 
+/**
+ * Pinch-to-zoom and pan handler that only consumes single-finger pan events when already
+ * zoomed in (scale > 1.05f), allowing unzoomed swipes and scrolls to pass through to the
+ * parent pager or list.
+ */
+private suspend fun PointerInputScope.detectPinchZoomAndPan(
+    getScale: () -> Float,
+    onGesture: (pan: Offset, zoom: Float) -> Unit,
+) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false)
+        var zoom = 1f
+        var pan = Offset.Zero
+        var pastTouchSlop = false
+        val touchSlop = viewConfiguration.touchSlop
+
+        do {
+            val event = awaitPointerEvent()
+            val canceled = event.changes.any { it.isConsumed }
+            if (!canceled) {
+                val pointerCount = event.changes.count { it.pressed }
+                val isZoomed = getScale() > 1.05f
+                if (pointerCount < 2 && !isZoomed) {
+                    continue
+                }
+                val zoomChange = event.calculateZoom()
+                val panChange = event.calculatePan()
+
+                if (!pastTouchSlop) {
+                    zoom *= zoomChange
+                    pan += panChange
+                    val centroidSize = event.calculateCentroidSize(useCurrent = false)
+                    val zoomMotion = abs(1f - zoom) * centroidSize
+                    val panMotion = pan.getDistance()
+                    if (zoomMotion > touchSlop || panMotion > touchSlop) {
+                        pastTouchSlop = true
+                    }
+                }
+
+                if (pastTouchSlop) {
+                    if (zoomChange != 1f || panChange != Offset.Zero) {
+                        onGesture(panChange, zoomChange)
+                    }
+                    event.changes.forEach {
+                        if (it.positionChanged()) {
+                            it.consume()
+                        }
+                    }
+                }
+            }
+        } while (!canceled && event.changes.any { it.pressed })
+    }
+}
+
 @Composable
 private fun ZoomablePdfPage(
     pageIndex: Int,
@@ -843,7 +904,7 @@ private fun ZoomablePdfPage(
             .fillMaxWidth()
             .heightIn(min = 380.dp)
             .pointerInput(pageIndex) {
-                detectTransformGestures { _, pan, zoom, _ ->
+                detectPinchZoomAndPan(getScale = { scale }) { pan, zoom ->
                     val nextScale = (scale * zoom).coerceIn(1f, 4f)
                     scale = nextScale
                     offset = if (nextScale > 1.05f) offset + pan else Offset.Zero
@@ -1147,7 +1208,7 @@ private fun MangaPageView(
     val gestureMod = if (allowPinchZoom) {
         Modifier
             .pointerInput(pageIndex) {
-                detectTransformGestures { _, pan, zoom, _ ->
+                detectPinchZoomAndPan(getScale = { scale }) { pan, zoom ->
                     val nextScale = (scale * zoom).coerceIn(1f, 4f)
                     scale = nextScale
                     offset = if (nextScale > 1.05f) offset + pan else Offset.Zero

@@ -6,6 +6,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,8 +66,8 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.annotation.OptIn
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.Surface
+import com.jellio.android.ui.common.ClickableSurfaceDefaults
+import com.jellio.android.ui.common.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.jellio.android.data.model.BaseItemDto
@@ -159,7 +161,14 @@ internal fun ReactMenu(replyTo: com.jellio.android.data.model.GroupWatchMessageD
         runCatching { first.requestFocus() }
     }
     Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.35f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss,
+            ),
         contentAlignment = Alignment.BottomCenter,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = 140.dp)) {
@@ -177,17 +186,22 @@ internal fun ReactMenu(replyTo: com.jellio.android.data.model.GroupWatchMessageD
             modifier = Modifier
                 .clip(RoundedCornerShape(999.dp))
                 .background(JellioBgElevated.copy(alpha = 0.95f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                )
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
             com.jellio.android.ui.groupwatch.GROUP_REACTIONS.forEachIndexed { index, emoji ->
-                androidx.tv.material3.Surface(
+                Surface(
                     onClick = { onReact(emoji) },
-                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(shape = androidx.compose.foundation.shape.CircleShape),
-                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                    shape = ClickableSurfaceDefaults.shape(shape = androidx.compose.foundation.shape.CircleShape),
+                    colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         focusedContainerColor = Color.White.copy(alpha = 0.25f),
                     ),
-                    scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.2f),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.2f),
                     modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
                 ) {
                     Text(text = emoji, fontSize = 30.sp, modifier = Modifier.padding(10.dp))

@@ -55,10 +55,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.material3.ClickableSurfaceDefaults
+import com.jellio.android.ui.common.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
+import com.jellio.android.ui.common.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.jellio.android.data.model.BadgeDto
@@ -447,7 +447,7 @@ private fun BadgeTile(badge: BadgeDto, onFocused: () -> Unit, modifier: Modifier
     val color = if (badge.Unlocked) rarityColor(badge.Rarity) else JellioBorder
     val shape = RoundedCornerShape(16.dp)
     Surface(
-        onClick = {},
+        onClick = { onFocused() },
         shape = ClickableSurfaceDefaults.shape(shape = shape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (badge.Unlocked) color.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.04f),
