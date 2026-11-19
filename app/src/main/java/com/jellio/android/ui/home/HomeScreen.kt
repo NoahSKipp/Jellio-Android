@@ -1,6 +1,7 @@
 package com.jellio.android.ui.home
 
 import com.jellio.android.data.model.ComingSoonHomeRow
+import com.jellio.android.data.model.HomeRow
 import com.jellio.android.data.model.HomeSection
 import com.jellio.android.data.model.PosterHomeRow
 import com.jellio.android.data.model.StudioHubsHomeRow
@@ -35,6 +36,8 @@ import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -42,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -74,11 +78,13 @@ import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.data.session.Session
 import com.jellio.android.ui.common.NoOpBringIntoViewSpec
 import com.jellio.android.ui.common.TvBringIntoViewSpec
+import com.jellio.android.ui.nav.LocalBottomBarPadding
 import com.jellio.android.ui.theme.JellioBg
 import com.jellio.android.ui.theme.JellioBgElevated
 import com.jellio.android.ui.theme.JellioSecondary
 import com.jellio.android.ui.theme.JellioText
 import com.jellio.android.ui.theme.JellioTextSecondary
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private data class CardMenuTarget(val item: BaseItemDto, val row: PosterHomeRow)
@@ -86,6 +92,7 @@ private data class CardMenuTarget(val item: BaseItemDto, val row: PosterHomeRow)
 @OptIn(ExperimentalFoundationApi::class)
 private const val WATCHLIST_POLL_MS = 20_000L
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     session: Session,
@@ -222,6 +229,19 @@ fun HomeScreen(
                 val isPortrait = layoutMode == com.jellio.android.ui.common.WindowLayoutMode.COMPACT_PORTRAIT
                 val isCompact = layoutMode != com.jellio.android.ui.common.WindowLayoutMode.TABLET_OR_WIDE
                 val horizontalPad = if (isCompact) 16.dp else 52.dp
+                val bottomBarPadding = LocalBottomBarPadding.current
+
+                var isPullRefreshing by remember { mutableStateOf(false) }
+                var refreshTriggerCount by remember { mutableIntStateOf(0) }
+                LaunchedEffect(refreshTriggerCount) {
+                    if (refreshTriggerCount == 0) return@LaunchedEffect
+                    val beforeRows = uiState.rows
+                    kotlinx.coroutines.withTimeoutOrNull(2500L) {
+                        snapshotFlow { uiState.rows to uiState.loadingMore }
+                            .first { (rows, loadingMore) -> !loadingMore && rows != beforeRows }
+                    }
+                    isPullRefreshing = false
+                }
 
                 // The space this screen really gets, which can be less than the display.
                 val screenHeight = maxHeight
@@ -229,6 +249,9 @@ fun HomeScreen(
                 val rowsViewportHeight = screenHeight * 0.52f
                 val topFixtureHeight = screenHeight - rowsViewportHeight
                 val firstRowItem = uiState.rows.firstNotNullOfOrNull { (it as? PosterHomeRow)?.section?.items?.firstOrNull() }
+                val heroItems = remember(visibleRows, isPortrait) {
+                    if (isPortrait) selectMobileHeroItems(visibleRows) else emptyList()
+                }
                 if (!isPortrait) {
                     ShowcaseHost(
                         highlighted = highlightedItem,
@@ -243,39 +266,29 @@ fun HomeScreen(
                 }
 
                 // Scrollable rows (full height with scrollable hero on portrait phones; bottom viewport on TV/tablet)
-                val defaultScrollSpec = LocalBringIntoViewSpec.current.scrollAnimationSpec
-                val verticalRowBringIntoViewSpec = remember(density) {
-                    val topInsetPx = with(density) { RowHeaderHeight.toPx() }
-                    com.jellio.android.ui.common.TvVerticalRowBringIntoViewSpec(topInsetPx = topInsetPx, scrollAnimationSpec = defaultScrollSpec) { listState.canScrollBackward }
-                }
-
-                CompositionLocalProvider(LocalBringIntoViewSpec provides verticalRowBringIntoViewSpec) {
+                val rowsContent: @Composable (Modifier) -> Unit = { columnModifier ->
                     LazyColumn(
                         state = listState,
-                        modifier = if (isPortrait) {
-                            Modifier
-                                .fillMaxSize()
-                                .clipToBounds()
-                                .focusRestorer()
-                        } else {
-                            Modifier
-                                .align(Alignment.BottomStart)
-                                .fillMaxWidth()
-                                .height(rowsViewportHeight)
-                                .clipToBounds()
-                                .focusRestorer()
-                        }
-                            .dpadFastScroll(listState) {
-                                if (!editMode) {
-                                    // Focus lands on the first row that is fully in view.
-                                    val visible = listState.layoutInfo.visibleItemsInfo
-                                    val target = visible.firstOrNull { it.offset >= 0 && rowFocus.containsKey(it.key) }
-                                        ?: visible.firstOrNull { rowFocus.containsKey(it.key) }
-                                    target?.let { runCatching { rowFocus[it.key]?.requestFocus() } }
-                                }
-                            },
+                        modifier = columnModifier
+                            .clipToBounds()
+                            .focusRestorer()
+                            .then(
+                                if (!isCompact) {
+                                    Modifier.dpadFastScroll(listState) {
+                                        if (!editMode) {
+                                            // Focus lands on the first row that is fully in view.
+                                            val visible = listState.layoutInfo.visibleItemsInfo
+                                            val target = visible.firstOrNull { it.offset >= 0 && rowFocus.containsKey(it.key) }
+                                                ?: visible.firstOrNull { rowFocus.containsKey(it.key) }
+                                            target?.let { runCatching { rowFocus[it.key]?.requestFocus() } }
+                                        }
+                                    }
+                                } else {
+                                    Modifier
+                                },
+                            ),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            bottom = if (isPortrait) 24.dp else rowsViewportHeight,
+                            bottom = if (isPortrait) bottomBarPadding + 24.dp else rowsViewportHeight,
                         ),
                     ) {
                         if (isPortrait && !editMode) {
@@ -283,13 +296,14 @@ fun HomeScreen(
                                 ShowcaseHost(
                                     highlighted = highlightedItem,
                                     fallback = firstRowItem,
+                                    heroItems = heroItems,
                                     loadInfo = { item -> viewModel.showcaseInfo(session, item) },
                                     imageUrl = imageUrl,
                                     onClick = onItemClick,
                                     onPlay = onPlay,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height((screenHeight * 0.48f).coerceIn(360.dp, 450.dp)),
+                                        .height(430.dp),
                                 )
                             }
                         }
@@ -388,6 +402,42 @@ fun HomeScreen(
                             item(key = "skeleton") { SkeletonRow() }
                             item(key = "skeleton-2") { SkeletonRow() }
                         }
+                    }
+                }
+
+                if (isCompact) {
+                    val containerModifier = if (isPortrait) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth()
+                            .height(rowsViewportHeight)
+                    }
+                    PullToRefreshBox(
+                        isRefreshing = isPullRefreshing,
+                        onRefresh = {
+                            isPullRefreshing = true
+                            refreshTriggerCount += 1
+                            viewModel.load(session, force = true)
+                        },
+                        modifier = containerModifier,
+                    ) {
+                        rowsContent(Modifier.fillMaxSize())
+                    }
+                } else {
+                    val defaultScrollSpec = LocalBringIntoViewSpec.current.scrollAnimationSpec
+                    val verticalRowBringIntoViewSpec = remember(density) {
+                        val topInsetPx = with(density) { RowHeaderHeight.toPx() }
+                        com.jellio.android.ui.common.TvVerticalRowBringIntoViewSpec(topInsetPx = topInsetPx, scrollAnimationSpec = defaultScrollSpec) { listState.canScrollBackward }
+                    }
+                    CompositionLocalProvider(LocalBringIntoViewSpec provides verticalRowBringIntoViewSpec) {
+                        rowsContent(
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .height(rowsViewportHeight),
+                        )
                     }
                 }
 
@@ -680,3 +730,100 @@ private fun HomeRowEditorButton(
         }
     }
 }
+
+private fun selectMobileHeroItems(rows: List<HomeRow>, maxCount: Int = 7): List<BaseItemDto> {
+    val posterRows = rows.filterIsInstance<PosterHomeRow>()
+    if (posterRows.isEmpty()) return emptyList()
+
+    fun hasBackdrop(item: BaseItemDto): Boolean =
+        !item.BackdropImageTags.isNullOrEmpty() ||
+            !item.ParentBackdropImageTags.isNullOrEmpty() ||
+            !item.ImageTags?.get("Backdrop").isNullOrBlank()
+
+    fun hasPrimary(item: BaseItemDto): Boolean =
+        !item.ImageTags?.get("Primary").isNullOrBlank() ||
+            !item.PrimaryImageTag.isNullOrBlank()
+
+    fun isMovieOrSeries(item: BaseItemDto): Boolean =
+        item.Type.equals("Movie", ignoreCase = true) || item.Type.equals("Series", ignoreCase = true)
+
+    fun rowPriority(row: PosterHomeRow): Int {
+        val key = row.section.key.lowercase()
+        val title = row.section.title.lowercase()
+        return when {
+            row.landscape || key == "continue-watching" || key == "up-next" -> 4
+            key.startsWith("catalog:") && (title.contains("trending") || title.contains("popular") || title.contains("new") || title.contains("latest")) -> 0
+            key.startsWith("rec:") || key.startsWith("seasonal:") -> 1
+            key.startsWith("catalog:") || key.startsWith("genre:") -> 2
+            else -> 3
+        }
+    }
+
+    val discoveryRows = posterRows.filter { rowPriority(it) < 4 }.sortedBy { rowPriority(it) }
+    val fallbackRows = posterRows.filter { rowPriority(it) == 4 }
+
+    val selected = ArrayList<BaseItemDto>(maxCount)
+    val seenIds = HashSet<String>(maxCount * 2)
+
+    fun addCandidate(item: BaseItemDto): Boolean {
+        if (selected.size >= maxCount) return false
+        if (!seenIds.add(item.Id)) return false
+        selected.add(item)
+        return true
+    }
+
+    // Pass 1: Spread up to 2 backdrop-backed Movies/Series per discovery row for variety.
+    for (row in discoveryRows) {
+        if (selected.size >= maxCount) break
+        var addedFromRow = 0
+        for (item in row.section.items) {
+            if (isMovieOrSeries(item) && hasBackdrop(item) && addCandidate(item)) {
+                addedFromRow += 1
+                if (addedFromRow >= 2 || selected.size >= maxCount) break
+            }
+        }
+    }
+    // Pass 2: Remaining backdrop-backed Movies/Series from discovery rows.
+    for (row in discoveryRows) {
+        if (selected.size >= maxCount) break
+        for (item in row.section.items) {
+            if (isMovieOrSeries(item) && hasBackdrop(item)) addCandidate(item)
+            if (selected.size >= maxCount) break
+        }
+    }
+    // Pass 3: Primary-art Movies/Series from discovery rows.
+    for (row in discoveryRows) {
+        if (selected.size >= maxCount) break
+        for (item in row.section.items) {
+            if (isMovieOrSeries(item) && hasPrimary(item)) addCandidate(item)
+            if (selected.size >= maxCount) break
+        }
+    }
+    // Pass 4: Movies/Series from continue watching / fallback rows with artwork.
+    for (row in fallbackRows) {
+        if (selected.size >= maxCount) break
+        for (item in row.section.items) {
+            if (isMovieOrSeries(item) && (hasBackdrop(item) || hasPrimary(item))) addCandidate(item)
+            if (selected.size >= maxCount) break
+        }
+    }
+    // Pass 5: Any remaining items with backdrop/primary art across all rows.
+    for (row in discoveryRows + fallbackRows) {
+        if (selected.size >= maxCount) break
+        for (item in row.section.items) {
+            if (hasBackdrop(item) || hasPrimary(item)) addCandidate(item)
+            if (selected.size >= maxCount) break
+        }
+    }
+    // Pass 6: Last-resort fallback to any item so the carousel is never empty if rows have items.
+    for (row in discoveryRows + fallbackRows) {
+        if (selected.size >= maxCount) break
+        for (item in row.section.items) {
+            addCandidate(item)
+            if (selected.size >= maxCount) break
+        }
+    }
+
+    return selected
+}
+

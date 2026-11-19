@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -74,6 +73,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import com.jellio.android.data.offline.OfflineDownloadItem
 import com.jellio.android.ui.common.ScreenSpinner
+import com.jellio.android.ui.nav.LocalBottomBarPadding
 import com.jellio.android.ui.theme.JellioBg
 import com.jellio.android.ui.theme.JellioBgElevated
 import com.jellio.android.ui.theme.JellioBorder
@@ -104,8 +104,7 @@ fun DownloadsScreen(
         modifier = modifier
             .fillMaxSize()
             .background(JellioBg)
-            .statusBarsPadding()
-            .navigationBarsPadding(),
+            .statusBarsPadding(),
     ) {
         // Header
         val isCompact = com.jellio.android.ui.common.isCompactScreen()
@@ -182,15 +181,21 @@ fun DownloadsScreen(
             }
         }
 
+        val bottomBarPadding = LocalBottomBarPadding.current
         LazyColumn(
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 32.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 10.dp,
+                bottom = 32.dp + bottomBarPadding,
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
         ) {
             // Storage Summary & Queue Controls Card
-            item(key = "storage_summary") {
+            item(key = "storage_summary", contentType = "storage_summary") {
                 StorageSummaryCard(
                     uiState = uiState,
                     onSyncNow = { viewModel.syncOfflineProgressNow() },
@@ -201,13 +206,14 @@ fun DownloadsScreen(
             }
 
             if (uiState.mangaGroups.isEmpty() && uiState.filteredItems.isEmpty()) {
-                item(key = "empty_state") {
+                item(key = "empty_state", contentType = "empty_state") {
                     EmptyDownloadsState(filter = uiState.filter)
                 }
             } else {
                 items(
                     items = uiState.mangaGroups,
                     key = { "manga_group_${it.groupKey}" },
+                    contentType = { "manga_group" },
                 ) { group ->
                     val expanded = expandedGroups[group.groupKey] ?: true
                     MangaSeriesDownloadCard(
@@ -231,6 +237,7 @@ fun DownloadsScreen(
                 items(
                     items = uiState.filteredItems,
                     key = { "item_${it.id}" },
+                    contentType = { "download_item" },
                 ) { item ->
                     DownloadItemCard(
                         item = item,

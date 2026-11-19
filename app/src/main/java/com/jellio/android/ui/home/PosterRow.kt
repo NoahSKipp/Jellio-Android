@@ -4,11 +4,14 @@ import com.jellio.android.data.model.HomeSection
 import com.jellio.android.ui.common.rowEntry
 import com.jellio.android.ui.common.RowEntryTarget
 import com.jellio.android.ui.common.rememberTvRowState
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -17,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +38,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import com.jellio.android.ui.common.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -43,6 +48,7 @@ import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.data.recommend.titleKey
 import com.jellio.android.ui.theme.JellioBgElevated
 import com.jellio.android.ui.theme.JellioText
+import com.jellio.android.ui.theme.JellioTextSecondary
 import com.jellio.android.ui.theme.scaled
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -129,8 +135,14 @@ fun PosterRow(
         }
     }
 
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
+    val useLandscapeCard = progress && isCompact
+
     Column(modifier = modifier.padding(bottom = RowSpacing)) {
-        RowTitle(text = section.title)
+        RowTitle(
+            text = section.title,
+            onClick = if (isCompact) onTitleClick else null,
+        )
         val firstCard = remember { androidx.compose.ui.focus.FocusRequester() }
         val rowState = rememberTvRowState()
         ReportRowScrolling(rowState)
@@ -149,7 +161,7 @@ fun PosterRow(
         }
 
         val horizontalPadding = responsiveRowStartPadding()
-        CompositionLocalProvider(LocalBringIntoViewSpec provides rememberTvHorizontalBringIntoViewSpec()) {
+        val rowContent: @Composable () -> Unit = {
             LazyRow(
                 state = rowState,
                 contentPadding = PaddingValues(horizontal = horizontalPadding),
@@ -157,7 +169,11 @@ fun PosterRow(
                 modifier = (if (rowFocusRequester != null) Modifier.focusRequester(rowFocusRequester) else Modifier)
                     .rowEntry(firstCard),
             ) {
-                itemsIndexed(displayItems, key = { index, item -> "${item.Id}_$index" }, contentType = { _, _ -> "poster_card" }) { index, item ->
+                itemsIndexed(
+                    displayItems,
+                    key = { _, item -> item.Id },
+                    contentType = { _, _ -> if (useLandscapeCard) "landscape_poster_card" else "poster_card" },
+                ) { index, item ->
                     val onCardClick = remember(item, onItemClick) { { onItemClick(item) } }
                     val onCardOptions = remember(item, onItemOptions) { onItemOptions?.let { opts -> { opts(item) } } }
                     val restoreHere = item.Id == restoreItemId
@@ -176,7 +192,7 @@ fun PosterRow(
                             onClick = onCardClick,
                             onOptionsClick = onCardOptions,
                             userImageUrl = userImageUrl,
-                            canExpand = true,
+                            canExpand = !isCompact,
                             onFocus = { focusedItem ->
                                 onItemFocus?.invoke(focusedItem)
                                 if (fetchPage != null && index >= displayItems.size - 4) {
@@ -186,31 +202,88 @@ fun PosterRow(
                             progress = progress,
                             isRemoving = removingItemId == item.Id,
                             onShatterFinished = { onShatterFinished(item) },
+                            landscapeCard = useLandscapeCard,
                         )
                     }
                 }
                 val showExpandButton = onTitleClick != null && (fetchPage != null || section.items.size > 20 || section.fetchAll != null)
                 if (showExpandButton) {
                     item {
-                        RowExpandButton(onClick = onTitleClick, height = (PosterWidth * 1.5f).scaled())
+                        RowExpandButton(
+                            onClick = onTitleClick,
+                            height = if (useLandscapeCard) LandscapeCardHeight else (PosterWidth * 1.5f).scaled(),
+                        )
                     }
                 }
+            }
+        }
+        if (isCompact) {
+            rowContent()
+        } else {
+            CompositionLocalProvider(LocalBringIntoViewSpec provides rememberTvHorizontalBringIntoViewSpec()) {
+                rowContent()
             }
         }
     }
 }
 
 @Composable
-fun RowTitle(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        fontSize = RowTitleFontSize,
-        lineHeight = 24.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = JellioText,
-        maxLines = 1,
-        modifier = modifier.padding(start = responsiveRowStartPadding(), bottom = 14.dp),
-    )
+fun RowTitle(
+    text: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    val startPad = responsiveRowStartPadding()
+    if (onClick != null && com.jellio.android.ui.common.isCompactScreen()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(start = startPad, end = startPad, bottom = 14.dp),
+        ) {
+            Text(
+                text = text,
+                fontSize = RowTitleFontSize,
+                lineHeight = 24.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = JellioText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.padding(start = 12.dp),
+            ) {
+                Text(
+                    text = com.jellio.android.ui.i18n.string("action_see_all"),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = JellioTextSecondary,
+                    maxLines = 1,
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = JellioTextSecondary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    } else {
+        Text(
+            text = text,
+            fontSize = RowTitleFontSize,
+            lineHeight = 24.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = JellioText,
+            maxLines = 1,
+            modifier = modifier.padding(start = startPad, bottom = 14.dp),
+        )
+    }
 }
 
 @Composable

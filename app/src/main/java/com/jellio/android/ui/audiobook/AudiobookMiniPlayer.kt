@@ -1,6 +1,9 @@
 package com.jellio.android.ui.audiobook
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -8,7 +11,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,7 +30,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -34,14 +38,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -51,6 +63,10 @@ import com.jellio.android.ui.theme.JellioBorder
 import com.jellio.android.ui.theme.JellioSecondary
 import com.jellio.android.ui.theme.JellioText
 import com.jellio.android.ui.theme.JellioTextSecondary
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Floating glassmorphic audiobook mini-player pill that docks cleanly above
@@ -72,15 +88,16 @@ fun AudiobookMiniPlayer(
         modifier = modifier,
     ) {
         if (book == null) return@AnimatedVisibility
-        val progress = if (state.totalDurationMs > 0L) {
-            (state.currentPositionMs.toFloat() / state.totalDurationMs.toFloat()).coerceIn(0f, 1f)
-        } else {
-            0f
-        }
         val currentChapter = state.chapters.getOrNull(state.currentChapterIndex)
         val subtitleText = currentChapter?.Title?.takeIf { it.isNotBlank() }
             ?: state.author.takeIf { it.isNotBlank() }
             ?: "Audiobook"
+
+        val scope = rememberCoroutineScope()
+        val haptic = LocalHapticFeedback.current
+        val density = LocalDensity.current
+        val dismissThresholdPx = remember(density) { with(density) { 120.dp.toPx() } }
+        val offsetX = remember(book.Id) { Animatable(0f) }
 
         Surface(
             color = Color.Transparent,
@@ -89,6 +106,35 @@ fun AudiobookMiniPlayer(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .alpha((1f - (abs(offsetX.value) / (dismissThresholdPx * 2.2f))).coerceIn(0.25f, 1f))
+                .pointerInput(book.Id, dismissThresholdPx) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            scope.launch {
+                                if (abs(offsetX.value) >= dismissThresholdPx) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    val target = if (offsetX.value > 0f) dismissThresholdPx * 3f else -dismissThresholdPx * 3f
+                                    offsetX.animateTo(target, tween(160))
+                                    controller.stopAndDismiss()
+                                } else {
+                                    offsetX.animateTo(0f, spring())
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            scope.launch {
+                                offsetX.animateTo(0f, spring())
+                            }
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            scope.launch {
+                                offsetX.snapTo(offsetX.value + dragAmount)
+                            }
+                        },
+                    )
+                }
                 .clip(RoundedCornerShape(20.dp))
                 .background(
                     brush = Brush.verticalGradient(
@@ -162,16 +208,17 @@ fun AudiobookMiniPlayer(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = Icons.Filled.Replay10,
+                                imageVector = Icons.Filled.Replay,
                                 contentDescription = "Rewind 15 seconds",
                                 tint = JellioTextSecondary,
-                                modifier = Modifier.size(22.dp),
+                                modifier = Modifier.size(24.dp),
                             )
                             Text(
                                 text = "15",
                                 color = JellioText,
-                                fontSize = 7.sp,
+                                fontSize = 8.sp,
                                 fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 2.dp),
                             )
                         }
                     }
@@ -211,21 +258,38 @@ fun AudiobookMiniPlayer(
                     }
                 }
 
-                // Thin bottom progress bar
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.5.dp)
-                        .background(Color.White.copy(alpha = 0.10f)),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(fraction = progress)
-                            .height(2.5.dp)
-                            .background(JellioSecondary),
-                    )
-                }
+                // Thin bottom progress bar isolated from outer mini-player recomposition
+                MiniPlayerProgressBar(
+                    positionFlow = controller.positionMs,
+                    totalDurationMs = state.totalDurationMs,
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun MiniPlayerProgressBar(
+    positionFlow: StateFlow<Long>,
+    totalDurationMs: Long,
+) {
+    val positionMs by positionFlow.collectAsState()
+    val progress = if (totalDurationMs > 0L) {
+        (positionMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(2.5.dp)
+            .background(Color.White.copy(alpha = 0.10f)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(fraction = progress)
+                .height(2.5.dp)
+                .background(JellioSecondary),
+        )
     }
 }

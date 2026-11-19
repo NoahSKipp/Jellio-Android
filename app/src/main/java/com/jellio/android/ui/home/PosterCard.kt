@@ -12,6 +12,7 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -220,33 +221,38 @@ fun PosterCard(
     modifier: Modifier = Modifier,
     onOptionsClick: (() -> Unit)? = null,
     userImageUrl: ((String, String?) -> String)? = null,
-    canExpand: Boolean = true,
+    canExpand: Boolean = !com.jellio.android.ui.common.isCompactScreen(),
     onFocus: ((BaseItemDto) -> Unit)? = null,
     progress: Boolean = false,
     isRemoving: Boolean = false,
     onShatterFinished: () -> Unit = {},
     // A label in the card's top-left corner, such as a release date.
     badge: String? = null,
+    fillWidth: Boolean = false,
+    landscapeCard: Boolean = false,
 ) {
+    if (landscapeCard) {
+        LandscapeContinueWatchingCard(
+            item = item,
+            imageUrl = imageUrl,
+            onClick = onClick,
+            onOptionsClick = onOptionsClick,
+            onFocus = onFocus,
+            progress = progress,
+            isRemoving = isRemoving,
+            onShatterFinished = onShatterFinished,
+            modifier = modifier,
+        )
+        return
+    }
+
     val baseWidth = PosterWidth.scaled()
     val baseHeight = (PosterWidth * 1.5f).scaled()
     val expandedWidth = baseHeight * (16f / 9f)
-    val prefetch = LocalGelatoPrefetch.current
     val context = androidx.compose.ui.platform.LocalContext.current
     var isFocused by remember { mutableStateOf(false) }
     var isExpanded by remember { mutableStateOf(false) }
-    val bringIntoView = remember { BringIntoViewRequester() }
-
-    LaunchedEffect(isFocused, canExpand) {
-        isExpanded = false
-        if (!isFocused || !canExpand) return@LaunchedEffect
-        delay(EXPAND_DELAY_MS)
-        isExpanded = true
-        // A card near the end of a row grows past the right edge; once it
-        // has finished widening, scroll the row so all of it shows.
-        delay(EXPAND_ANIMATION_MS + 40L)
-        runCatching { bringIntoView.bringIntoView() }
-    }
+    val bringIntoView = if (canExpand) remember { BringIntoViewRequester() } else null
 
     val density = androidx.compose.ui.platform.LocalDensity.current
     val baseWidthPx = with(density) { baseWidth.roundToPx() }.coerceAtLeast(1)
@@ -277,31 +283,54 @@ fun PosterCard(
     val logoDecodeWidthPx = maxOf(expandedWidthPx, 900)
     val logoDecodeHeightPx = maxOf(logoHeightPx * 3, 240)
 
-    // Resting on a card warms its banner and logo with the exact requests the
-    // widened card makes, so they are in memory by the time it widens.
-    LaunchedEffect(isFocused, item.Id) {
-        if (!isFocused) return@LaunchedEffect
-        delay(PREFETCH_DEBOUNCE_MS)
-        if (com.jellio.android.ui.perf.ScrollActivity.busy) return@LaunchedEffect
-        prefetch(item)
-        if (!canExpand) return@LaunchedEffect
-        val loader = coil3.SingletonImageLoader.get(context)
-        backdropCandidates.firstOrNull()?.let { loader.enqueue(sizedImageRequest(context, it, expandedWidthPx, baseHeightPx)) }
-        logoCandidates.firstOrNull()?.let { loader.enqueue(sizedImageRequest(context, it, logoDecodeWidthPx, logoDecodeHeightPx)) }
+    if (canExpand) {
+        val prefetch = LocalGelatoPrefetch.current
+        LaunchedEffect(isFocused) {
+            isExpanded = false
+            if (!isFocused) return@LaunchedEffect
+            delay(EXPAND_DELAY_MS)
+            isExpanded = true
+            // A card near the end of a row grows past the right edge; once it
+            // has finished widening, scroll the row so all of it shows.
+            delay(EXPAND_ANIMATION_MS + 40L)
+            runCatching { bringIntoView?.bringIntoView() }
+        }
+
+        // Resting on a card warms its banner and logo with the exact requests the
+        // widened card makes, so they are in memory by the time it widens.
+        LaunchedEffect(isFocused, item.Id) {
+            if (!isFocused) return@LaunchedEffect
+            delay(PREFETCH_DEBOUNCE_MS)
+            if (com.jellio.android.ui.perf.ScrollActivity.busy) return@LaunchedEffect
+            prefetch(item)
+            val loader = coil3.SingletonImageLoader.get(context)
+            backdropCandidates.firstOrNull()?.let { loader.enqueue(sizedImageRequest(context, it, expandedWidthPx, baseHeightPx)) }
+            logoCandidates.firstOrNull()?.let { loader.enqueue(sizedImageRequest(context, it, logoDecodeWidthPx, logoDecodeHeightPx)) }
+        }
     }
 
-    val animatedWidth by animateDpAsState(
-        targetValue = if (isExpanded) expandedWidth else baseWidth,
-        animationSpec = tween(durationMillis = EXPAND_ANIMATION_MS, easing = FastOutSlowInEasing),
-        label = "posterCardWidth",
-    )
+    val cardWidth = if (canExpand) {
+        val animatedWidth by animateDpAsState(
+            targetValue = if (isExpanded) expandedWidth else baseWidth,
+            animationSpec = tween(durationMillis = EXPAND_ANIMATION_MS, easing = FastOutSlowInEasing),
+            label = "posterCardWidth",
+        )
+        animatedWidth
+    } else {
+        baseWidth
+    }
 
     val episode = episodeLabel(item)
     val remaining = if (progress) remainingLabel(item) else ""
     val percentage = item.UserData?.PlayedPercentage?.takeIf { it > 0 && item.UserData?.Played != true }
 
     if (isRemoving) {
-        Box(modifier = modifier.width(baseWidth).height(baseHeight)) {
+        val removeSizeModifier = if (fillWidth && !canExpand) {
+            Modifier.fillMaxWidth().aspectRatio(2f / 3f)
+        } else {
+            Modifier.width(baseWidth).height(baseHeight)
+        }
+        Box(modifier = modifier.then(removeSizeModifier)) {
             val shatterUrl = activeUrl ?: candidates.firstOrNull()
             if (shatterUrl != null) {
                 CardShatterOverlay(imageUrl = shatterUrl, cardWidth = baseWidth, cardHeight = baseHeight, onFinished = onShatterFinished)
@@ -310,6 +339,12 @@ fun PosterCard(
             }
         }
         return
+    }
+
+    val sizeModifier = if (fillWidth && !canExpand) {
+        Modifier.fillMaxWidth().aspectRatio(2f / 3f)
+    } else {
+        Modifier.width(cardWidth).height(baseHeight)
     }
 
     Surface(
@@ -330,19 +365,24 @@ fun PosterCard(
         ),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
         modifier = modifier
-            .bringIntoViewRequester(bringIntoView)
-            .width(animatedWidth)
-            .height(baseHeight)
-            .onFocusChanged { state ->
-                if (state.isFocused && !isFocused) onFocus?.invoke(item)
-                isFocused = state.isFocused
-            },
+            .then(if (bringIntoView != null) Modifier.bringIntoViewRequester(bringIntoView) else Modifier)
+            .then(sizeModifier)
+            .then(
+                if (canExpand || onFocus != null) {
+                    Modifier.onFocusChanged { state ->
+                        if (state.isFocused && !isFocused) onFocus?.invoke(item)
+                        isFocused = state.isFocused
+                    }
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            if (isExpanded) {
+            if (canExpand && isExpanded) {
                 if (activeBackdropUrl != null) {
                     AsyncImage(
-                        model = remember(activeBackdropUrl) { sizedImageRequest(context, activeBackdropUrl, expandedWidthPx, baseHeightPx) },
+                        model = remember(activeBackdropUrl, expandedWidthPx, baseHeightPx) { sizedImageRequest(context, activeBackdropUrl, expandedWidthPx, baseHeightPx) },
                         contentDescription = item.Name,
                         contentScale = ContentScale.Crop,
                         onError = { if (backdropIndex < backdropCandidates.size) backdropIndex += 1 },
@@ -396,7 +436,7 @@ fun PosterCard(
             } else {
                 if (activeUrl != null) {
                     AsyncImage(
-                        model = remember(activeUrl) { sizedImageRequest(context, activeUrl, baseWidthPx, baseHeightPx) },
+                        model = remember(activeUrl, baseWidthPx, baseHeightPx) { sizedImageRequest(context, activeUrl, baseWidthPx, baseHeightPx) },
                         contentDescription = item.Name,
                         contentScale = ContentScale.Crop,
                         onError = { if (candidateIndex < candidates.size) candidateIndex += 1 },
@@ -440,7 +480,7 @@ fun PosterCard(
                     )
                 }
                 if (!progress) {
-                    item.CommunityRating.let { rating ->
+                    item.CommunityRating?.takeIf { it > 0.0 }?.let { rating ->
                         RatingChip(
                             rating = rating,
                             modifier = Modifier
@@ -505,6 +545,200 @@ fun PosterCard(
     }
 }
 
+internal val LandscapeCardWidth = 248.dp
+internal val LandscapeCardHeight = 140.dp
+
+@Composable
+private fun LandscapeContinueWatchingCard(
+    item: BaseItemDto,
+    imageUrl: (BaseItemDto, String, Int) -> String,
+    onClick: () -> Unit,
+    onOptionsClick: (() -> Unit)?,
+    onFocus: ((BaseItemDto) -> Unit)?,
+    progress: Boolean,
+    isRemoving: Boolean,
+    onShatterFinished: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val density = LocalDensity.current
+    val widthPx = with(density) { LandscapeCardWidth.roundToPx() }.coerceAtLeast(1)
+    val heightPx = with(density) { LandscapeCardHeight.roundToPx() }.coerceAtLeast(1)
+    val requestWidth = imageWidthBucket(widthPx)
+    val candidates = remember(item, imageUrl, progress, requestWidth) {
+        posterBackdropCandidates(item, imageUrl, requestWidth, episodeStill = progress)
+    }
+    var candidateIndex by remember(item.Id, candidates) { androidx.compose.runtime.mutableIntStateOf(0) }
+    val activeUrl = candidates.getOrNull(candidateIndex)
+
+    val episode = episodeLabel(item)
+    val remaining = if (progress) remainingLabel(item) else ""
+    val percentage = item.UserData?.PlayedPercentage?.takeIf { it > 0 && item.UserData?.Played != true }
+    val primaryTitle = if (item.isEpisodeLike()) item.SeriesName ?: item.Name.orEmpty() else item.Name.orEmpty()
+    val episodeSubtitle = if (item.isEpisodeLike() && episode.isNotEmpty()) {
+        val epName = item.Name?.takeIf { it.isNotBlank() }?.let { com.jellio.android.data.i18n.episodeDisplayName(it, item.IndexNumber) }
+        if (epName != null) "$episode - $epName" else episode
+    } else {
+        null
+    }
+
+    if (isRemoving) {
+        Box(modifier = modifier.width(LandscapeCardWidth).height(LandscapeCardHeight)) {
+            val shatterUrl = activeUrl ?: candidates.firstOrNull()
+            if (shatterUrl != null) {
+                CardShatterOverlay(
+                    imageUrl = shatterUrl,
+                    cardWidth = LandscapeCardWidth,
+                    cardHeight = LandscapeCardHeight,
+                    onFinished = onShatterFinished,
+                )
+            } else {
+                LaunchedEffect(item.Id) { onShatterFinished() }
+            }
+        }
+        return
+    }
+
+    val shape = RoundedCornerShape(14.dp)
+    Surface(
+        onClick = onClick,
+        onLongClick = onOptionsClick,
+        shape = ClickableSurfaceDefaults.shape(shape = shape),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = JellioBgElevated,
+            contentColor = JellioText,
+            focusedContainerColor = JellioBgElevated,
+            focusedContentColor = JellioText,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, Color.White),
+                shape = shape,
+            ),
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
+        modifier = modifier
+            .width(LandscapeCardWidth)
+            .height(LandscapeCardHeight)
+            .then(
+                if (onFocus != null) {
+                    Modifier.onFocusChanged { state ->
+                        if (state.isFocused) onFocus.invoke(item)
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (activeUrl != null) {
+                AsyncImage(
+                    model = remember(activeUrl, widthPx, heightPx) { sizedImageRequest(context, activeUrl, widthPx, heightPx) },
+                    contentDescription = primaryTitle,
+                    contentScale = ContentScale.Crop,
+                    onError = { if (candidateIndex < candidates.size) candidateIndex += 1 },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(JellioBgElevated)
+                        .padding(12.dp),
+                ) {
+                    Text(
+                        text = primaryTitle,
+                        color = JellioText.copy(alpha = 0.75f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+            }
+
+            // Bottom dark gradient scrim for legible title, subtitle, and progress bar.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.75f)
+                    .align(Alignment.BottomStart)
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.42f to Color.Black.copy(alpha = 0.38f),
+                            1f to Color.Black.copy(alpha = 0.90f),
+                        ),
+                    ),
+            )
+
+            if (remaining.isNotEmpty()) {
+                CardChip(
+                    text = remaining,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                )
+            }
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(
+                        start = 10.dp,
+                        end = 10.dp,
+                        bottom = if (percentage != null) 16.dp else 10.dp,
+                    ),
+            ) {
+                Text(
+                    text = primaryTitle,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    lineHeight = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (episodeSubtitle != null) {
+                    Text(
+                        text = episodeSubtitle,
+                        color = Color.White.copy(alpha = 0.80f),
+                        fontSize = 12.sp,
+                        lineHeight = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            if (percentage != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                        .height(3.5.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.White.copy(alpha = 0.28f)),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth((minOf(100.0, percentage).toFloat() / 100f).coerceIn(0f, 1f))
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(JellioSecondary),
+                    )
+                }
+            }
+        }
+    }
+}
+
 internal fun sizedImageRequest(
     context: android.content.Context,
     url: String,
@@ -527,6 +761,7 @@ internal fun RatingChip(
     badgeHeight: Dp = 11.dp,
     badgeSize: Dp? = null,
 ) {
+    if (rating == null || rating <= 0.0) return
     val resolvedWidth = badgeSize?.let { it * 2.33f } ?: badgeWidth
     val resolvedHeight = badgeSize ?: badgeHeight
     Row(
@@ -538,8 +773,7 @@ internal fun RatingChip(
     ) {
         TmdbBadge(width = resolvedWidth, height = resolvedHeight)
         Text(
-            // No TMDB rating yet: a dash, so every card shows the same chip.
-            text = rating?.takeIf { it > 0.0 }?.let { String.format(Locale.US, "%.1f", it) } ?: "-",
+            text = String.format(Locale.US, "%.1f", rating),
             color = JellioText,
             fontSize = fontSize,
             fontWeight = FontWeight.SemiBold,

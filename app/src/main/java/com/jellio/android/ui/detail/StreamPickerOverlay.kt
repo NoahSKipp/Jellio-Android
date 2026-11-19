@@ -2,33 +2,42 @@ package com.jellio.android.ui.detail
 
 import kotlinx.coroutines.async
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import com.jellio.android.ui.common.displayText
 import androidx.compose.runtime.LaunchedEffect
@@ -53,6 +62,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Border
 import com.jellio.android.ui.common.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -193,22 +203,25 @@ fun StreamPickerOverlay(
     var selectedQuality by remember { mutableStateOf<String?>(null) }
     var selectedEdition by remember { mutableStateOf<String?>(null) }
     var readyInfo by remember { mutableStateOf<com.jellio.android.data.streams.ReadyInfo?>(null) }
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
     val initialFocusRequester = remember { FocusRequester() }
     val resumeFocusRequester = remember { FocusRequester() }
     val firstSourceCardFocusRequester = remember { FocusRequester() }
     var firstCardHasFocus by remember { mutableStateOf(false) }
     val streamListState = rememberLazyListState()
-    LaunchedEffect(state) {
+    LaunchedEffect(state, isCompact) {
         val current = state
         if (current is SourcesState.Loaded && current.sources.isNotEmpty()) {
             streamListState.scrollToItem(0)
-            for (attempt in 0 until 30) {
-                withFrameNanos {}
-                if (firstCardHasFocus) break
-                runCatching { firstSourceCardFocusRequester.requestFocus() }
+            if (!isCompact) {
+                for (attempt in 0 until 30) {
+                    withFrameNanos {}
+                    if (firstCardHasFocus) break
+                    runCatching { firstSourceCardFocusRequester.requestFocus() }
+                }
             }
         }
-        if (current !is SourcesState.Loading) {
+        if (!isCompact && current !is SourcesState.Loading) {
             runCatching { initialFocusRequester.requestFocus() }
         }
     }
@@ -252,15 +265,22 @@ fun StreamPickerOverlay(
     LaunchedEffect(item.Id) {
         selectedLanguage = null
         selectedQuality = null
+        selectedEdition = null
     }
     BackHandler(onBack = onDismiss)
 
     Box(
         modifier = modifier.fillMaxSize()
-            .focusGroup().focusProperties { onExit = { FocusRequester.Cancel } }
-            .background(JellioBg),
+            .then(
+                if (isCompact) {
+                    Modifier
+                } else {
+                    Modifier.focusGroup().focusProperties { onExit = { FocusRequester.Cancel } }
+                },
+            )
+            .background(if (isCompact) Color.Black.copy(alpha = 0.62f) else JellioBg),
     ) {
-        if (backdropUrl != null) {
+        if (!isCompact && backdropUrl != null) {
             coil3.compose.AsyncImage(
                 model = backdropUrl,
                 contentDescription = null,
@@ -269,12 +289,23 @@ fun StreamPickerOverlay(
             )
         }
         Box(
-            modifier = Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(listOf(JellioBg.copy(alpha = 0.55f), JellioBg), startX = 0f),
-            ),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (isCompact) {
+                        Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onDismiss,
+                        )
+                    } else {
+                        Modifier.background(
+                            Brush.horizontalGradient(listOf(JellioBg.copy(alpha = 0.55f), JellioBg), startX = 0f),
+                        )
+                    },
+                ),
         )
 
-        val isCompact = com.jellio.android.ui.common.isCompactScreen()
         val isEpisode = item.Type == "Episode" && item.SeriesName != null
         Column(
             modifier = if (isCompact) {
@@ -284,8 +315,13 @@ fun StreamPickerOverlay(
                     .fillMaxHeight(0.85f)
                     .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                     .background(JellioBgElevated)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    )
                     .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             } else {
                 Modifier
                     .align(Alignment.CenterEnd)
@@ -296,17 +332,104 @@ fun StreamPickerOverlay(
                     .padding(28.dp)
             },
         ) {
-            Box(modifier = Modifier.padding(top = if (isCompact) 4.dp else 24.dp)) {
-                Text(text = if (isEpisode) item.SeriesName.orEmpty() else item.Name.orEmpty(), style = MaterialTheme.typography.titleLarge, color = JellioText)
-            }
-            if (isEpisode) {
-                val code = if (item.ParentIndexNumber != null && item.IndexNumber != null) "S${item.ParentIndexNumber}E${item.IndexNumber} - " else ""
-                Text(text = code + item.Name.orEmpty(), color = JellioTextSecondary, modifier = Modifier.padding(top = 4.dp))
+            if (isCompact) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(36.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color.White.copy(alpha = 0.28f)),
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isEpisode) item.SeriesName.orEmpty() else item.Name.orEmpty(),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = JellioText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (isEpisode) {
+                            val code = if (item.ParentIndexNumber != null && item.IndexNumber != null) "S${item.ParentIndexNumber}E${item.IndexNumber} - " else ""
+                            Text(
+                                text = code + item.Name.orEmpty(),
+                                color = JellioTextSecondary,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                    }
+                    Surface(
+                        onClick = onDismiss,
+                        shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color.White.copy(alpha = 0.08f),
+                            contentColor = JellioText,
+                            focusedContainerColor = Color.White.copy(alpha = 0.22f),
+                            focusedContentColor = Color.White,
+                        ),
+                        border = ClickableSurfaceDefaults.border(
+                            border = Border(
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                                shape = CircleShape,
+                            ),
+                            focusedBorder = Border(
+                                border = BorderStroke(2.dp, Color.White),
+                                shape = CircleShape,
+                            ),
+                        ),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Close",
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                }
+            } else {
+                Box(modifier = Modifier.padding(top = 24.dp)) {
+                    Text(text = if (isEpisode) item.SeriesName.orEmpty() else item.Name.orEmpty(), style = MaterialTheme.typography.titleLarge, color = JellioText)
+                }
+                if (isEpisode) {
+                    val code = if (item.ParentIndexNumber != null && item.IndexNumber != null) "S${item.ParentIndexNumber}E${item.IndexNumber} - " else ""
+                    Text(text = code + item.Name.orEmpty(), color = JellioTextSecondary, modifier = Modifier.padding(top = 4.dp))
+                }
             }
 
             when (val currentState = state) {
-                is SourcesState.Loading -> Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
-                    Text(text = com.jellio.android.ui.i18n.string("status_loading"), color = JellioTextSecondary)
+                is SourcesState.Loading -> Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 56.dp),
+                ) {
+                    CircularProgressIndicator(
+                        color = JellioSecondary,
+                        strokeWidth = 3.dp,
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = com.jellio.android.ui.i18n.string("status_loading"),
+                        color = JellioTextSecondary,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
                 is SourcesState.Error -> Column(modifier = Modifier.padding(top = 48.dp)) {
                     Text(text = currentState.message, color = JellioTextSecondary)
@@ -326,6 +449,15 @@ fun StreamPickerOverlay(
                 is SourcesState.Loaded -> if (currentState.sources.isEmpty()) {
                     val refreshRequester = remember { FocusRequester() }
                     val allChipRequester = remember { FocusRequester() }
+                    val elevatedCardContainer = if (isCompact) Color.White.copy(alpha = 0.06f) else JellioBgElevated
+                    val elevatedBorder = if (isCompact) {
+                        Border(
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                            shape = RoundedCornerShape(999.dp),
+                        )
+                    } else {
+                        Border.None
+                    }
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -338,10 +470,13 @@ fun StreamPickerOverlay(
                                 onClick = { reloadKey++ },
                                 shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
                                 colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = JellioBgElevated,
+                                    containerColor = elevatedCardContainer,
                                     contentColor = JellioText,
                                     focusedContainerColor = Color.White.copy(alpha = 0.18f),
                                     focusedContentColor = JellioText,
+                                ),
+                                border = ClickableSurfaceDefaults.border(
+                                    border = elevatedBorder,
                                 ),
                                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
                                 modifier = Modifier
@@ -385,12 +520,20 @@ fun StreamPickerOverlay(
                             onClick = { reloadKey++ },
                             shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
                             colors = ClickableSurfaceDefaults.colors(
-                                containerColor = JellioBgElevated,
+                                containerColor = elevatedCardContainer,
                                 contentColor = JellioText,
                                 focusedContainerColor = Color.White.copy(alpha = 0.28f),
                                 focusedContentColor = JellioText,
                             ),
                             border = ClickableSurfaceDefaults.border(
+                                border = if (isCompact) {
+                                    Border(
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                                        shape = RoundedCornerShape(12.dp),
+                                    )
+                                } else {
+                                    Border.None
+                                },
                                 focusedBorder = androidx.tv.material3.Border(
                                     border = androidx.compose.foundation.BorderStroke(2.5.dp, Color.White),
                                     shape = RoundedCornerShape(12.dp),
@@ -425,13 +568,18 @@ fun StreamPickerOverlay(
                     }
                 } else {
                     val resumeTicks = item.UserData?.PlaybackPositionTicks ?: 0
-                    val languageCounts = linkedMapOf<String, Int>()
-                    currentState.sources.forEach { source ->
-                        sourceAudioLanguages(source).forEach { code -> languageCounts[code] = (languageCounts[code] ?: 0) + 1 }
+                    val languageCounts = remember(currentState.sources) {
+                        val counts = linkedMapOf<String, Int>()
+                        currentState.sources.forEach { source ->
+                            sourceAudioLanguages(source).forEach { code -> counts[code] = (counts[code] ?: 0) + 1 }
+                        }
+                        counts
                     }
-                    val languages = languageCounts.keys.sortedWith(
-                        compareByDescending<String> { languageCounts[it] ?: 0 }.thenBy { languageName(it) },
-                    )
+                    val languages = remember(languageCounts) {
+                        languageCounts.keys.sortedWith(
+                            compareByDescending<String> { languageCounts[it] ?: 0 }.thenBy { languageName(it) },
+                        )
+                    }
                     val chipFocusRequesters = remember(languages) {
                         val map = mutableMapOf<String?, FocusRequester>()
                         map[null] = FocusRequester()
@@ -459,24 +607,21 @@ fun StreamPickerOverlay(
                     val showLanguages = languages.size > 1
                     val showQualities = qualities.size > 1
                     // Language, quality, and edition combine: a source has to match all active filters.
-                    val filteredSources = currentState.sources.filter { source ->
-                        (selectedLanguage == null || sourceAudioLanguages(source).contains(selectedLanguage)) &&
-                            (selectedQuality == null || sourceQuality(source) == selectedQuality) &&
-                            (selectedEdition == null || EditionParser.detectSourceEdition(source, currentState.sources) == selectedEdition)
+                    val filteredSources = remember(currentState.sources, selectedLanguage, selectedQuality, selectedEdition) {
+                        currentState.sources.filter { source ->
+                            (selectedLanguage == null || sourceAudioLanguages(source).contains(selectedLanguage)) &&
+                                (selectedQuality == null || sourceQuality(source) == selectedQuality) &&
+                                (selectedEdition == null || EditionParser.detectSourceEdition(source, currentState.sources) == selectedEdition)
+                        }
                     }
 
-                    android.util.Log.d(
-                        "StreamPickerDpad",
-                        "loaded sources=${currentState.sources.size} filtered=${filteredSources.size} " +
-                            "resumeTicks=$resumeTicks languages=${languages.size}",
-                    )
                     LazyColumn(
                         state = streamListState,
                         contentPadding = PaddingValues(bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.weight(1f).focusRestorer(),
+                        modifier = Modifier.weight(1f).then(if (!isCompact) Modifier.focusRestorer() else Modifier),
                     ) {
-                        item(key = "header_resume") {
+                        item(key = "header_resume", contentType = "resume_button") {
                             if (resumeTicks > 0) {
                                 Surface(
                                     onClick = {
@@ -486,10 +631,9 @@ fun StreamPickerOverlay(
                                     shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
                                     colors = ClickableSurfaceDefaults.colors(containerColor = JellioText, contentColor = JellioBg),
                                     modifier = Modifier
-                                        .padding(top = 24.dp)
+                                        .padding(top = 18.dp)
                                         .focusRequester(initialFocusRequester)
-                                        .focusRequester(resumeFocusRequester)
-                                        .onFocusChanged { android.util.Log.d("StreamPickerDpad", "resume focus=${it.isFocused}") },
+                                        .focusRequester(resumeFocusRequester),
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
@@ -501,7 +645,7 @@ fun StreamPickerOverlay(
                                 }
                             }
                         }
-                        item(key = "header_edition_chips") {
+                        item(key = "header_edition_chips", contentType = "filter_chips") {
                             if (showEditions) {
                                 FilterChipRow(
                                     chips = listOf<Pair<String?, String>>(null to com.jellio.android.ui.i18n.string("stream_all")) + editions.map { it to it },
@@ -510,11 +654,12 @@ fun StreamPickerOverlay(
                                     firstChipFocusRequester = if (resumeTicks <= 0) initialFocusRequester else null,
                                     chipFocusRequesters = editionFocusRequesters,
                                     upTarget = if (resumeTicks > 0) resumeFocusRequester else null,
-                                    topPadding = 20.dp,
+                                    topPadding = if (isCompact) 14.dp else 20.dp,
+                                    onElevatedSurface = isCompact,
                                 )
                             }
                         }
-                        item(key = "header_chips") {
+                        item(key = "header_chips", contentType = "filter_chips") {
                             if (showLanguages) {
                                 FilterChipRow(
                                     chips = listOf<Pair<String?, String>>(null to com.jellio.android.ui.i18n.string("stream_all")) + languages.map { it to languageName(it) },
@@ -523,11 +668,12 @@ fun StreamPickerOverlay(
                                     firstChipFocusRequester = if (resumeTicks <= 0 && !showEditions) initialFocusRequester else null,
                                     chipFocusRequesters = chipFocusRequesters,
                                     upTarget = if (showEditions) editionFocusRequesters[selectedEdition] else if (resumeTicks > 0) resumeFocusRequester else null,
-                                    topPadding = if (showEditions) 12.dp else 20.dp,
+                                    topPadding = if (showEditions) 12.dp else if (isCompact) 14.dp else 20.dp,
+                                    onElevatedSurface = isCompact,
                                 )
                             }
                         }
-                        item(key = "header_quality_chips") {
+                        item(key = "header_quality_chips", contentType = "filter_chips") {
                             if (showQualities) {
                                 FilterChipRow(
                                     chips = listOf<Pair<String?, String>>(null to "All") + qualities.map { it to it },
@@ -536,30 +682,35 @@ fun StreamPickerOverlay(
                                     firstChipFocusRequester = if (resumeTicks <= 0 && !showEditions && !showLanguages) initialFocusRequester else null,
                                     chipFocusRequesters = qualityFocusRequesters,
                                     upTarget = if (showLanguages) chipFocusRequesters[selectedLanguage] else if (showEditions) editionFocusRequesters[selectedEdition] else if (resumeTicks > 0) resumeFocusRequester else null,
-                                    topPadding = if (showLanguages || showEditions) 12.dp else 20.dp,
+                                    topPadding = if (showLanguages || showEditions) 12.dp else if (isCompact) 14.dp else 20.dp,
+                                    onElevatedSurface = isCompact,
                                 )
                             }
                         }
-                        item(key = "header_text") {
+                        item(key = "header_text", contentType = "section_header") {
                             Text(
                                 text = if (filteredSources.isEmpty()) com.jellio.android.ui.i18n.string("stream_no_matches") else com.jellio.android.ui.i18n.formatString("stream_count_found", filteredSources.size),
                                 color = JellioTextSecondary,
-                                modifier = Modifier.padding(top = 24.dp, bottom = 12.dp),
+                                modifier = Modifier.padding(top = if (isCompact) 16.dp else 24.dp, bottom = 10.dp),
                             )
                         }
-                        itemsIndexed(filteredSources, key = { index, source -> source.Id ?: index }) { index, source ->
+                        itemsIndexed(
+                            items = filteredSources,
+                            key = { index, source -> source.Id ?: index },
+                            contentType = { _, _ -> "source_card" },
+                        ) { index, source ->
                             SourceCard(
                                 source = source,
                                 recentlyFailed = com.jellio.android.ui.player.BadStreams.isBad(item.Id, source),
                                 ready = readyInfo?.isReady(source.Id) == true,
                                 onClick = { onSelect(source) },
+                                onElevatedSurface = isCompact,
                                 modifier = if (index == 0) {
                                     Modifier
                                         .focusRequester(firstSourceCardFocusRequester)
                                         .let { if (resumeTicks <= 0 && !showLanguages && !showQualities) it.focusRequester(initialFocusRequester) else it }
                                         .onFocusChanged {
                                             firstCardHasFocus = it.hasFocus
-                                            android.util.Log.d("StreamPickerDpad", "first card focus=${it.hasFocus}")
                                         }
                                         .focusProperties {
                                             up = if (showQualities) {
@@ -594,6 +745,7 @@ internal fun FilterChipRow(
     chipFocusRequesters: Map<String?, FocusRequester>,
     upTarget: FocusRequester? = null,
     topPadding: androidx.compose.ui.unit.Dp = 20.dp,
+    onElevatedSurface: Boolean = false,
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -607,22 +759,30 @@ internal fun FilterChipRow(
         chips.forEachIndexed { index, pair ->
             val (code, label) = pair
             val isSelected = code == selected
+            val unselectedContainer = if (onElevatedSurface) Color.White.copy(alpha = 0.06f) else JellioBgElevated
             Surface(
                 onClick = { onSelect(code) },
                 shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
                 colors = ClickableSurfaceDefaults.colors(
-                    containerColor = if (isSelected) JellioSecondary else JellioBgElevated,
+                    containerColor = if (isSelected) JellioSecondary else unselectedContainer,
                     contentColor = if (isSelected) JellioBg else JellioText,
                     focusedContainerColor = Color.White.copy(alpha = 0.18f),
                     focusedContentColor = JellioText,
                 ),
+                border = ClickableSurfaceDefaults.border(
+                    border = if (!isSelected && onElevatedSurface) {
+                        Border(
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                            shape = RoundedCornerShape(999.dp),
+                        )
+                    } else {
+                        Border.None
+                    },
+                ),
                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
                 modifier = Modifier
                     .focusRequester(chipFocusRequesters[code]!!)
-                    .let { if (index == 0 && firstChipFocusRequester != null) it.focusRequester(firstChipFocusRequester) else it }
-                    .onFocusChanged {
-                        if (index == 0) android.util.Log.d("StreamPickerDpad", "chip[0] focus=${it.isFocused}")
-                    },
+                    .let { if (index == 0 && firstChipFocusRequester != null) it.focusRequester(firstChipFocusRequester) else it },
             ) {
                 Text(text = label, modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
             }
@@ -641,6 +801,7 @@ internal fun SourceCard(
     // under Avoid, red under Block.
     transcodeMark: Boolean = false,
     ready: Boolean = false,
+    onElevatedSurface: Boolean = false,
 ) {
     val policy = com.jellio.android.data.playback.VideoTranscodePolicy
     val classification = remember(source) {
@@ -648,6 +809,7 @@ internal fun SourceCard(
     }
     val reencode = classification?.takeIf { transcodeMark && it.needsVideoTranscode }
     val blocked = reencode != null && policy.blocking
+    val defaultContainer = if (onElevatedSurface) Color.White.copy(alpha = 0.06f) else JellioBgElevated
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
@@ -656,13 +818,21 @@ internal fun SourceCard(
                 isActive -> JellioSecondary.copy(alpha = 0.22f)
                 blocked -> Color(0xFFEF5350).copy(alpha = 0.12f)
                 reencode != null -> Color(0xFFFFD54F).copy(alpha = 0.08f)
-                else -> JellioBgElevated
+                else -> defaultContainer
             },
             contentColor = if (blocked) JellioText.copy(alpha = 0.6f) else JellioText,
             focusedContainerColor = Color.White.copy(alpha = 0.28f),
             focusedContentColor = JellioText,
         ),
         border = ClickableSurfaceDefaults.border(
+            border = if (onElevatedSurface) {
+                Border(
+                    border = BorderStroke(1.dp, if (isActive) JellioSecondary.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.10f)),
+                    shape = RoundedCornerShape(12.dp),
+                )
+            } else {
+                Border.None
+            },
             focusedBorder = androidx.tv.material3.Border(
                 border = androidx.compose.foundation.BorderStroke(2.5.dp, Color.White),
                 shape = RoundedCornerShape(12.dp)

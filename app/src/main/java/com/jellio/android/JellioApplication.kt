@@ -33,6 +33,18 @@ interface ImageLoaderEntryPoint {
 
 @HiltAndroidApp
 class JellioApplication : Application(), SingletonImageLoader.Factory {
+    @Volatile
+    private var cachedHostPair: Pair<String, String?>? = null
+
+    private fun resolveServerHost(serverAddress: String?): String? {
+        if (serverAddress.isNullOrEmpty()) return null
+        val cached = cachedHostPair
+        if (cached != null && cached.first == serverAddress) return cached.second
+        val parsed = runCatching { java.net.URI(serverAddress).host }.getOrNull()
+        cachedHostPair = serverAddress to parsed
+        return parsed
+    }
+
     override fun onCreate() {
         super.onCreate()
         CrashReporter.install(this)
@@ -54,8 +66,7 @@ class JellioApplication : Application(), SingletonImageLoader.Factory {
                 val original = chain.request()
                 val token = sessionManager.getCachedAccessToken()
                 val deviceId = sessionManager.getCachedDeviceId()
-                val serverHost = sessionManager.getCachedServerAddress()
-                    ?.let { runCatching { java.net.URI(it).host }.getOrNull() }
+                val serverHost = resolveServerHost(sessionManager.getCachedServerAddress())
                 val requestBuilder = original.newBuilder()
 
                 val isServerHost = serverHost == null || original.url.host.equals(serverHost, ignoreCase = true)
@@ -67,8 +78,7 @@ class JellioApplication : Application(), SingletonImageLoader.Factory {
             }
             .addNetworkInterceptor { chain ->
                 val req = chain.request()
-                val serverHost = sessionManager.getCachedServerAddress()
-                    ?.let { runCatching { java.net.URI(it).host }.getOrNull() }
+                val serverHost = resolveServerHost(sessionManager.getCachedServerAddress())
                 if (serverHost != null && !req.url.host.equals(serverHost, ignoreCase = true)) {
                     chain.proceed(
                         req.newBuilder()
@@ -110,7 +120,7 @@ class JellioApplication : Application(), SingletonImageLoader.Factory {
                     .maxSizeBytes(250L * 1024 * 1024)
                     .build()
             }
-            .crossfade(false)
+            .crossfade(180)
             .precision(coil3.size.Precision.INEXACT)
             .bitmapFactoryMaxParallelism(4)
             .apply { if (BuildConfig.DEBUG) logger(DebugLogger()) }

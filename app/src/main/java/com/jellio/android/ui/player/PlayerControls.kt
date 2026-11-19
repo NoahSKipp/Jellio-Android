@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.tv.material3.Border
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
@@ -185,6 +186,7 @@ internal fun PlayerControls(
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(JellioBg.copy(alpha = 0.78f), Color.Transparent)))
+                .displayCutoutPadding()
                 .padding(horizontal = horizontalPad, vertical = if (isCompact) 16.dp else 24.dp),
         ) {
             TransportButton(
@@ -263,9 +265,12 @@ internal fun PlayerControls(
         }
 
         Column(
-            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().background(
-                Brush.verticalGradient(listOf(Color.Transparent, JellioBg)),
-            ).padding(horizontal = horizontalPad, vertical = if (isCompact) 18.dp else 32.dp),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Transparent, JellioBg)))
+                .displayCutoutPadding()
+                .padding(horizontal = horizontalPad, vertical = if (isCompact) 18.dp else 32.dp),
         ) {
             Text(
                 text = title,

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.layout.ContentScale
@@ -209,10 +210,12 @@ fun SettingsScreen(
     val contentFocus = remember { FocusRequester() }
     var contentHasFocus by remember { mutableStateOf(false) }
     var focusSeen by remember { mutableStateOf(false) }
+    val isCompact = com.jellio.android.ui.common.isCompactScreen()
     // Settings opens on its first menu section, so the d-pad starts where the
     // menu is. Another screen closing at the same moment can take focus back,
     // so it is asked again once if nothing in here has had it yet.
-    LaunchedEffect(Unit) {
+    LaunchedEffect(isCompact) {
+        if (isCompact) return@LaunchedEffect
         repeat(3) {
             var granted = false
             repeat(25) {
@@ -225,10 +228,29 @@ fun SettingsScreen(
             if (focusSeen) return@LaunchedEffect
         }
     }
-    val isCompact = com.jellio.android.ui.common.isCompactScreen()
     if (isCompact) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(top = 16.dp, start = 16.dp, end = 16.dp)) {
-            Text(text = string("settings_title"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
+        val backDispatcher = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(top = 12.dp, start = 16.dp, end = 16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            ) {
+                androidx.compose.material3.IconButton(
+                    onClick = { backDispatcher?.onBackPressed() },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(JellioBgElevated),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = string("action_back"),
+                        tint = JellioText,
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(text = string("settings_title"), style = MaterialTheme.typography.titleLarge)
+            }
             androidx.compose.foundation.lazy.LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),

@@ -41,7 +41,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -472,6 +474,7 @@ internal fun PlayerSurface(
     var interaction by remember { mutableStateOf(0) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var playbackSpeed by remember { mutableStateOf(1f) }
+    var isHoldSpeed2x by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
     var showSleepMenu by remember { mutableStateOf(false) }
     var showAudioMenu by remember { mutableStateOf(false) }
@@ -503,8 +506,9 @@ internal fun PlayerSurface(
     var nearEndUpNextDismissed by remember(currentItemId) { mutableStateOf(false) }
     var nearEndUpNextAnnounced by remember(currentItemId) { mutableStateOf(false) }
 
-    LaunchedEffect(player, playbackSpeed) {
-        player.setPlaybackSpeed(playbackSpeed)
+    val effectivePlaybackSpeed = if (isHoldSpeed2x) 2.0f else playbackSpeed
+    LaunchedEffect(player, effectivePlaybackSpeed) {
+        player.setPlaybackSpeed(effectivePlaybackSpeed)
     }
 
     val bufferScope = rememberCoroutineScope()
@@ -1011,12 +1015,57 @@ internal fun PlayerSurface(
         }
     }
 
+    val haptic = LocalHapticFeedback.current
+    val holdSpeedScope = rememberCoroutineScope()
+    val currentIsPlaying by androidx.compose.runtime.rememberUpdatedState(isPlaying)
+    val currentSyncPlaylistItemId by androidx.compose.runtime.rememberUpdatedState(syncPlaylistItemId)
+    val currentIsHoldSpeed2x by androidx.compose.runtime.rememberUpdatedState(isHoldSpeed2x)
+    var suppressNextTap by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(menuOpen, showEndScreen, upNextCardVisible, showResumePrompt, catchUpOpen, pauseOverlayVisible, isLocked, isInPipMode) {
                 detectTapGestures(
+                    onPress = {
+                        if (
+                            !isInPipMode &&
+                            !isLocked &&
+                            !menuOpen &&
+                            !showEndScreen &&
+                            !upNextCardVisible &&
+                            !showResumePrompt &&
+                            !catchUpOpen &&
+                            !pauseOverlayVisible &&
+                            currentSyncPlaylistItemId == null &&
+                            currentIsPlaying
+                        ) {
+                            val holdJob = holdSpeedScope.launch {
+                                delay(350L)
+                                if (activeSwipeHud == null) {
+                                    isHoldSpeed2x = true
+                                    suppressNextTap = true
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+                            }
+                            val released = try {
+                                tryAwaitRelease()
+                            } finally {
+                                holdJob.cancel()
+                                if (isHoldSpeed2x) {
+                                    isHoldSpeed2x = false
+                                }
+                            }
+                            if (!released) {
+                                suppressNextTap = false
+                            }
+                        }
+                    },
                     onTap = {
+                        if (suppressNextTap) {
+                            suppressNextTap = false
+                            return@detectTapGestures
+                        }
                         if (isInPipMode) return@detectTapGestures
                         interaction++
                         if (isLocked) {
@@ -1036,6 +1085,7 @@ internal fun PlayerSurface(
                         if (isInPipMode || isLocked) return@detectTapGestures
                         interaction++
                         if (!menuOpen && !showEndScreen && !upNextCardVisible && !showResumePrompt && !catchUpOpen) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             val forward = offset.x > size.width / 2f
                             val delta = if (forward) SEEK_STEP_MS else -SEEK_STEP_MS
                             val base = seekFlash?.target ?: positionMs
@@ -1056,6 +1106,11 @@ internal fun PlayerSurface(
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
+                        if (currentIsHoldSpeed2x) {
+                            dragZone = 0
+                            pinchAccum = 1f
+                            continue
+                        }
                         val pressed = event.changes.filter { it.pressed }
                         if (pressed.isEmpty()) {
                             dragZone = 0
@@ -1361,6 +1416,23 @@ internal fun PlayerSurface(
                     percent = swipeHudPercent,
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 36.dp),
                 )
+            }
+
+            if (isHoldSpeed2x) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 36.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(999.dp))
+                        .background(com.jellio.android.ui.theme.JellioBgElevated.copy(alpha = 0.88f))
+                        .padding(horizontal = 18.dp, vertical = 8.dp),
+                ) {
+                    androidx.tv.material3.Text(
+                        text = "2x Speed >>",
+                        color = com.jellio.android.ui.theme.JellioSecondary,
+                        style = androidx.tv.material3.MaterialTheme.typography.labelLarge,
+                    )
+                }
             }
 
             // The quick-jump badge: shown for a moment after the last press,

@@ -1,5 +1,6 @@
 package com.jellio.android.ui.audiobook
 
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -45,7 +46,7 @@ import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -103,6 +104,7 @@ import com.jellio.android.ui.theme.JellioSecondary
 import com.jellio.android.ui.theme.JellioText
 import com.jellio.android.ui.theme.JellioTextSecondary
 import com.jellio.android.ui.theme.JellioTextTertiary
+import kotlinx.coroutines.flow.StateFlow
 
 private val SPEED_OPTIONS = listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 private val SLEEP_PRESETS = listOf(
@@ -140,27 +142,42 @@ fun AudiobookScreen(
             .fillMaxSize()
             .background(JellioBg),
     ) {
-        // Subtle ambient cover backdrop
+        // Subtle ambient cover backdrop (API < 31 uses a darker scrim since Modifier.blur is a no-op)
         if (!state.coverUrl.isNullOrBlank()) {
+            val supportsBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
             AsyncImage(
                 model = state.coverUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(48.dp)
-                    .alpha(0.22f),
+                modifier = if (supportsBlur) {
+                    Modifier
+                        .fillMaxSize()
+                        .blur(48.dp)
+                        .alpha(0.22f)
+                } else {
+                    Modifier
+                        .fillMaxSize()
+                        .alpha(0.10f)
+                },
             )
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(
-                                JellioBg.copy(alpha = 0.55f),
-                                JellioBg.copy(alpha = 0.88f),
-                                JellioBg,
-                            ),
+                            colors = if (supportsBlur) {
+                                listOf(
+                                    JellioBg.copy(alpha = 0.55f),
+                                    JellioBg.copy(alpha = 0.88f),
+                                    JellioBg,
+                                )
+                            } else {
+                                listOf(
+                                    JellioBg.copy(alpha = 0.78f),
+                                    JellioBg.copy(alpha = 0.94f),
+                                    JellioBg,
+                                )
+                            },
                         ),
                     ),
             )
@@ -382,48 +399,22 @@ fun AudiobookScreen(
 
                         // Overall Book Timeline Scrubber with chapter boundary ticks & bookmarks
                         BookTimelineScrubber(
-                            currentPositionMs = state.currentPositionMs,
+                            positionFlow = controller.positionMs,
                             totalDurationMs = state.totalDurationMs,
                             chapters = state.chapters,
                             bookmarks = state.bookmarks,
                             onSeek = { controller.seekToBookPositionMs(it) },
                         )
 
-                        // Current Chapter Progress indicator
+                        // Current Chapter Progress indicator (isolated leaf composable)
                         if (currentChapter != null && currentChapter.DurationSeconds > 0.0) {
-                            val chStartMs = (currentChapter.StartSeconds * 1000.0).toLong()
-                            val chDurMs = (currentChapter.DurationSeconds * 1000.0).toLong().coerceAtLeast(1L)
-                            val chElapsedMs = (state.currentPositionMs - chStartMs).coerceIn(0L, chDurMs)
-                            val chFraction = (chElapsedMs.toFloat() / chDurMs.toFloat()).coerceIn(0f, 1f)
-
                             Spacer(modifier = Modifier.height(10.dp))
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Row(
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Text(
-                                        text = "Chapter ${state.currentChapterIndex + 1} of ${state.chapters.size}",
-                                        color = JellioTextTertiary,
-                                        fontSize = 11.sp,
-                                    )
-                                    Text(
-                                        text = "${formatPlaybackTime(chElapsedMs)} / ${formatPlaybackTime(chDurMs)}",
-                                        color = JellioTextTertiary,
-                                        fontSize = 11.sp,
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                LinearProgressIndicator(
-                                    progress = { chFraction },
-                                    color = JellioSecondary.copy(alpha = 0.7f),
-                                    trackColor = Color.White.copy(alpha = 0.12f),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(3.dp)
-                                        .clip(RoundedCornerShape(2.dp)),
-                                )
-                            }
+                            ChapterProgressSection(
+                                positionFlow = controller.positionMs,
+                                currentChapter = currentChapter,
+                                currentChapterIndex = state.currentChapterIndex,
+                                totalChapters = state.chapters.size,
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(22.dp))
@@ -453,7 +444,7 @@ fun AudiobookScreen(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = Icons.Filled.Replay10,
+                                        imageVector = Icons.Filled.Replay,
                                         contentDescription = "Skip back 15 seconds",
                                         tint = JellioText,
                                         modifier = Modifier.size(34.dp),
@@ -461,8 +452,9 @@ fun AudiobookScreen(
                                     Text(
                                         text = "15",
                                         color = JellioText,
-                                        fontSize = 9.sp,
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(top = 3.dp),
                                     )
                                 }
                             }
@@ -521,11 +513,6 @@ fun AudiobookScreen(
                         Spacer(modifier = Modifier.height(24.dp))
 
                         // Secondary Action Bar: Speed / Sleep Timer / Chapters / Bookmark
-                        val currentPosSec = (state.currentPositionMs / 1000L)
-                        val hasNearbyBookmark = state.bookmarks.any { bm ->
-                            val bmSec = AudiobookPlayerController.parseBookmarkSeconds(bm.Locator)
-                            bmSec >= 0L && kotlin.math.abs(bmSec - currentPosSec) <= 5L
-                        }
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -564,33 +551,11 @@ fun AudiobookScreen(
                                 modifier = Modifier.weight(1.1f),
                             )
 
-                            Surface(
-                                onClick = {
-                                    controller.addBookmark()
-                                },
-                                color = if (hasNearbyBookmark) JellioSecondary else JellioBgElevated,
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .border(
-                                        width = 1.dp,
-                                        color = if (hasNearbyBookmark || state.bookmarks.isNotEmpty()) JellioSecondary else JellioBorder,
-                                        shape = RoundedCornerShape(14.dp),
-                                    ),
-                            ) {
-                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                    Icon(
-                                        imageVector = if (hasNearbyBookmark || state.bookmarks.isNotEmpty()) {
-                                            Icons.Filled.Bookmark
-                                        } else {
-                                            Icons.Filled.BookmarkBorder
-                                        },
-                                        contentDescription = "Add bookmark",
-                                        tint = if (hasNearbyBookmark) Color(0xFF0D0D0D) else if (state.bookmarks.isNotEmpty()) JellioSecondary else JellioTextSecondary,
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
-                            }
+                            AudiobookBookmarkButton(
+                                positionFlow = controller.positionMs,
+                                bookmarks = state.bookmarks,
+                                onAddBookmark = { controller.addBookmark() },
+                            )
                         }
 
                         if (state.bookmarks.isNotEmpty()) {
@@ -677,13 +642,95 @@ fun AudiobookScreen(
 }
 
 @Composable
+private fun ChapterProgressSection(
+    positionFlow: StateFlow<Long>,
+    currentChapter: AudiobookChapterDto,
+    currentChapterIndex: Int,
+    totalChapters: Int,
+) {
+    val currentPositionMs by positionFlow.collectAsState()
+    val chStartMs = (currentChapter.StartSeconds * 1000.0).toLong()
+    val chDurMs = (currentChapter.DurationSeconds * 1000.0).toLong().coerceAtLeast(1L)
+    val chElapsedMs = (currentPositionMs - chStartMs).coerceIn(0L, chDurMs)
+    val chFraction = (chElapsedMs.toFloat() / chDurMs.toFloat()).coerceIn(0f, 1f)
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = "Chapter ${currentChapterIndex + 1} of $totalChapters",
+                color = JellioTextTertiary,
+                fontSize = 11.sp,
+            )
+            Text(
+                text = "${formatPlaybackTime(chElapsedMs)} / ${formatPlaybackTime(chDurMs)}",
+                color = JellioTextTertiary,
+                fontSize = 11.sp,
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        LinearProgressIndicator(
+            progress = { chFraction },
+            color = JellioSecondary.copy(alpha = 0.7f),
+            trackColor = Color.White.copy(alpha = 0.12f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp)),
+        )
+    }
+}
+
+@Composable
+private fun AudiobookBookmarkButton(
+    positionFlow: StateFlow<Long>,
+    bookmarks: List<AnnotationDto>,
+    onAddBookmark: () -> Unit,
+) {
+    val currentPositionMs by positionFlow.collectAsState()
+    val currentPosSec = currentPositionMs / 1000L
+    val hasNearbyBookmark = bookmarks.any { bm ->
+        val bmSec = AudiobookPlayerController.parseBookmarkSeconds(bm.Locator)
+        bmSec >= 0L && kotlin.math.abs(bmSec - currentPosSec) <= 5L
+    }
+    Surface(
+        onClick = onAddBookmark,
+        color = if (hasNearbyBookmark) JellioSecondary else JellioBgElevated,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier
+            .size(46.dp)
+            .border(
+                width = 1.dp,
+                color = if (hasNearbyBookmark || bookmarks.isNotEmpty()) JellioSecondary else JellioBorder,
+                shape = RoundedCornerShape(14.dp),
+            ),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Icon(
+                imageVector = if (hasNearbyBookmark || bookmarks.isNotEmpty()) {
+                    Icons.Filled.Bookmark
+                } else {
+                    Icons.Filled.BookmarkBorder
+                },
+                contentDescription = "Add bookmark",
+                tint = if (hasNearbyBookmark) Color(0xFF0D0D0D) else if (bookmarks.isNotEmpty()) JellioSecondary else JellioTextSecondary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun BookTimelineScrubber(
-    currentPositionMs: Long,
+    positionFlow: StateFlow<Long>,
     totalDurationMs: Long,
     chapters: List<AudiobookChapterDto>,
     bookmarks: List<AnnotationDto>,
     onSeek: (Long) -> Unit,
 ) {
+    val currentPositionMs by positionFlow.collectAsState()
     var dragging by remember { mutableStateOf(false) }
     var dragRatio by remember { mutableFloatStateOf(0f) }
 

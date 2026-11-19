@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,7 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +50,7 @@ import com.jellio.android.ui.theme.JellioText
 import com.jellio.android.ui.theme.JellioTextSecondary
 
 val MobileBottomNavHeight = 82.dp
+val LocalBottomBarPadding = compositionLocalOf { 0.dp }
 private val FloatingPillShape = RoundedCornerShape(999.dp)
 
 /**
@@ -64,6 +68,7 @@ fun MobileBottomNav(
     profileBadge: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val haptic = LocalHapticFeedback.current
     val home = items.firstOrNull { it is JellioRoute.Home } ?: JellioRoute.Home()
     val search = items.firstOrNull { it is JellioRoute.Search } ?: JellioRoute.Search
     val bookshelf = items.firstOrNull { it is JellioRoute.Bookshelf } ?: JellioRoute.Bookshelf("ebook")
@@ -92,23 +97,23 @@ fun MobileBottomNav(
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Surface(
-            color = Color.Transparent,
+            color = Color(0xF2121216),
             shape = FloatingPillShape,
-            shadowElevation = 18.dp,
+            shadowElevation = 12.dp,
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 520.dp)
                 .height(62.dp)
-                .clip(FloatingPillShape)
-                .background(
+                .border(
+                    width = 0.75.dp,
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            JellioBgElevated.copy(alpha = 0.95f),
-                            Color(0xFF0E0E10).copy(alpha = 0.97f),
+                            Color.White.copy(alpha = 0.16f),
+                            JellioBorder.copy(alpha = 0.55f),
                         ),
                     ),
-                )
-                .border(1.dp, JellioBorder.copy(alpha = 0.85f), FloatingPillShape),
+                    shape = FloatingPillShape,
+                ),
         ) {
             Row(
                 modifier = Modifier
@@ -121,14 +126,20 @@ fun MobileBottomNav(
                     route = home,
                     isSelected = selected is JellioRoute.Home,
                     enabled = enabled,
-                    onClick = { onSelect(home) },
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSelect(home)
+                    },
                     modifier = Modifier.weight(1f),
                 )
                 BottomNavPillTab(
                     route = search,
                     isSelected = selected is JellioRoute.Search,
                     enabled = enabled,
-                    onClick = { onSelect(search) },
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSelect(search)
+                    },
                     modifier = Modifier.weight(1f),
                 )
                 Box(
@@ -155,7 +166,10 @@ fun MobileBottomNav(
                                     Modifier
                                 },
                             )
-                            .clickable(enabled = enabled) { librariesMenuOpen = true }
+                            .clickable(enabled = enabled) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                librariesMenuOpen = true
+                            }
                             .padding(vertical = 5.dp, horizontal = 2.dp),
                     ) {
                         Icon(
@@ -180,7 +194,10 @@ fun MobileBottomNav(
                     labelOverride = "Reader",
                     isSelected = selected is JellioRoute.Bookshelf || selected is JellioRoute.Vocab,
                     enabled = enabled,
-                    onClick = { onSelect(bookshelf) },
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSelect(bookshelf)
+                    },
                     modifier = Modifier.weight(1f),
                 )
                 BottomNavPillTab(
@@ -190,7 +207,10 @@ fun MobileBottomNav(
                     badge = profileBadge,
                     isSelected = selected is JellioRoute.Profile && selected.userId == null,
                     enabled = enabled,
-                    onClick = { onSelect(profile) },
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSelect(profile)
+                    },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -202,6 +222,7 @@ fun MobileBottomNav(
             libraries = mediaLibraries,
             selected = selected,
             onSelect = { libRoute ->
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 librariesMenuOpen = false
                 onSelect(libRoute)
             },

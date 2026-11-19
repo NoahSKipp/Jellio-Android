@@ -1,5 +1,7 @@
 package com.jellio.android.ui.home
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -11,7 +13,9 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +25,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
@@ -29,8 +35,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,11 +48,14 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -67,6 +77,7 @@ data class ShowcaseInfo(val item: BaseItemDto, val series: BaseItemDto?)
 
 private const val TICKS_PER_MINUTE = 10_000_000L * 60L
 private const val SHOWCASE_SETTLE_MS = 350L
+private const val HERO_AUTO_ADVANCE_MS = 8_000L
 
 // Top of Home: the focused card's backdrop on the right, fading into the
 // background towards the left where its logo, details and overview sit.
@@ -78,8 +89,22 @@ fun HomeItemShowcase(
     modifier: Modifier = Modifier,
     onClick: ((BaseItemDto) -> Unit)? = null,
     onPlay: ((BaseItemDto) -> Unit)? = null,
+    heroItems: List<BaseItemDto> = emptyList(),
+    loadInfo: (suspend (BaseItemDto) -> ShowcaseInfo)? = null,
 ) {
     val isCompactPortrait = com.jellio.android.ui.common.rememberWindowLayoutMode() == com.jellio.android.ui.common.WindowLayoutMode.COMPACT_PORTRAIT
+    if (isCompactPortrait && heroItems.isNotEmpty()) {
+        MobileHeroCarousel(
+            items = heroItems,
+            imageUrl = imageUrl,
+            loadInfo = loadInfo,
+            onClick = onClick,
+            onPlay = onPlay,
+            modifier = modifier,
+        )
+        return
+    }
+    val haptics = LocalHapticFeedback.current
     val clickModifier = if (onClick != null && item != null) {
         Modifier.clickable { onClick(item) }
     } else {
@@ -119,9 +144,11 @@ fun HomeItemShowcase(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            0f to JellioBg.copy(alpha = 0.22f),
-                            0.35f to JellioBg.copy(alpha = 0.30f),
-                            0.68f to JellioBg.copy(alpha = 0.84f),
+                            0f to JellioBg.copy(alpha = 0.35f),
+                            0.18f to Color.Transparent,
+                            0.44f to JellioBg.copy(alpha = 0.28f),
+                            0.70f to JellioBg.copy(alpha = 0.84f),
+                            0.92f to JellioBg.copy(alpha = 0.96f),
                             1f to JellioBg,
                         ),
                     ),
@@ -134,8 +161,8 @@ fun HomeItemShowcase(
             targetState = Triple(details, series, isEpisode),
             contentKey = { it.first.Id },
             transitionSpec = {
-                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(260)) togetherWith
-                    androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180))
+                androidx.compose.animation.fadeIn(tween(260)) togetherWith
+                    androidx.compose.animation.fadeOut(tween(180))
             },
             modifier = Modifier
                 // Sits Nuvio's 16dp above the rows, which start HeaderOverlap above this box's bottom.
@@ -195,63 +222,253 @@ fun HomeItemShowcase(
                 )
             }
             if (isCompactPortrait && (onPlay != null || onClick != null)) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                HeroCtaRow(
+                    details = details,
+                    onPlay = onPlay,
+                    onClick = onClick,
+                    haptics = haptics,
+                    centered = false,
                     modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+        }
+    }
+}
+
+@Composable
+private fun MobileHeroCarousel(
+    items: List<BaseItemDto>,
+    imageUrl: (BaseItemDto, String, Int) -> String,
+    loadInfo: (suspend (BaseItemDto) -> ShowcaseInfo)?,
+    onClick: ((BaseItemDto) -> Unit)?,
+    onPlay: ((BaseItemDto) -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    if (items.isEmpty()) return
+    val pagerState = rememberPagerState(pageCount = { items.size })
+    val haptics = LocalHapticFeedback.current
+    val infoCache = remember { mutableStateMapOf<String, ShowcaseInfo>() }
+
+    // Enrich the active hero slide if its overview or series info is missing.
+    LaunchedEffect(pagerState.currentPage, items, loadInfo) {
+        val loader = loadInfo ?: return@LaunchedEffect
+        val current = items.getOrNull(pagerState.currentPage) ?: return@LaunchedEffect
+        if (!infoCache.containsKey(current.Id) && current.Overview.isNullOrBlank()) {
+            infoCache[current.Id] = loader(current)
+        }
+    }
+
+    // Gently auto-advance every 8 seconds while the user is not dragging.
+    LaunchedEffect(pagerState.currentPage, pagerState.isScrollInProgress, items.size) {
+        if (items.size <= 1 || pagerState.isScrollInProgress) return@LaunchedEffect
+        kotlinx.coroutines.delay(HERO_AUTO_ADVANCE_MS)
+        if (!pagerState.isScrollInProgress) {
+            val nextPage = (pagerState.currentPage + 1) % items.size
+            pagerState.animateScrollToPage(nextPage)
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(JellioBg),
+    ) {
+        HorizontalPager(
+            state = pagerState,
+            key = { index -> items[index].Id },
+            modifier = Modifier.fillMaxSize(),
+        ) { page ->
+            val rawItem = items[page]
+            val cached = infoCache[rawItem.Id]
+            val details = cached?.item ?: rawItem
+            val series = cached?.series
+            val isEpisode = details.Type.equals("Episode", ignoreCase = true) || details.Type.equals("Season", ignoreCase = true)
+            val title = if (isEpisode) details.SeriesName ?: series?.Name ?: details.Name.orEmpty() else details.Name.orEmpty()
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (onClick != null) Modifier.clickable { onClick(details) } else Modifier),
+            ) {
+                ShowcaseBackdrop(
+                    item = details,
+                    series = series,
+                    imageUrl = imageUrl,
+                    applySideMask = false,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                // Smooth multi-stop vertical scrim fading seamlessly into JellioBg
+                // without an offscreen FBO.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0f to JellioBg.copy(alpha = 0.35f),
+                                0.18f to Color.Transparent,
+                                0.42f to JellioBg.copy(alpha = 0.28f),
+                                0.68f to JellioBg.copy(alpha = 0.82f),
+                                0.90f to JellioBg.copy(alpha = 0.96f),
+                                1f to JellioBg,
+                            ),
+                        ),
+                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                        .padding(
+                            start = 20.dp,
+                            end = 20.dp,
+                            top = 12.dp,
+                            bottom = if (items.size > 1) 28.dp else 16.dp,
+                        ),
                 ) {
-                    if (onPlay != null) {
-                        androidx.compose.material3.Button(
-                            onClick = { onPlay(details) },
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = Color.White,
-                                contentColor = Color(0xFF0D0D0D),
-                            ),
-                            shape = RoundedCornerShape(999.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 8.dp),
-                        ) {
-                            androidx.compose.material3.Icon(
-                                imageVector = Icons.Filled.PlayArrow,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            androidx.compose.foundation.layout.Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = com.jellio.android.data.i18n.Strings.get("action_play"),
-                                color = Color(0xFF0D0D0D),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
+                    ShowcaseLogo(
+                        item = details,
+                        series = series,
+                        title = title,
+                        imageUrl = imageUrl,
+                        isCompactPortrait = true,
+                        centered = true,
+                    )
+                    ShowcaseMetadata(
+                        details = details,
+                        series = series,
+                        isEpisode = isEpisode,
+                        isCompactPortrait = true,
+                        centered = true,
+                    )
+                    val overview = details.Overview?.takeIf { it.isNotBlank() } ?: series?.Overview?.takeIf { it.isNotBlank() }
+                    if (overview != null) {
+                        Text(
+                            text = overview,
+                            color = JellioText.copy(alpha = 0.84f),
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.widthIn(max = 360.dp),
+                        )
                     }
-                    if (onClick != null) {
-                        androidx.compose.material3.OutlinedButton(
-                            onClick = { onClick(details) },
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.28f)),
-                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                                containerColor = Color.White.copy(alpha = 0.10f),
-                                contentColor = JellioText,
-                            ),
-                            shape = RoundedCornerShape(999.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        ) {
-                            androidx.compose.material3.Icon(
-                                imageVector = Icons.Filled.Info,
-                                contentDescription = null,
-                                tint = JellioText,
-                                modifier = Modifier.size(16.dp),
-                            )
-                            androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = com.jellio.android.data.i18n.Strings.get("details_title"),
-                                color = JellioText,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
+                    if (onPlay != null || onClick != null) {
+                        HeroCtaRow(
+                            details = details,
+                            onPlay = onPlay,
+                            onClick = onClick,
+                            haptics = haptics,
+                            centered = true,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
                     }
                 }
             }
         }
+
+        if (items.size > 1) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 8.dp),
+            ) {
+                repeat(items.size) { index ->
+                    val selected = pagerState.currentPage == index
+                    val dotWidth by animateDpAsState(
+                        targetValue = if (selected) 20.dp else 6.dp,
+                        animationSpec = tween(durationMillis = 220),
+                        label = "heroIndicatorWidth",
+                    )
+                    Box(
+                        modifier = Modifier
+                            .height(6.dp)
+                            .width(dotWidth)
+                            .background(
+                                color = if (selected) Color.White else Color.White.copy(alpha = 0.35f),
+                                shape = RoundedCornerShape(999.dp),
+                            ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroCtaRow(
+    details: BaseItemDto,
+    onPlay: ((BaseItemDto) -> Unit)?,
+    onClick: ((BaseItemDto) -> Unit)?,
+    haptics: androidx.compose.ui.hapticfeedback.HapticFeedback,
+    centered: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(10.dp, if (centered) Alignment.CenterHorizontally else Alignment.Start),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier,
+    ) {
+        if (onPlay != null) {
+            androidx.compose.material3.Button(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onPlay(details)
+                },
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF0D0D0D),
+                ),
+                shape = RoundedCornerShape(999.dp),
+                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp),
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    text = com.jellio.android.data.i18n.Strings.get("action_play"),
+                    color = Color(0xFF0D0D0D),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+        if (onClick != null) {
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick(details)
+                },
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.30f)),
+                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.White.copy(alpha = 0.14f),
+                    contentColor = JellioText,
+                ),
+                shape = RoundedCornerShape(999.dp),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = JellioText,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = com.jellio.android.data.i18n.Strings.get("details_title"),
+                    color = JellioText,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
     }
 }
@@ -268,27 +485,23 @@ private fun ShowcaseBackdrop(
     var index by remember(candidates) { mutableIntStateOf(0) }
     val url = candidates.getOrNull(index) ?: return
     val context = LocalContext.current
-    BoxWithConstraints(
-        // The image fades out by transparency (a mask), not by painting the
-        // background colour over it, so it blends into whatever is beneath.
-        modifier = modifier
+    // On portrait mobile (!applySideMask), skip the offscreen FBO and DstIn mask
+    // so scrolling stays at 60fps; the caller paints a vertical scrim into JellioBg.
+    val maskModifier = if (applySideMask) {
+        Modifier
             .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
             .drawWithCache {
                 if (size.width <= 0f || size.height <= 0f) {
                     return@drawWithCache onDrawWithContent { drawContent() }
                 }
-                val sideMask = if (applySideMask) {
-                    Brush.horizontalGradient(
-                        0f to Color.Transparent,
-                        0.18f to Color.Black.copy(alpha = 0.1f),
-                        0.42f to Color.Black.copy(alpha = 0.45f),
-                        0.68f to Color.Black.copy(alpha = 0.85f),
-                        1f to Color.Black,
-                        endX = size.width * 0.7f,
-                    )
-                } else {
-                    null
-                }
+                val sideMask = Brush.horizontalGradient(
+                    0f to Color.Transparent,
+                    0.18f to Color.Black.copy(alpha = 0.1f),
+                    0.42f to Color.Black.copy(alpha = 0.45f),
+                    0.68f to Color.Black.copy(alpha = 0.85f),
+                    1f to Color.Black,
+                    endX = size.width * 0.7f,
+                )
                 val bottomMask = Brush.verticalGradient(
                     0f to Color.Black,
                     0.55f to Color.Black,
@@ -297,12 +510,15 @@ private fun ShowcaseBackdrop(
                 )
                 onDrawWithContent {
                     drawContent()
-                    if (sideMask != null) {
-                        drawRect(sideMask, blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
-                    }
+                    drawRect(sideMask, blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
                     drawRect(bottomMask, blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
                 }
-            },
+            }
+    } else {
+        Modifier
+    }
+    BoxWithConstraints(
+        modifier = modifier.then(maskModifier),
     ) {
         val density = LocalDensity.current
         val widthPx = with(density) { maxWidth.roundToPx() }.coerceAtLeast(1)
@@ -333,6 +549,7 @@ private fun ShowcaseLogo(
     title: String,
     imageUrl: (BaseItemDto, String, Int) -> String,
     isCompactPortrait: Boolean = false,
+    centered: Boolean = false,
 ) {
     val candidates = remember(item.Id, series?.Id) { posterLogoCandidates(item, imageUrl, 1200, series = series) }
     var index by remember(candidates) { mutableIntStateOf(0) }
@@ -343,13 +560,14 @@ private fun ShowcaseLogo(
     val maxLogoWidth = if (isCompactPortrait) 260.dp else 340.dp.scaled()
     val logoWidthPx = maxOf(with(density) { maxLogoWidth.roundToPx() }, 1000)
     val logoHeightPx = maxOf(with(density) { maxLogoHeight.roundToPx() } * 3, 300)
+    val boxAlignment = if (centered) Alignment.BottomCenter else Alignment.BottomStart
     if (url != null) {
-        Box(contentAlignment = Alignment.BottomStart, modifier = Modifier.height(maxLogoHeight)) {
+        Box(contentAlignment = boxAlignment, modifier = Modifier.height(maxLogoHeight)) {
             AsyncImage(
                 model = remember(url, logoWidthPx, logoHeightPx) { sizedImageRequest(context, url, logoWidthPx, logoHeightPx) },
                 contentDescription = title,
                 contentScale = ContentScale.Fit,
-                alignment = Alignment.BottomStart,
+                alignment = boxAlignment,
                 onError = { index += 1 },
                 modifier = Modifier
                     .fillMaxHeight()
@@ -360,11 +578,12 @@ private fun ShowcaseLogo(
         Text(
             text = title,
             color = JellioText,
-            fontSize = if (isCompactPortrait) 24.sp else 30.sp,
-            lineHeight = if (isCompactPortrait) 28.sp else 34.sp,
+            fontSize = if (isCompactPortrait) 26.sp else 30.sp,
+            lineHeight = if (isCompactPortrait) 30.sp else 34.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
+            textAlign = if (centered) TextAlign.Center else TextAlign.Start,
         )
     }
 }
@@ -378,6 +597,7 @@ private fun ShowcaseMetadata(
     series: BaseItemDto?,
     isEpisode: Boolean,
     isCompactPortrait: Boolean = false,
+    centered: Boolean = false,
 ) {
     val episodeHeading = remember(details, isEpisode) {
         if (!isEpisode) return@remember null
@@ -392,32 +612,57 @@ private fun ShowcaseMetadata(
     }
     val parts = remember(details, series, isCompactPortrait, com.jellio.android.data.prefs.DisplayPreferences.displayLanguage) {
         buildList {
-            if (!isCompactPortrait && isEpisode) {
-                val label = episodeLabel(details)
-                if (label.isNotEmpty()) add(label)
-                details.Name?.takeIf { it.isNotBlank() && label.isNotEmpty() }?.let { add(com.jellio.android.data.i18n.episodeDisplayName(it, details.IndexNumber)) }
-            } else if (!isEpisode) {
-                when (details.Type?.lowercase(Locale.US)) {
-                    "movie" -> add(com.jellio.android.data.i18n.Strings.get("search_filter_movies"))
-                    "series" -> add(com.jellio.android.data.i18n.Strings.get("nav_shows"))
-                    "boxset" -> add(com.jellio.android.data.i18n.Strings.get("detail_collection"))
+            if (isCompactPortrait) {
+                val year = details.ProductionYear?.toString() ?: details.PremiereDate?.take(4)
+                if (!year.isNullOrBlank()) {
+                    val ongoing = !isEpisode && details.Status.equals("Continuing", ignoreCase = true)
+                    add(if (ongoing) "$year-" else year)
                 }
-            }
-            (details.Genres?.firstOrNull() ?: series?.Genres?.firstOrNull())?.takeIf { it.isNotBlank() }?.let { add(com.jellio.android.data.i18n.genreDisplayName(it)) }
-            details.RunTimeTicks?.let { ticks ->
-                val minutes = (ticks / TICKS_PER_MINUTE).toInt()
-                if (minutes > 0) add(com.jellio.android.data.i18n.formatDurationMinutes(minutes))
-            }
-            val year = details.ProductionYear?.toString() ?: details.PremiereDate?.take(4)
-            if (!year.isNullOrBlank()) {
-                val ongoing = !isEpisode && details.Status.equals("Continuing", ignoreCase = true)
-                add(if (ongoing) "$year-" else year)
+                val isSeries = details.Type.equals("Series", ignoreCase = true)
+                val seasonCount = details.ChildCount?.takeIf { isSeries && it > 0 }
+                if (seasonCount != null) {
+                    add(if (seasonCount == 1) "1 Season" else "$seasonCount Seasons")
+                } else {
+                    details.RunTimeTicks?.let { ticks ->
+                        val minutes = (ticks / TICKS_PER_MINUTE).toInt()
+                        if (minutes > 0) add(com.jellio.android.data.i18n.formatDurationMinutes(minutes))
+                    }
+                }
+                val genreList = (details.Genres?.takeIf { it.isNotEmpty() } ?: series?.Genres).orEmpty()
+                genreList.filter { it.isNotBlank() }.take(2).forEach {
+                    add(com.jellio.android.data.i18n.genreDisplayName(it))
+                }
+            } else {
+                if (isEpisode) {
+                    val label = episodeLabel(details)
+                    if (label.isNotEmpty()) add(label)
+                    details.Name?.takeIf { it.isNotBlank() && label.isNotEmpty() }?.let { add(com.jellio.android.data.i18n.episodeDisplayName(it, details.IndexNumber)) }
+                } else {
+                    when (details.Type?.lowercase(Locale.US)) {
+                        "movie" -> add(com.jellio.android.data.i18n.Strings.get("search_filter_movies"))
+                        "series" -> add(com.jellio.android.data.i18n.Strings.get("nav_shows"))
+                        "boxset" -> add(com.jellio.android.data.i18n.Strings.get("detail_collection"))
+                    }
+                }
+                (details.Genres?.firstOrNull() ?: series?.Genres?.firstOrNull())?.takeIf { it.isNotBlank() }?.let { add(com.jellio.android.data.i18n.genreDisplayName(it)) }
+                details.RunTimeTicks?.let { ticks ->
+                    val minutes = (ticks / TICKS_PER_MINUTE).toInt()
+                    if (minutes > 0) add(com.jellio.android.data.i18n.formatDurationMinutes(minutes))
+                }
+                val year = details.ProductionYear?.toString() ?: details.PremiereDate?.take(4)
+                if (!year.isNullOrBlank()) {
+                    val ongoing = !isEpisode && details.Status.equals("Continuing", ignoreCase = true)
+                    add(if (ongoing) "$year-" else year)
+                }
             }
         }
     }
     val rating = details.CommunityRating ?: series?.CommunityRating?.takeIf { isEpisode }
     if (isCompactPortrait) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(
+            horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             if (episodeHeading != null) {
                 Text(
                     text = episodeHeading,
@@ -429,18 +674,18 @@ private fun ShowcaseMetadata(
                 )
             }
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp, if (centered) Alignment.CenterHorizontally else Alignment.Start),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 parts.forEach { part ->
                     Box(
                         modifier = Modifier
-                            .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                            .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
                         Text(
                             text = part,
-                            color = JellioTextSecondary,
+                            color = JellioText.copy(alpha = 0.88f),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1,
@@ -453,8 +698,8 @@ private fun ShowcaseMetadata(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier
-                            .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                            .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
                         TmdbBadge(width = 24.dp, height = 10.dp)
                         Text(
@@ -544,7 +789,20 @@ fun ShowcaseHost(
     modifier: Modifier = Modifier,
     onClick: ((BaseItemDto) -> Unit)? = null,
     onPlay: ((BaseItemDto) -> Unit)? = null,
+    heroItems: List<BaseItemDto> = emptyList(),
 ) {
+    val isCompactPortrait = com.jellio.android.ui.common.rememberWindowLayoutMode() == com.jellio.android.ui.common.WindowLayoutMode.COMPACT_PORTRAIT
+    if (isCompactPortrait && heroItems.isNotEmpty()) {
+        MobileHeroCarousel(
+            items = heroItems,
+            imageUrl = imageUrl,
+            loadInfo = loadInfo,
+            onClick = onClick,
+            onPlay = onPlay,
+            modifier = modifier,
+        )
+        return
+    }
     val active = highlighted.value ?: fallback
     var shownItem by remember { mutableStateOf<BaseItemDto?>(null) }
     var showcaseInfo by remember { mutableStateOf<ShowcaseInfo?>(null) }

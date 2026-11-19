@@ -97,8 +97,8 @@ object ClickableSurfaceDefaults {
         contentColor: Color = tvContentColorFor(containerColor).takeOrElse { TvLocalContentColor.current },
         focusedContainerColor: Color = TvMaterialTheme.colorScheme.inverseSurface,
         focusedContentColor: Color = tvContentColorFor(focusedContainerColor).takeOrElse { contentColor },
-        pressedContainerColor: Color = focusedContainerColor,
-        pressedContentColor: Color = focusedContentColor,
+        pressedContainerColor: Color = if (isCompactScreen()) containerColor else focusedContainerColor,
+        pressedContentColor: Color = if (isCompactScreen()) contentColor else focusedContentColor,
         disabledContainerColor: Color = containerColor.copy(alpha = 0.4f),
         disabledContentColor: Color = contentColor.copy(alpha = 0.4f),
     ): ClickableSurfaceColors = ClickableSurfaceColors(
@@ -237,16 +237,16 @@ object SelectableSurfaceDefaults {
         contentColor: Color = tvContentColorFor(containerColor).takeOrElse { TvLocalContentColor.current },
         focusedContainerColor: Color = TvMaterialTheme.colorScheme.inverseSurface,
         focusedContentColor: Color = tvContentColorFor(focusedContainerColor).takeOrElse { contentColor },
-        pressedContainerColor: Color = focusedContainerColor,
-        pressedContentColor: Color = focusedContentColor,
+        pressedContainerColor: Color = if (isCompactScreen()) containerColor else focusedContainerColor,
+        pressedContentColor: Color = if (isCompactScreen()) contentColor else focusedContentColor,
         selectedContainerColor: Color = TvMaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.5f),
         selectedContentColor: Color = TvMaterialTheme.colorScheme.inverseOnSurface,
         disabledContainerColor: Color = containerColor.copy(alpha = 0.4f),
         disabledContentColor: Color = contentColor.copy(alpha = 0.4f),
         focusedSelectedContainerColor: Color = focusedContainerColor,
         focusedSelectedContentColor: Color = focusedContentColor,
-        pressedSelectedContainerColor: Color = pressedContainerColor,
-        pressedSelectedContentColor: Color = pressedContentColor,
+        pressedSelectedContainerColor: Color = if (isCompactScreen()) selectedContainerColor else pressedContainerColor,
+        pressedSelectedContentColor: Color = if (isCompactScreen()) selectedContentColor else pressedContentColor,
     ): SelectableSurfaceColors = SelectableSurfaceColors(
         containerColor = containerColor,
         contentColor = contentColor,
@@ -388,22 +388,32 @@ fun Surface(
         isFocused -> border.focusedBorder
         else -> border.border
     }
-    val targetScale = when {
-        !enabled && isFocused -> scale.focusedDisabledScale
-        !enabled -> scale.disabledScale
-        isPressed -> scale.pressedScale
-        isFocused -> scale.focusedScale
-        else -> scale.scale
+    val usesScale = scale.scale != 1f ||
+        scale.focusedScale != 1f ||
+        scale.pressedScale != 1f ||
+        scale.disabledScale != 1f ||
+        scale.focusedDisabledScale != 1f
+    val scaleModifier = if (usesScale) {
+        val targetScale = when {
+            !enabled && isFocused -> scale.focusedDisabledScale
+            !enabled -> scale.disabledScale
+            isPressed -> scale.pressedScale
+            isFocused -> scale.focusedScale
+            else -> scale.scale
+        }
+        val animatedScale by animateFloatAsState(targetValue = targetScale, label = "touchSurfaceScale")
+        Modifier.graphicsLayer {
+            scaleX = animatedScale
+            scaleY = animatedScale
+        }
+    } else {
+        Modifier
     }
-    val animatedScale by animateFloatAsState(targetValue = targetScale, label = "touchSurfaceScale")
-    val rippleColor = if (contentColor != Color.Unspecified) contentColor else Color.White
+    val rippleColor = if (colors.contentColor != Color.Unspecified) colors.contentColor else Color.White
 
     Box(
         modifier = modifier
-            .graphicsLayer {
-                scaleX = animatedScale
-                scaleY = animatedScale
-            }
+            .then(scaleModifier)
             .clip(currentShape)
             .background(color = containerColor, shape = currentShape)
             .applySurfaceBorder(currentBorder, currentShape)
@@ -484,25 +494,38 @@ fun Surface(
         selected -> border.selectedBorder
         else -> border.border
     }
-    val targetScale = when {
-        !enabled && isFocused -> scale.focusedDisabledScale
-        !enabled -> scale.disabledScale
-        isPressed && selected -> scale.pressedSelectedScale
-        isPressed -> scale.pressedScale
-        isFocused && selected -> scale.focusedSelectedScale
-        isFocused -> scale.focusedScale
-        selected -> scale.selectedScale
-        else -> scale.scale
+    val usesScale = scale.scale != 1f ||
+        scale.focusedScale != 1f ||
+        scale.pressedScale != 1f ||
+        scale.selectedScale != 1f ||
+        scale.disabledScale != 1f ||
+        scale.focusedSelectedScale != 1f ||
+        scale.focusedDisabledScale != 1f ||
+        scale.pressedSelectedScale != 1f
+    val scaleModifier = if (usesScale) {
+        val targetScale = when {
+            !enabled && isFocused -> scale.focusedDisabledScale
+            !enabled -> scale.disabledScale
+            isPressed && selected -> scale.pressedSelectedScale
+            isPressed -> scale.pressedScale
+            isFocused && selected -> scale.focusedSelectedScale
+            isFocused -> scale.focusedScale
+            selected -> scale.selectedScale
+            else -> scale.scale
+        }
+        val animatedScale by animateFloatAsState(targetValue = targetScale, label = "touchSelectableSurfaceScale")
+        Modifier.graphicsLayer {
+            scaleX = animatedScale
+            scaleY = animatedScale
+        }
+    } else {
+        Modifier
     }
-    val animatedScale by animateFloatAsState(targetValue = targetScale, label = "touchSelectableSurfaceScale")
-    val rippleColor = if (contentColor != Color.Unspecified) contentColor else Color.White
+    val rippleColor = if (colors.contentColor != Color.Unspecified) colors.contentColor else Color.White
 
     Box(
         modifier = modifier
-            .graphicsLayer {
-                scaleX = animatedScale
-                scaleY = animatedScale
-            }
+            .then(scaleModifier)
             .clip(currentShape)
             .background(color = containerColor, shape = currentShape)
             .applySurfaceBorder(currentBorder, currentShape)

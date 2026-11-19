@@ -124,6 +124,9 @@ class AudiobookPlayerController @Inject constructor(
     private val _state = MutableStateFlow(AudiobookPlaybackState())
     val state: StateFlow<AudiobookPlaybackState> = _state.asStateFlow()
 
+    private val _positionMs = MutableStateFlow(0L)
+    val positionMs: StateFlow<Long> = _positionMs.asStateFlow()
+
     private var player: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
     private var playbackService: AudiobookPlaybackService? = null
@@ -236,6 +239,7 @@ class AudiobookPlayerController @Inject constructor(
             teardownSession(resetState = false)
         }
 
+        _positionMs.value = 0L
         _state.value = AudiobookPlaybackState(
             isActive = true,
             isLoading = true,
@@ -314,6 +318,7 @@ class AudiobookPlayerController @Inject constructor(
         listenedSecondsAccum = 0.0
         lastPositionSampleAtMs = 0L
 
+        _positionMs.value = initialBookPosMs
         _state.value = AudiobookPlaybackState(
             isActive = true,
             isLoading = false,
@@ -359,14 +364,14 @@ class AudiobookPlayerController @Inject constructor(
 
     fun skipForward30s() {
         mainScope.launch {
-            val target = _state.value.currentPositionMs + 30_000L
+            val target = _positionMs.value + 30_000L
             seekToBookPositionMs(target)
         }
     }
 
     fun skipBackward15s() {
         mainScope.launch {
-            val target = (_state.value.currentPositionMs - 15_000L).coerceAtLeast(0L)
+            val target = (_positionMs.value - 15_000L).coerceAtLeast(0L)
             seekToBookPositionMs(target)
         }
     }
@@ -446,7 +451,7 @@ class AudiobookPlayerController @Inject constructor(
         if (current.chapters.isEmpty()) return
         val chapter = current.chapters.getOrNull(current.currentChapterIndex)
         val chapterStartMs = ((chapter?.StartSeconds ?: 0.0) * 1000.0).toLong()
-        val target = if (current.currentPositionMs - chapterStartMs > RESTART_CHAPTER_THRESHOLD_MS) {
+        val target = if (_positionMs.value - chapterStartMs > RESTART_CHAPTER_THRESHOLD_MS) {
             current.currentChapterIndex
         } else {
             (current.currentChapterIndex - 1).coerceAtLeast(0)
@@ -546,7 +551,7 @@ class AudiobookPlayerController @Inject constructor(
     fun addBookmark(note: String? = null) {
         val current = _state.value
         val book = current.bookItem ?: return
-        val positionSec = (current.currentPositionMs / 1000.0).coerceAtLeast(0.0)
+        val positionSec = (_positionMs.value / 1000.0).coerceAtLeast(0.0)
         val totalSec = (current.totalDurationMs / 1000.0).coerceAtLeast(1.0)
         val progress = (positionSec / totalSec).coerceIn(0.0, 1.0)
         val currentChapterTitle = current.chapters.getOrNull(current.currentChapterIndex)?.Title?.takeIf { it.isNotBlank() }
@@ -849,6 +854,8 @@ class AudiobookPlayerController @Inject constructor(
         usingTranscodeFallback = false
         pendingSeekMs = offsetMs.coerceAtLeast(0L)
         lastPositionSampleAtMs = 0L
+        val targetBookPosMs = (trackStartsMs.getOrElse(index) { 0L } + pendingSeekMs).coerceAtLeast(0L)
+        _positionMs.value = targetBookPosMs
 
         _state.value = _state.value.copy(
             currentTrackIndex = index,
@@ -1010,7 +1017,7 @@ class AudiobookPlayerController @Inject constructor(
                         break
                     }
                     val chapterEndMs = ((chapter.StartSeconds + chapter.DurationSeconds) * 1000.0).toLong()
-                    val remainingMs = chapterEndMs - current.currentPositionMs
+                    val remainingMs = chapterEndMs - _positionMs.value
                     if (remainingMs <= 300L) {
                         p?.pause()
                         setSleepTimer(0)
@@ -1040,15 +1047,12 @@ class AudiobookPlayerController @Inject constructor(
     }
 
     private fun updatePositionState(bookPosMs: Long) {
+        _positionMs.value = bookPosMs
         val current = _state.value
         val total = current.totalDurationMs.coerceAtLeast(bookPosMs)
         val chIdx = chapterIndexAt(current.chapters, bookPosMs)
         val chapterChanged = current.currentChapterIndex != chIdx
-        if (
-            current.currentPositionMs != bookPosMs ||
-            chapterChanged ||
-            current.totalDurationMs != total
-        ) {
+        if (chapterChanged || current.totalDurationMs != total) {
             _state.value = current.copy(
                 currentPositionMs = bookPosMs,
                 currentChapterIndex = chIdx,
@@ -1131,7 +1135,7 @@ class AudiobookPlayerController @Inject constructor(
         val current = _state.value
         val book = current.bookItem ?: return
         val total = current.totalDurationMs
-        val reachedEnd = finishedBook || (total > 0L && current.currentPositionMs >= (total * 0.98).toLong())
+        val reachedEnd = finishedBook || (total > 0L && _positionMs.value >= (total * 0.98).toLong())
         val isFinishedNow = !finishedReported && reachedEnd
         val seconds = listenedSecondsAccum.roundToInt()
 
@@ -1189,6 +1193,7 @@ class AudiobookPlayerController @Inject constructor(
         lastPositionSampleAtMs = 0L
 
         if (resetState) {
+            _positionMs.value = 0L
             _state.value = AudiobookPlaybackState()
             runCatching {
                 val stopIntent = Intent(context, AudiobookPlaybackService::class.java).apply {

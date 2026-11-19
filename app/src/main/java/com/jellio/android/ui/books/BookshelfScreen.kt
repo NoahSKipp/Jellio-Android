@@ -102,6 +102,8 @@ import com.jellio.android.data.books.SeriesPrefsDto
 import com.jellio.android.data.books.ShelfCategoryDto
 import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.data.offline.OfflineDownloadItem
+import com.jellio.android.ui.common.isCompactScreen
+import com.jellio.android.ui.nav.LocalBottomBarPadding
 import com.jellio.android.ui.theme.JellioBg
 import com.jellio.android.ui.theme.JellioBgElevated
 import com.jellio.android.ui.theme.JellioBorder
@@ -625,15 +627,22 @@ private fun BookshelfMainGrid(
         }
     }
 
+    val isCompact = isCompactScreen()
+    val bottomBarPadding = if (isCompact) LocalBottomBarPadding.current else 0.dp
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 136.dp),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 16.dp,
+            bottom = 16.dp + bottomBarPadding,
+        ),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
         if (continueList.isNotEmpty()) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
+            item(key = "continue_section", span = { GridItemSpan(maxLineSpan) }, contentType = "continue_section") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = if (state.activeTab == BookshelfTab.AUDIOBOOK) "Continue Listening" else "Continue Reading",
@@ -644,7 +653,7 @@ private fun BookshelfMainGrid(
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        items(continueList, key = { "${it.kind}:${it.itemId}" }) { card ->
+                        items(continueList, key = { "${it.kind}:${it.itemId}" }, contentType = { "continue_card" }) { card ->
                             ContinueReadingCard(
                                 card = card,
                                 onClick = {
@@ -664,11 +673,11 @@ private fun BookshelfMainGrid(
         when (state.activeTab) {
             BookshelfTab.EBOOK -> {
                 if (filteredEbooks.isEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(key = "empty_ebook", span = { GridItemSpan(maxLineSpan) }, contentType = "empty_placeholder") {
                         EmptyShelfPlaceholder("No books found in this shelf.")
                     }
                 } else {
-                    items(filteredEbooks, key = { it.Id }) { item ->
+                    items(filteredEbooks, key = { it.Id }, contentType = { "ebook_card" }) { item ->
                         val norm = BooksRepository.normalizeId(item.Id)
                         val info = state.shelfInfoById[norm]
                         val progress = state.readingProgressById[norm]?.Progress ?: 0.0
@@ -690,11 +699,11 @@ private fun BookshelfMainGrid(
 
             BookshelfTab.MANGA -> {
                 if (filteredManga.isEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(key = "empty_manga", span = { GridItemSpan(maxLineSpan) }, contentType = "empty_placeholder") {
                         EmptyShelfPlaceholder("No manga found. Tap Discover to add series.")
                     }
                 } else {
-                    items(filteredManga, key = { it.key }) { series ->
+                    items(filteredManga, key = { it.key }, contentType = { "manga_card" }) { series ->
                         val pct = if (series.chapterCount > 0) {
                             (series.readCount.toDouble() / series.chapterCount.toDouble()).coerceIn(0.0, 1.0)
                         } else {
@@ -721,11 +730,11 @@ private fun BookshelfMainGrid(
 
             BookshelfTab.AUDIOBOOK -> {
                 if (filteredAudiobooks.isEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(key = "empty_audiobook", span = { GridItemSpan(maxLineSpan) }, contentType = "empty_placeholder") {
                         EmptyShelfPlaceholder("No audiobooks found.")
                     }
                 } else {
-                    items(filteredAudiobooks, key = { it.Id }) { item ->
+                    items(filteredAudiobooks, key = { it.Id }, contentType = { "audiobook_card" }) { item ->
                         val norm = BooksRepository.normalizeId(item.Id)
                         val info = state.shelfInfoById[norm]
                         val pct = (item.UserData?.PlayedPercentage ?: 0.0) / 100.0
@@ -862,10 +871,17 @@ private fun BookShelfGridCard(
                     .aspectRatio(0.68f)
                     .background(JellioBg),
             ) {
+                val context = LocalContext.current
                 var coverFailed by remember(coverUrl) { mutableStateOf(false) }
                 if (!coverUrl.isNullOrBlank() && !coverFailed) {
+                    val coverRequest = remember(coverUrl) {
+                        ImageRequest.Builder(context)
+                            .data(coverUrl)
+                            .size(360, 540)
+                            .build()
+                    }
                     AsyncImage(
-                        model = coverUrl,
+                        model = coverRequest,
                         contentDescription = title,
                         contentScale = ContentScale.Crop,
                         onError = { coverFailed = true },

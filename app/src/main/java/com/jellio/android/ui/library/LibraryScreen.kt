@@ -42,6 +42,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.tv.material3.Text
 import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.data.session.Session
@@ -52,9 +54,10 @@ import com.jellio.android.data.model.HomeSection
 import com.jellio.android.ui.home.PosterRow
 import com.jellio.android.ui.home.RowListModal
 import com.jellio.android.ui.home.rememberCardOptionsHost
+import com.jellio.android.ui.nav.LocalBottomBarPadding
 import com.jellio.android.ui.theme.JellioTextSecondary
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     session: Session,
@@ -71,6 +74,7 @@ fun LibraryScreen(
         val listState = com.jellio.android.ui.common.rememberTvColumnState()
         var rowListTarget by remember { mutableStateOf<HomeSection?>(null) }
         var openFilterField by remember { mutableStateOf<LibraryFilterFieldTarget?>(null) }
+        var isRefreshing by remember { mutableStateOf(false) }
         // Closing a filter list hands focus back to the field that opened it,
         // otherwise it fell to the sidebar.
         val sortFieldFocusRequester = remember { FocusRequester() }
@@ -85,6 +89,12 @@ fun LibraryScreen(
 
         LaunchedEffect(session.userId, library.Id, com.jellio.android.data.prefs.DisplayPreferences.displayLanguage) {
             viewModel.load(session, library)
+        }
+        LaunchedEffect(isRefreshing) {
+            if (isRefreshing) {
+                kotlinx.coroutines.delay(900L)
+                isRefreshing = false
+            }
         }
         LaunchedEffect(listState) {
             snapshotFlow { listState.isScrollInProgress }.collect { com.jellio.android.ui.perf.ScrollActivity.scrolling = it }
@@ -119,6 +129,7 @@ fun LibraryScreen(
                 val screenHeight = maxHeight
                 val density = LocalDensity.current
                 val isCompact = isCompactScreen()
+                val bottomBarPadding = LocalBottomBarPadding.current
                 val horizontalPad = if (isCompact) 16.dp else 48.dp
                 val rowsViewportHeight = screenHeight * 0.52f
                 val firstItem = featuredRow?.items?.firstOrNull()
@@ -138,28 +149,22 @@ fun LibraryScreen(
                     )
                 }
 
-                val defaultScrollSpec = LocalBringIntoViewSpec.current.scrollAnimationSpec
-                val rowsSpec = remember(density) {
-                    TvVerticalRowBringIntoViewSpec(topInsetPx = with(density) { RowHeaderHeight.toPx() }, scrollAnimationSpec = defaultScrollSpec) { listState.canScrollBackward }
-                }
-                CompositionLocalProvider(LocalBringIntoViewSpec provides rowsSpec) {
+                val listContent: @Composable () -> Unit = {
                     LazyColumn(
                         state = listState,
                         modifier = if (isCompact) {
                             Modifier
                                 .fillMaxSize()
                                 .clipToBounds()
-                                .focusRestorer()
                         } else {
                             Modifier
-                                .align(Alignment.BottomStart)
                                 .fillMaxWidth()
                                 .height(rowsViewportHeight)
                                 .clipToBounds()
                                 .focusRestorer()
                         },
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            bottom = if (isCompact) 24.dp else rowsViewportHeight,
+                            bottom = if (isCompact) 24.dp + bottomBarPadding else rowsViewportHeight,
                         ),
                     ) {
                         item(key = "header") {
@@ -220,6 +225,29 @@ fun LibraryScreen(
                             }
                         }
                         item(key = "bottom_space") { Spacer(modifier = Modifier.height(32.dp)) }
+                    }
+                }
+
+                if (isCompact) {
+                    PullToRefreshBox(
+                        isRefreshing = isRefreshing,
+                        onRefresh = {
+                            isRefreshing = true
+                            viewModel.load(session, library)
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        listContent()
+                    }
+                } else {
+                    val defaultScrollSpec = LocalBringIntoViewSpec.current.scrollAnimationSpec
+                    val rowsSpec = remember(density) {
+                        TvVerticalRowBringIntoViewSpec(topInsetPx = with(density) { RowHeaderHeight.toPx() }, scrollAnimationSpec = defaultScrollSpec) { listState.canScrollBackward }
+                    }
+                    Box(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()) {
+                        CompositionLocalProvider(LocalBringIntoViewSpec provides rowsSpec) {
+                            listContent()
+                        }
                     }
                 }
             }

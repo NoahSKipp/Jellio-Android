@@ -1,14 +1,27 @@
 package com.jellio.android
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,6 +63,7 @@ import com.jellio.android.ui.library.LibraryScreen
 import com.jellio.android.ui.library.LibraryViewModel
 import com.jellio.android.ui.nav.AccountSwitcherOverlay
 import com.jellio.android.ui.nav.JellioRoute
+import com.jellio.android.ui.nav.LocalBottomBarPadding
 import com.jellio.android.ui.nav.MobileBottomNav
 import com.jellio.android.ui.nav.MobileBottomNavHeight
 import com.jellio.android.ui.nav.SidebarNav
@@ -57,6 +71,8 @@ import com.jellio.android.ui.nav.SidebarReservedWidth
 import com.jellio.android.ui.nav.isImmersive
 import com.jellio.android.ui.nav.jellioNavItems
 import com.jellio.android.ui.nowplaying.QuickHubTab
+import com.jellio.android.ui.perf.MotionLevel
+import com.jellio.android.ui.perf.MotionPolicy
 import com.jellio.android.ui.person.PersonScreen
 import com.jellio.android.ui.player.PlayerScreen
 import com.jellio.android.ui.profile.ProfileScreen
@@ -403,27 +419,70 @@ private fun JellioApp(
 
     val layoutMode = com.jellio.android.ui.common.rememberWindowLayoutMode()
     val useBottomNav = layoutMode == com.jellio.android.ui.common.WindowLayoutMode.COMPACT_PORTRAIT
+    val isSecondaryMobileRoute = useBottomNav && (
+        route is JellioRoute.Detail ||
+            route is JellioRoute.Person ||
+            route is JellioRoute.Service ||
+            route is JellioRoute.Settings ||
+            route is JellioRoute.Vocab
+        )
     val miniPlayerVisible = !route.isImmersive() && activeAudiobookId != null
+    val bottomNavVisible = useBottomNav && !route.isImmersive() && !isSecondaryMobileRoute
+    val navBarBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomBarInsetDp = if (route.isImmersive() || !useBottomNav) {
+        0.dp
+    } else {
+        navBarBottomInset +
+            (if (bottomNavVisible) MobileBottomNavHeight else 0.dp) +
+            (if (miniPlayerVisible) 68.dp else 0.dp)
+    }
+    val navItems = remember(libraries) { jellioNavItems(libraries) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (!route.isImmersive()) {
             SeasonalEffectsOverlay(themeKey = seasonalTheme, modifier = Modifier.fillMaxSize())
         }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .let {
-                    if (route.isImmersive()) it
-                    else if (useBottomNav) {
-                        val bottomPad = if (miniPlayerVisible) MobileBottomNavHeight + 68.dp else MobileBottomNavHeight
-                        it.navigationBarsPadding().padding(bottom = bottomPad)
-                    } else {
-                        val bottomPad = if (miniPlayerVisible) 76.dp else 0.dp
-                        it.padding(start = SidebarReservedWidth.scaled(), bottom = bottomPad)
-                    }
-                },
-        ) {
-            when (val current = route) {
+        CompositionLocalProvider(LocalBottomBarPadding provides bottomBarInsetDp) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .let {
+                        if (route.isImmersive() || useBottomNav) it
+                        else {
+                            val bottomPad = if (miniPlayerVisible) 76.dp else 0.dp
+                            it.padding(start = SidebarReservedWidth.scaled(), bottom = bottomPad)
+                        }
+                    },
+            ) {
+                AnimatedContent(
+                    targetState = route,
+                    contentKey = { it.transitionKey() },
+                    transitionSpec = {
+                        when (MotionPolicy.level) {
+                            MotionLevel.STILL, MotionLevel.OFF ->
+                                EnterTransition.None togetherWith ExitTransition.None
+                            MotionLevel.REDUCED ->
+                                fadeIn(animationSpec = tween(120)) togetherWith fadeOut(animationSpec = tween(100))
+                            MotionLevel.FULL -> {
+                                val fromTab = initialState.isTopLevelTab()
+                                val toTab = targetState.isTopLevelTab()
+                                when {
+                                    fromTab && toTab ->
+                                        fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
+                                    !toTab ->
+                                        (fadeIn(animationSpec = tween(200)) + slideInHorizontally(animationSpec = tween(220)) { it / 16 }) togetherWith
+                                            fadeOut(animationSpec = tween(140))
+                                    else ->
+                                        fadeIn(animationSpec = tween(180)) togetherWith
+                                            (fadeOut(animationSpec = tween(160)) + slideOutHorizontally(animationSpec = tween(180)) { it / 16 })
+                                }
+                            }
+                        }
+                    },
+                    label = "routeTransition",
+                    modifier = Modifier.fillMaxSize(),
+                ) { current ->
+                    when (current) {
                 is JellioRoute.Profile -> ProfileScreen(
                     session = session,
                     userId = current.userId,
@@ -435,13 +494,15 @@ private fun JellioApp(
                     onOpenProfile = { id -> push(JellioRoute.Profile(id)) },
                     modifier = Modifier.fillMaxSize(),
                 )
-                JellioRoute.Feed -> FeedScreen(
-                    userId = session.userId,
-                    imageUrl = memoizedRawImageUrl,
-                    userImageUrl = { userId, tag, maxWidth -> appViewModel.userImageUrl(session, userId, tag, maxWidth) },
-                    onUserClick = { userId -> push(JellioRoute.Profile(userId)) },
-                    modifier = Modifier.fillMaxSize(),
-                )
+                JellioRoute.Feed -> screenStates.SaveableStateProvider("feed") {
+                    FeedScreen(
+                        userId = session.userId,
+                        imageUrl = memoizedRawImageUrl,
+                        userImageUrl = { userId, tag, maxWidth -> appViewModel.userImageUrl(session, userId, tag, maxWidth) },
+                        onUserClick = { userId -> push(JellioRoute.Profile(userId)) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
                 is JellioRoute.Home -> screenStates.SaveableStateProvider("home") {
                     HomeScreen(
                         session = session,
@@ -473,39 +534,46 @@ private fun JellioApp(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
-                JellioRoute.Search -> SearchScreen(
-                    session = session,
-                    imageUrl = memoizedImageUrl,
-                    onItemClick = onOpenItemSmart,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                JellioRoute.Search -> screenStates.SaveableStateProvider("search") {
+                    SearchScreen(
+                        session = session,
+                        imageUrl = memoizedImageUrl,
+                        onItemClick = onOpenItemSmart,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
                 is JellioRoute.LibraryTab -> {
                     val library = libraries.firstOrNull { it.Id == current.libraryId && it.Name.orEmpty() == current.name }
                     if (library != null) {
-                        androidx.compose.runtime.key(current.libraryId + current.name) {
-                            LibraryScreen(
-                                session = session,
-                                library = library,
-                                imageUrl = memoizedImageUrl,
-                                onItemClick = onOpenItemSmart,
-                                modifier = Modifier.fillMaxSize(),
-                            )
+                        val libKey = "library:${current.libraryId}:${current.name}"
+                        screenStates.SaveableStateProvider(libKey) {
+                            androidx.compose.runtime.key(libKey) {
+                                LibraryScreen(
+                                    session = session,
+                                    library = library,
+                                    imageUrl = memoizedImageUrl,
+                                    onItemClick = onOpenItemSmart,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                         }
                     }
                 }
-                is JellioRoute.Bookshelf -> BookshelfScreen(
-                    initialKind = current.kind,
-                    onOpenReader = { itemId, kind, mangaId, chapterId ->
-                        push(JellioRoute.Reader(itemId = itemId, kind = kind, mangaId = mangaId, chapterId = chapterId))
-                    },
-                    onOpenAudiobook = { itemId ->
-                        push(JellioRoute.AudiobookPlayer(itemId = itemId))
-                    },
-                    onOpenVocab = {
-                        push(JellioRoute.Vocab)
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
+                is JellioRoute.Bookshelf -> screenStates.SaveableStateProvider("bookshelf") {
+                    BookshelfScreen(
+                        initialKind = current.kind,
+                        onOpenReader = { itemId, kind, mangaId, chapterId ->
+                            push(JellioRoute.Reader(itemId = itemId, kind = kind, mangaId = mangaId, chapterId = chapterId))
+                        },
+                        onOpenAudiobook = { itemId ->
+                            push(JellioRoute.AudiobookPlayer(itemId = itemId))
+                        },
+                        onOpenVocab = {
+                            push(JellioRoute.Vocab)
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
                 is JellioRoute.Reader -> androidx.compose.runtime.key("${current.itemId}:${current.kind}:${current.mangaId}:${current.chapterId}") {
                     ReaderScreen(
                         itemId = current.itemId,
@@ -546,30 +614,32 @@ private fun JellioApp(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                JellioRoute.Downloads -> DownloadsScreen(
-                    onBack = {
-                        if (routeStack.size > 1) routeStack = routeStack.dropLast(1)
-                        else switchTab(JellioRoute.Home())
-                    },
-                    onPlayOfflineVideo = { dl ->
-                        playItem(dl.id)
-                    },
-                    onReadOfflineBook = { dl ->
-                        val readerKind = if (dl.kind == "manga") "manga" else "book"
-                        push(
-                            JellioRoute.Reader(
-                                itemId = dl.id,
-                                kind = readerKind,
-                                mangaId = dl.streamMangaId,
-                                chapterId = dl.streamChapterId,
-                            ),
-                        )
-                    },
-                    onListenOfflineAudiobook = { dl ->
-                        push(JellioRoute.AudiobookPlayer(itemId = dl.id))
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
+                JellioRoute.Downloads -> screenStates.SaveableStateProvider("downloads") {
+                    DownloadsScreen(
+                        onBack = {
+                            if (routeStack.size > 1) routeStack = routeStack.dropLast(1)
+                            else switchTab(JellioRoute.Home())
+                        },
+                        onPlayOfflineVideo = { dl ->
+                            playItem(dl.id)
+                        },
+                        onReadOfflineBook = { dl ->
+                            val readerKind = if (dl.kind == "manga") "manga" else "book"
+                            push(
+                                JellioRoute.Reader(
+                                    itemId = dl.id,
+                                    kind = readerKind,
+                                    mangaId = dl.streamMangaId,
+                                    chapterId = dl.streamChapterId,
+                                ),
+                            )
+                        },
+                        onListenOfflineAudiobook = { dl ->
+                            push(JellioRoute.AudiobookPlayer(itemId = dl.id))
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
                 JellioRoute.Settings -> SettingsScreen(
                     session = session,
                     onLogout = { appViewModel.logout() },
@@ -680,12 +750,14 @@ private fun JellioApp(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                JellioRoute.LiveTv -> com.jellio.android.ui.live.LiveTvScreen(
-                    session = session,
-                    imageUrl = { itemId, tag -> memoizedRawImageUrl(itemId, tag, "Primary", 240) },
-                    onPlay = { channelId -> push(JellioRoute.LivePlayer(channelId)) },
-                    modifier = Modifier.fillMaxSize(),
-                )
+                JellioRoute.LiveTv -> screenStates.SaveableStateProvider("livetv") {
+                    com.jellio.android.ui.live.LiveTvScreen(
+                        session = session,
+                        imageUrl = { itemId, tag -> memoizedRawImageUrl(itemId, tag, "Primary", 240) },
+                        onPlay = { channelId -> push(JellioRoute.LivePlayer(channelId)) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
                 is JellioRoute.LivePlayer -> androidx.compose.runtime.key(current.channelId) {
                     com.jellio.android.ui.live.LivePlayerScreen(
                         session = session,
@@ -693,6 +765,8 @@ private fun JellioApp(
                         imageUrl = { itemId, tag -> memoizedRawImageUrl(itemId, tag, "Primary", 240) },
                         onBack = { routeStack = routeStack.dropLast(1) },
                     )
+                }
+                    }
                 }
             }
         }
@@ -723,31 +797,40 @@ private fun JellioApp(
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .then(
+                            if (isSecondaryMobileRoute) {
+                                Modifier.navigationBarsPadding().padding(bottom = 8.dp)
+                            } else {
+                                Modifier
+                            },
+                        ),
                 ) {
                     AudiobookMiniPlayer(
                         controller = appViewModel.audiobookController,
                         onExpand = { bookId -> push(JellioRoute.AudiobookPlayer(bookId)) },
                     )
-                    MobileBottomNav(
-                        items = jellioNavItems(libraries),
-                        selected = route,
-                        enabled = !homeEditMode,
-                        onSelect = { clicked ->
-                            if (clicked is JellioRoute.Profile && clicked.userId == null) {
-                                showAccountSwitcher = true
-                            } else {
-                                switchTab(clicked)
-                            }
-                        },
-                        profileAvatarUrl = appViewModel.userImageUrl(session, session.userId, null, 200),
-                        profileName = session.userName,
-                        profileBadge = badgeVisible(friendsState.incoming.size),
-                    )
+                    if (!isSecondaryMobileRoute) {
+                        MobileBottomNav(
+                            items = navItems,
+                            selected = route,
+                            enabled = !homeEditMode,
+                            onSelect = { clicked ->
+                                if (clicked is JellioRoute.Profile && clicked.userId == null) {
+                                    showAccountSwitcher = true
+                                } else {
+                                    switchTab(clicked)
+                                }
+                            },
+                            profileAvatarUrl = appViewModel.userImageUrl(session, session.userId, null, 200),
+                            profileName = session.userName,
+                            profileBadge = badgeVisible(friendsState.incoming.size),
+                        )
+                    }
                 }
             } else {
                 SidebarNav(
-                    items = jellioNavItems(libraries),
+                    items = navItems,
                     selected = route,
                     enabled = !homeEditMode,
                     focusable = !homeEditMode && !(showAccountSwitcher || showNotifications || showChangelog || showOnboarding || showNowPlayingDrawer),
@@ -924,4 +1007,27 @@ private fun JellioApp(
             },
         )
     }
+}
+
+private fun JellioRoute.isTopLevelTab(): Boolean = when (this) {
+    is JellioRoute.Home,
+    JellioRoute.Search,
+    is JellioRoute.LibraryTab,
+    is JellioRoute.Bookshelf,
+    JellioRoute.Downloads,
+    JellioRoute.Feed,
+    JellioRoute.LiveTv -> true
+    is JellioRoute.Profile -> userId == null
+    else -> false
+}
+
+private fun JellioRoute.transitionKey(): Any = when (this) {
+    is JellioRoute.Home -> "tab:home"
+    JellioRoute.Search -> "tab:search"
+    is JellioRoute.LibraryTab -> "tab:library:$libraryId:$name"
+    is JellioRoute.Bookshelf -> "tab:bookshelf"
+    JellioRoute.Downloads -> "tab:downloads"
+    JellioRoute.Feed -> "tab:feed"
+    JellioRoute.LiveTv -> "tab:livetv"
+    else -> this
 }
