@@ -238,7 +238,7 @@ fun LivePlayerScreen(
             dataSource.setUserAgent(headers?.get("User-Agent") ?: "Jellio-Android/$APP_VERSION")
             val mime = if (headers == null) MimeTypes.VIDEO_MP2T else uiState.mimeType
             val chName = uiState.channel?.name.orEmpty()
-            val progTitle = uiState.channel?.now?.title?.takeIf { it.isNotBlank() }
+            val progTitle = uiState.channel?.now?.name?.takeIf { it.isNotBlank() }
             val logoUrl = uiState.channel?.logoUrl?.takeIf { it.isNotBlank() }
             val metadata = MediaMetadata.Builder()
                 .setTitle(chName)
