@@ -1,6 +1,7 @@
 package com.jellio.android.ui.common
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -9,6 +10,7 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -404,13 +406,7 @@ fun Surface(
             }
             .clip(currentShape)
             .background(color = containerColor, shape = currentShape)
-            .then(
-                if (currentBorder != Border.None) {
-                    Modifier.border(border = currentBorder.border, shape = currentBorder.shape)
-                } else {
-                    Modifier
-                }
-            )
+            .applySurfaceBorder(currentBorder, currentShape)
             .combinedClickable(
                 interactionSource = resolvedInteractionSource,
                 indication = ripple(color = rippleColor),
@@ -509,13 +505,7 @@ fun Surface(
             }
             .clip(currentShape)
             .background(color = containerColor, shape = currentShape)
-            .then(
-                if (currentBorder != Border.None) {
-                    Modifier.border(border = currentBorder.border, shape = currentBorder.shape)
-                } else {
-                    Modifier
-                }
-            )
+            .applySurfaceBorder(currentBorder, currentShape)
             .semantics { semanticsSelected = selected }
             .combinedClickable(
                 interactionSource = resolvedInteractionSource,
@@ -533,4 +523,23 @@ fun Surface(
             content()
         }
     }
+}
+
+// androidx.tv.material3.Border defaults `shape` to an internal empty GenericShape sentinel
+// (ShapeTokens.BorderDefaultShape) meaning "inherit the Surface's shape". Passing that empty
+// GenericShape directly to Modifier.border crashes Bitmap.createBitmap with
+// "width and height must be > 0".
+private val DefaultBorderShapeSentinel: Shape =
+    Border(border = BorderStroke(0.dp, Color.Transparent)).shape
+
+private fun Modifier.applySurfaceBorder(border: Border, fallbackShape: Shape): Modifier {
+    if (border == Border.None) return this
+    val width = border.border.width
+    if (width == Dp.Unspecified || width <= 0.dp) return this
+    val resolvedShape = if (border.shape == DefaultBorderShapeSentinel || border.shape is GenericShape) {
+        fallbackShape
+    } else {
+        border.shape
+    }
+    return this.border(border = border.border, shape = resolvedShape)
 }

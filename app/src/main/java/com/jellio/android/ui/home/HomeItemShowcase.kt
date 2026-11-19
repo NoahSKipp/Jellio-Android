@@ -207,6 +207,9 @@ private fun ShowcaseBackdrop(
         modifier = modifier
             .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
             .drawWithCache {
+                if (size.width <= 0f || size.height <= 0f) {
+                    return@drawWithCache onDrawWithContent { drawContent() }
+                }
                 val sideMask = if (applySideMask) {
                     Brush.horizontalGradient(
                         0f to Color.Transparent,
