@@ -4,7 +4,7 @@
 # field names by reflection for every class without generated adapters,
 # so the JSON-shaped classes keep their names and members.
 -keep class kotlin.Metadata { *; }
--keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*
+-keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*, SourceFile, LineNumberTable
 -keep class com.jellio.android.data.model.** { *; }
 -keep class com.jellio.android.data.playback.** { *; }
 -keep class com.jellio.android.data.books.** { *; }

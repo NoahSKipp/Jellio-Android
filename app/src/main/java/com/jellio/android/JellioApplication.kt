@@ -33,6 +33,11 @@ interface ImageLoaderEntryPoint {
 
 @HiltAndroidApp
 class JellioApplication : Application(), SingletonImageLoader.Factory {
+    override fun onCreate() {
+        super.onCreate()
+        CrashReporter.install(this)
+    }
+
     override fun newImageLoader(context: PlatformContext): ImageLoader {
         val entryPoint = EntryPointAccessors.fromApplication(this, ImageLoaderEntryPoint::class.java)
         val sessionManager = entryPoint.sessionManager()

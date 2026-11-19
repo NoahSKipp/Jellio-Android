@@ -21,7 +21,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -330,6 +332,18 @@ class MainActivity : ComponentActivity() {
                                         onPipSeekDeltaMs = null
                                         updatePipParams(isPlaying = false)
                                     }
+                                },
+                            )
+                        }
+                        var pendingCrashReport by androidx.compose.runtime.remember {
+                            androidx.compose.runtime.mutableStateOf(CrashReporter.read(this@MainActivity))
+                        }
+                        pendingCrashReport?.let { report ->
+                            CrashReportOverlay(
+                                report = report,
+                                onDismiss = {
+                                    CrashReporter.clear(this@MainActivity)
+                                    pendingCrashReport = null
                                 },
                             )
                         }
