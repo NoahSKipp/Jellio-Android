@@ -106,6 +106,17 @@ fun isBigRelease(version: String): Boolean {
 
 val CHANGELOG_RELEASES = listOf(
     ChangelogRelease(
+        version = "0.2.0",
+        title = "What's New in Jellio",
+        subtitle = "Version 0.2.0",
+        features = listOf(
+            ChangelogFeature(Icons.Filled.AutoAwesome, "Featured Hero Carousel & Landscape Continue Watching", "Swipeable full-bleed featured carousel on Home with auto-advance and quick Play/Details actions, plus 16:9 landscape Continue Watching cards with remaining time badges and inset progress bars."),
+            ChangelogFeature(Icons.Filled.GraphicEq, "Android Media Drawer for Audiobooks, Video & Live TV", "Active audiobooks, movies, shows, and Live TV now appear in Android's Quick Settings media drawer, lock screen, and connected wearables with artwork, scrub bar, and playback controls."),
+            ChangelogFeature(Icons.Filled.Tune, "Streamlined Navigation, Detail & Search Overhaul", "5-tab floating pill with Browse centered and Offline moved inside Browse, edge-to-edge scrolling behind the pill, vertical episode lists and expandable synopses on Detail, a polished Stream Picker sheet, and a unified Search pill with recent searches."),
+            ChangelogFeature(Icons.Filled.Speed, "2x Long-Press Speed & Smooth 60fps Performance", "Hold anywhere in the video player for 2x speed, cutout-safe player controls, swipe-to-dismiss audiobook mini-player, isolated 400ms position tickers, smooth Coil crossfades, and animated route transitions."),
+        ),
+    ),
+    ChangelogRelease(
         version = "1.0.0",
         title = "What's New in Jellio",
         subtitle = "Version 1.0.0",
