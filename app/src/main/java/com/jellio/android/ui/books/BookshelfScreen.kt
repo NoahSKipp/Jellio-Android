@@ -88,6 +88,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,6 +96,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
 import com.jellio.android.data.books.BooksRepository
 import com.jellio.android.data.books.SeriesPrefsDto
 import com.jellio.android.data.books.ShelfCategoryDto
@@ -389,10 +391,14 @@ fun BookshelfScreen(
             DiscoverAndRequestSheet(
                 state = state,
                 onDismiss = { viewModel.openDiscoverSheet(false) },
+                onSelectDiscoverTab = viewModel::setDiscoverMediaTab,
                 onQueryChange = viewModel::setDiscoverQuery,
                 onSearch = viewModel::runDiscoverSearch,
-                onSelectBookSource = viewModel::setBookDiscoverSource,
+                onSelectBookFilter = viewModel::setBookDiscoverFilter,
                 onSelectMangaSort = viewModel::setMangaDiscoverSort,
+                onSetMangaGenres = viewModel::setMangaDiscoverGenres,
+                onToggleMangaGenre = viewModel::toggleMangaDiscoverGenre,
+                onSelectMangaCountry = viewModel::setMangaDiscoverCountry,
                 onRequestBookSearch = viewModel::requestBookSearchResult,
                 onRequestBookDiscover = viewModel::requestBookDiscoverResult,
                 onRequestMangaSearch = viewModel::requestMangaFromSearch,
@@ -1560,23 +1566,80 @@ private fun AssignCategoryDialog(
 
 // --- Discover & Request Sheet ---
 
+private val ANILIST_MANGA_GENRES = listOf(
+    "Action",
+    "Adventure",
+    "Comedy",
+    "Drama",
+    "Fantasy",
+    "Horror",
+    "Mystery",
+    "Psychological",
+    "Romance",
+    "Sci-Fi",
+    "Slice of Life",
+    "Sports",
+    "Supernatural",
+    "Thriller",
+)
+
+private val MANGA_COUNTRY_FILTERS: List<Pair<String?, String>> = listOf(
+    null to "All",
+    "JP" to "Manga (JP)",
+    "KR" to "Manhwa (KR)",
+    "CN" to "Manhua (CN)",
+)
+
+private data class BookDiscoverOption(
+    val source: String,
+    val value: String?,
+    val label: String,
+)
+
+private val BOOK_DISCOVER_OPTIONS = listOf(
+    BookDiscoverOption("trending", null, "Trending"),
+    BookDiscoverOption("subject", "fantasy", "Fantasy"),
+    BookDiscoverOption("subject", "science_fiction", "Sci-Fi"),
+    BookDiscoverOption("subject", "mystery_and_detective_stories", "Mystery"),
+    BookDiscoverOption("subject", "thrillers", "Thrillers"),
+    BookDiscoverOption("subject", "romance", "Romance"),
+    BookDiscoverOption("subject", "classics", "Classics"),
+    BookDiscoverOption("subject", "horror", "Horror"),
+    BookDiscoverOption("subject", "history", "History"),
+    BookDiscoverOption("subject", "philosophy", "Philosophy"),
+    BookDiscoverOption("subject", "biography", "Biography"),
+    BookDiscoverOption("subject", "psychology", "Psychology"),
+    BookDiscoverOption("subject", "science", "Science"),
+    BookDiscoverOption("subject", "poetry", "Poetry"),
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DiscoverAndRequestSheet(
     state: BookshelfUiState,
     onDismiss: () -> Unit,
+    onSelectDiscoverTab: (BookshelfTab) -> Unit,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
-    onSelectBookSource: (String) -> Unit,
+    onSelectBookFilter: (String, String?) -> Unit,
     onSelectMangaSort: (String) -> Unit,
+    onSetMangaGenres: (Set<String>) -> Unit,
+    onToggleMangaGenre: (String) -> Unit,
+    onSelectMangaCountry: (String?) -> Unit,
     onRequestBookSearch: (com.jellio.android.data.books.BookSearchResultDto, String) -> Unit,
     onRequestBookDiscover: (com.jellio.android.data.books.BookDiscoverResultDto, String) -> Unit,
     onRequestMangaSearch: (Int, String) -> Unit,
     onRequestMangaDiscover: (com.jellio.android.data.books.MangaDiscoverDto) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val isManga = state.activeTab == BookshelfTab.MANGA
-    val bookType = if (state.activeTab == BookshelfTab.AUDIOBOOK) "audiobook" else "ebook"
+    val discoverTab = state.discoverMediaTab
+    val isManga = discoverTab == BookshelfTab.MANGA
+    val bookType = if (discoverTab == BookshelfTab.AUDIOBOOK) "audiobook" else "ebook"
+    var showGenreDialog by remember { mutableStateOf(false) }
+
+    val libraryMangaKeys = remember(state.mangaSeries) {
+        state.mangaSeries.map { it.key.removePrefix("s:") }.toSet()
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1587,16 +1650,56 @@ private fun DiscoverAndRequestSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.9f)
+                .fillMaxHeight(0.92f)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = if (isManga) "Discover & Search Manga" else "Discover & Request ${state.activeTab.label}",
+                text = if (isManga) "Discover & Read Manga" else "Discover & Request ${discoverTab.label}",
                 color = JellioText,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
             )
+
+            // Media tab switcher inside Discover
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                BookshelfTab.entries.forEach { tab ->
+                    val selected = discoverTab == tab
+                    val icon = when (tab) {
+                        BookshelfTab.EBOOK -> Icons.Filled.MenuBook
+                        BookshelfTab.MANGA -> Icons.Filled.AutoStories
+                        BookshelfTab.AUDIOBOOK -> Icons.Filled.Headphones
+                    }
+                    Surface(
+                        onClick = { onSelectDiscoverTab(tab) },
+                        color = if (selected) JellioSecondary else JellioBgElevated,
+                        contentColor = if (selected) JellioBg else JellioTextSecondary,
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, if (selected) JellioSecondary else JellioBorder),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = tab.label,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1611,6 +1714,16 @@ private fun DiscoverAndRequestSheet(
                             color = JellioTextTertiary,
                             fontSize = 13.sp,
                         )
+                    },
+                    trailingIcon = {
+                        if (state.discoverQuery.isNotEmpty()) {
+                            IconButton(onClick = {
+                                onQueryChange("")
+                                onSearch()
+                            }) {
+                                Icon(Icons.Filled.Close, contentDescription = "Clear", tint = JellioTextSecondary)
+                            }
+                        }
                     },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -1627,33 +1740,121 @@ private fun DiscoverAndRequestSheet(
             }
 
             if (isManga) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("trending" to "Trending", "popular" to "Popular", "top" to "Top Rated").forEach { (key, label) ->
+                // Sort + Genre picker row
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    items(listOf("trending" to "Trending", "popular" to "Popular", "top" to "Top Rated")) { (key, label) ->
                         FilterChip(
                             selected = state.mangaDiscoverSort == key,
                             onClick = { onSelectMangaSort(key) },
                             label = { Text(label, fontSize = 12.sp) },
                             colors = jellioChipColors(),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = state.mangaDiscoverSort == key,
+                                borderColor = JellioBorder,
+                                selectedBorderColor = JellioSecondary,
+                            ),
+                        )
+                    }
+                    item {
+                        val genreCount = state.mangaDiscoverGenres.size
+                        OutlinedButton(
+                            onClick = { showGenreDialog = true },
+                            border = BorderStroke(1.dp, if (genreCount > 0) JellioSecondary else JellioBorder),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (genreCount > 0) JellioSecondary else JellioText,
+                            ),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Icon(Icons.Filled.FilterList, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = if (genreCount > 0) "Genres ($genreCount)" else "Genres",
+                                fontSize = 12.sp,
+                                fontWeight = if (genreCount > 0) FontWeight.SemiBold else FontWeight.Normal,
+                            )
+                        }
+                    }
+                }
+
+                // Country filter chips
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    items(MANGA_COUNTRY_FILTERS) { (code, label) ->
+                        val selected = state.mangaDiscoverCountry == code
+                        FilterChip(
+                            selected = selected,
+                            onClick = { onSelectMangaCountry(code) },
+                            label = { Text(label, fontSize = 11.sp) },
+                            colors = jellioChipColors(),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = selected,
+                                borderColor = JellioBorder,
+                                selectedBorderColor = JellioSecondary,
+                            ),
                         )
                     }
                 }
+
+                // Selected genre chips
+                if (state.mangaDiscoverGenres.isNotEmpty()) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        items(state.mangaDiscoverGenres.toList().sorted()) { genre ->
+                            FilterChip(
+                                selected = true,
+                                onClick = { onToggleMangaGenre(genre) },
+                                label = { Text(genre, fontSize = 11.sp) },
+                                trailingIcon = {
+                                    Icon(Icons.Filled.Close, contentDescription = "Remove $genre", modifier = Modifier.size(13.dp))
+                                },
+                                colors = jellioChipColors(),
+                            )
+                        }
+                        item {
+                            TextButton(
+                                onClick = { onSetMangaGenres(emptySet()) },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            ) {
+                                Text("Clear", color = JellioTextSecondary, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("trending" to "Trending", "classic" to "Classics").forEach { (key, label) ->
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    items(BOOK_DISCOVER_OPTIONS, key = { "${it.source}_${it.value.orEmpty()}" }) { opt ->
+                        val selected = state.bookDiscoverSource == opt.source && state.bookDiscoverValue == opt.value
                         FilterChip(
-                            selected = state.bookDiscoverSource == key,
-                            onClick = { onSelectBookSource(key) },
-                            label = { Text(label, fontSize = 12.sp) },
+                            selected = selected,
+                            onClick = { onSelectBookFilter(opt.source, opt.value) },
+                            label = { Text(opt.label, fontSize = 12.sp) },
                             colors = jellioChipColors(),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = selected,
+                                borderColor = JellioBorder,
+                                selectedBorderColor = JellioSecondary,
+                            ),
                         )
                     }
                 }
             }
 
             if (state.isDiscoverLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = JellioSecondary)
-                }
+                DiscoverSkeletonList(modifier = Modifier.fillMaxSize())
             } else if (isManga) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -1673,23 +1874,36 @@ private fun DiscoverAndRequestSheet(
                                 )
                             }
                             items(source.Results, key = { "${source.SourceId}_${it.MangaId}" }) { res ->
+                                val proxyCover = state.discoverProxyCoverByKey[BookshelfViewModel.mangaSearchCoverKey(res.MangaId)]
+                                val fallbackCover = res.ThumbnailUrl.takeIf { it.startsWith("http://") || it.startsWith("https://") }
                                 DiscoverRowCard(
                                     title = res.Title,
                                     subtitle = listOfNotNull(res.Author, res.Status).joinToString(" | "),
-                                    coverUrl = res.ThumbnailUrl,
-                                    actionLabel = if (res.InLibrary) "In Library" else "Add / Request",
-                                    actionEnabled = !res.InLibrary,
+                                    primaryCoverUrl = proxyCover ?: fallbackCover,
+                                    fallbackCoverUrl = fallbackCover,
+                                    actionLabel = if (res.InLibrary) "Open" else "Read",
+                                    actionEnabled = true,
                                     onAction = { onRequestMangaSearch(res.MangaId, res.Title) },
                                 )
                             }
                         }
+                    } else if (state.mangaDiscoverResults.isEmpty()) {
+                        item {
+                            EmptyShelfPlaceholder("No manga matched the current filters.")
+                        }
                     } else {
                         items(state.mangaDiscoverResults, key = { it.Id }) { item ->
+                            val titleKey = BooksRepository.mangaSeriesKey(item.Title)
+                            val altKey = item.AltTitle?.takeIf { it.isNotBlank() }?.let { BooksRepository.mangaSeriesKey(it) }
+                            val inLibrary = titleKey in libraryMangaKeys || (altKey != null && altKey in libraryMangaKeys)
+                            val proxyCover = state.discoverProxyCoverByKey[BookshelfViewModel.mangaDiscoverCoverKey(item.Id)]
+                            val fallbackCover = item.CoverUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
                             DiscoverRowCard(
                                 title = item.Title,
                                 subtitle = listOfNotNull(item.Author, item.Year?.toString(), item.Status).joinToString(" | "),
-                                coverUrl = item.CoverUrl,
-                                actionLabel = "Find Sources",
+                                primaryCoverUrl = proxyCover ?: fallbackCover,
+                                fallbackCoverUrl = fallbackCover,
+                                actionLabel = if (inLibrary) "Open" else "Read",
                                 actionEnabled = true,
                                 onAction = { onRequestMangaDiscover(item) },
                             )
@@ -1705,27 +1919,181 @@ private fun DiscoverAndRequestSheet(
                     if (state.bookSearchResults.isNotEmpty()) {
                         items(state.bookSearchResults, key = { it.WorkId + it.Title }) { res ->
                             val already = if (bookType == "audiobook") res.AudiobookDownloaded else res.EbookDownloaded
+                            val proxyCover = state.discoverProxyCoverByKey[BookshelfViewModel.bookSearchCoverKey(res.WorkId, res.Title)]
+                            val fallbackCover = res.CoverUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
                             DiscoverRowCard(
                                 title = res.Title,
                                 subtitle = listOfNotNull(res.Author, res.Year?.toString()).joinToString(" | "),
-                                coverUrl = res.CoverUrl,
-                                actionLabel = if (already) "Available" else "Request via Chaptarr",
+                                primaryCoverUrl = proxyCover ?: fallbackCover,
+                                fallbackCoverUrl = fallbackCover,
+                                actionLabel = if (already) "Available" else "Request",
                                 actionEnabled = !already,
                                 onAction = { onRequestBookSearch(res, bookType) },
                             )
                         }
+                    } else if (state.bookDiscoverResults.isEmpty()) {
+                        item {
+                            EmptyShelfPlaceholder("No titles found for this subject.")
+                        }
                     } else {
                         items(state.bookDiscoverResults, key = { it.WorkId + it.Title }) { res ->
+                            val proxyCover = state.discoverProxyCoverByKey[BookshelfViewModel.bookDiscoverCoverKey(res.WorkId, res.Title)]
+                            val fallbackCover = res.CoverUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
                             DiscoverRowCard(
                                 title = res.Title,
                                 subtitle = listOfNotNull(res.Author, res.Year?.toString()).joinToString(" | "),
-                                coverUrl = res.CoverUrl,
-                                actionLabel = "Request via Chaptarr",
+                                primaryCoverUrl = proxyCover ?: fallbackCover,
+                                fallbackCoverUrl = fallbackCover,
+                                actionLabel = "Request",
                                 actionEnabled = true,
                                 onAction = { onRequestBookDiscover(res, bookType) },
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+
+    if (showGenreDialog) {
+        MangaGenrePickerDialog(
+            selectedGenres = state.mangaDiscoverGenres,
+            onDismiss = { showGenreDialog = false },
+            onApply = { next ->
+                onSetMangaGenres(next)
+                showGenreDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun MangaGenrePickerDialog(
+    selectedGenres: Set<String>,
+    onDismiss: () -> Unit,
+    onApply: (Set<String>) -> Unit,
+) {
+    var draft by remember(selectedGenres) { mutableStateOf(selectedGenres) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = JellioBgElevated,
+        titleContentColor = JellioText,
+        textContentColor = JellioText,
+        title = { Text("Filter by Genre", fontWeight = FontWeight.Bold) },
+        text = {
+            LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                items(ANILIST_MANGA_GENRES) { genre ->
+                    val checked = genre in draft
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                draft = if (checked) draft - genre else draft + genre
+                            },
+                    ) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = { isChecked ->
+                                draft = if (isChecked) draft + genre else draft - genre
+                            },
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(genre, color = JellioText, fontSize = 14.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onApply(draft) },
+                colors = ButtonDefaults.buttonColors(containerColor = JellioSecondary, contentColor = JellioBg),
+            ) {
+                Text("Apply")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (draft.isNotEmpty()) {
+                    TextButton(onClick = { draft = emptySet() }) {
+                        Text("Clear", color = JellioTextSecondary)
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel", color = JellioTextSecondary)
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun DiscoverSkeletonList(modifier: Modifier = Modifier) {
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "discoverSkeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.06f,
+        targetValue = 0.16f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(850),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "discoverSkeletonAlpha",
+    )
+    val fillColor = Color.White.copy(alpha = alpha)
+
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        userScrollEnabled = false,
+    ) {
+        items(7) {
+            Surface(
+                color = JellioBgElevated,
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, JellioBorder),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(48.dp)
+                            .height(70.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(fillColor),
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.75f)
+                                .height(14.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(fillColor),
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.48f)
+                                .height(11.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(fillColor),
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .width(64.dp)
+                            .height(32.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(fillColor),
+                    )
                 }
             }
         }
@@ -1736,11 +2104,20 @@ private fun DiscoverAndRequestSheet(
 private fun DiscoverRowCard(
     title: String,
     subtitle: String,
-    coverUrl: String?,
+    primaryCoverUrl: String?,
+    fallbackCoverUrl: String? = null,
     actionLabel: String,
     actionEnabled: Boolean,
     onAction: () -> Unit,
 ) {
+    val context = LocalContext.current
+    var coverStage by remember(primaryCoverUrl, fallbackCoverUrl) { mutableStateOf(0) }
+    val activeUrl = when {
+        coverStage == 0 && !primaryCoverUrl.isNullOrBlank() -> primaryCoverUrl
+        coverStage <= 1 && !fallbackCoverUrl.isNullOrBlank() && fallbackCoverUrl != primaryCoverUrl -> fallbackCoverUrl
+        else -> null
+    }
+
     Surface(
         color = JellioBgElevated,
         shape = RoundedCornerShape(10.dp),
@@ -1760,13 +2137,35 @@ private fun DiscoverRowCard(
                     .clip(RoundedCornerShape(6.dp))
                     .background(JellioBg),
             ) {
-                if (!coverUrl.isNullOrBlank()) {
+                if (activeUrl != null) {
+                    val request = remember(activeUrl) {
+                        ImageRequest.Builder(context)
+                            .data(activeUrl)
+                            .size(192, 280)
+                            .build()
+                    }
                     AsyncImage(
-                        model = coverUrl,
+                        model = request,
                         contentDescription = title,
                         contentScale = ContentScale.Crop,
+                        onError = {
+                            coverStage = if (coverStage == 0 && !fallbackCoverUrl.isNullOrBlank() && fallbackCoverUrl != primaryCoverUrl) {
+                                1
+                            } else {
+                                2
+                            }
+                        },
                         modifier = Modifier.fillMaxSize(),
                     )
+                } else {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Filled.MenuBook,
+                            contentDescription = null,
+                            tint = JellioTextTertiary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                 }
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -1784,7 +2183,7 @@ private fun DiscoverRowCard(
                     disabledContainerColor = JellioBorder,
                     disabledContentColor = JellioTextSecondary,
                 ),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
             ) {
                 Text(actionLabel, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }

@@ -24,6 +24,7 @@ import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.data.offline.OfflineDownloadItem
 import com.jellio.android.data.offline.OfflineDownloadManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -150,13 +151,18 @@ data class BookshelfUiState(
 
     // Discover & Request modals
     val showDiscoverSheet: Boolean = false,
+    val discoverMediaTab: BookshelfTab = BookshelfTab.EBOOK,
     val discoverQuery: String = "",
     val bookDiscoverSource: String = "trending",
+    val bookDiscoverValue: String? = null,
     val bookDiscoverResults: List<BookDiscoverResultDto> = emptyList(),
     val bookSearchResults: List<BookSearchResultDto> = emptyList(),
     val mangaDiscoverSort: String = "trending",
+    val mangaDiscoverGenres: Set<String> = emptySet(),
+    val mangaDiscoverCountry: String? = null,
     val mangaDiscoverResults: List<MangaDiscoverDto> = emptyList(),
     val mangaSearchResponse: MangaSearchResponseDto? = null,
+    val discoverProxyCoverByKey: Map<String, String> = emptyMap(),
     val isDiscoverLoading: Boolean = false,
     val pendingBookRequests: List<BookRequestEntryDto> = emptyList(),
     val chaptarrConfigured: Boolean = false,
@@ -178,6 +184,9 @@ class BookshelfViewModel @Inject constructor(
     val uiState: StateFlow<BookshelfUiState> = _uiState.asStateFlow()
 
     private var rawComicItems: List<BaseItemDto> = emptyList()
+    private var discoverJob: Job? = null
+    private val mangaDiscoverCache = HashMap<String, List<MangaDiscoverDto>>()
+    private val bookDiscoverCache = HashMap<String, List<BookDiscoverResultDto>>()
 
     init {
         viewModelScope.launch {
@@ -946,23 +955,100 @@ class BookshelfViewModel @Inject constructor(
     // --- Discover & Request Modals ---
 
     fun openDiscoverSheet(open: Boolean) {
-        _uiState.update { it.copy(showDiscoverSheet = open) }
         if (open) {
+            discoverJob?.cancel()
+            _uiState.update {
+                it.copy(
+                    showDiscoverSheet = true,
+                    discoverMediaTab = it.activeTab,
+                    discoverQuery = "",
+                    bookSearchResults = emptyList(),
+                    mangaSearchResponse = null,
+                )
+            }
             loadDiscoverFeed()
+        } else {
+            discoverJob?.cancel()
+            _uiState.update { it.copy(showDiscoverSheet = false, isDiscoverLoading = false) }
         }
+    }
+
+    fun setDiscoverMediaTab(tab: BookshelfTab) {
+        if (_uiState.value.discoverMediaTab == tab) return
+        discoverJob?.cancel()
+        _uiState.update {
+            it.copy(
+                discoverMediaTab = tab,
+                discoverQuery = "",
+                bookSearchResults = emptyList(),
+                mangaSearchResponse = null,
+            )
+        }
+        loadDiscoverFeed()
     }
 
     fun setDiscoverQuery(query: String) {
         _uiState.update { it.copy(discoverQuery = query) }
     }
 
-    fun setBookDiscoverSource(source: String) {
-        _uiState.update { it.copy(bookDiscoverSource = source) }
+    fun setBookDiscoverFilter(source: String, value: String? = null) {
+        _uiState.update {
+            it.copy(
+                bookDiscoverSource = source,
+                bookDiscoverValue = value,
+                discoverQuery = "",
+                bookSearchResults = emptyList(),
+            )
+        }
         loadDiscoverFeed()
     }
 
     fun setMangaDiscoverSort(sort: String) {
-        _uiState.update { it.copy(mangaDiscoverSort = sort) }
+        _uiState.update {
+            it.copy(
+                mangaDiscoverSort = sort,
+                discoverQuery = "",
+                mangaSearchResponse = null,
+            )
+        }
+        loadDiscoverFeed()
+    }
+
+    fun setMangaDiscoverGenres(genres: Set<String>) {
+        _uiState.update {
+            it.copy(
+                mangaDiscoverGenres = genres,
+                discoverQuery = "",
+                mangaSearchResponse = null,
+            )
+        }
+        loadDiscoverFeed()
+    }
+
+    fun toggleMangaDiscoverGenre(genre: String) {
+        _uiState.update { state ->
+            val next = if (genre in state.mangaDiscoverGenres) {
+                state.mangaDiscoverGenres - genre
+            } else {
+                state.mangaDiscoverGenres + genre
+            }
+            state.copy(
+                mangaDiscoverGenres = next,
+                discoverQuery = "",
+                mangaSearchResponse = null,
+            )
+        }
+        loadDiscoverFeed()
+    }
+
+    fun setMangaDiscoverCountry(country: String?) {
+        _uiState.update {
+            it.copy(
+                mangaDiscoverCountry = country,
+                discoverQuery = "",
+                mangaSearchResponse = null,
+            )
+        }
         loadDiscoverFeed()
     }
 
@@ -974,12 +1060,20 @@ class BookshelfViewModel @Inject constructor(
             loadDiscoverFeed()
             return
         }
+        discoverJob?.cancel()
         _uiState.update { it.copy(isDiscoverLoading = true) }
-        viewModelScope.launch {
-            if (state.activeTab == BookshelfTab.MANGA) {
+        discoverJob = viewModelScope.launch {
+            if (state.discoverMediaTab == BookshelfTab.MANGA) {
                 booksRepository.searchManga(q)
                     .onSuccess { resp ->
-                        _uiState.update { it.copy(mangaSearchResponse = resp, isDiscoverLoading = false) }
+                        val covers = resolveMangaSearchCovers(resp)
+                        _uiState.update {
+                            it.copy(
+                                mangaSearchResponse = resp,
+                                discoverProxyCoverByKey = it.discoverProxyCoverByKey + covers,
+                                isDiscoverLoading = false,
+                            )
+                        }
                     }
                     .onFailure { err ->
                         _uiState.update {
@@ -987,10 +1081,17 @@ class BookshelfViewModel @Inject constructor(
                         }
                     }
             } else {
-                val mediaType = if (state.activeTab == BookshelfTab.AUDIOBOOK) "audiobook" else "ebook"
+                val mediaType = if (state.discoverMediaTab == BookshelfTab.AUDIOBOOK) "audiobook" else "ebook"
                 booksRepository.searchBooks(q, mediaType)
                     .onSuccess { res ->
-                        _uiState.update { it.copy(bookSearchResults = res, isDiscoverLoading = false) }
+                        val covers = resolveBookSearchCovers(res)
+                        _uiState.update {
+                            it.copy(
+                                bookSearchResults = res,
+                                discoverProxyCoverByKey = it.discoverProxyCoverByKey + covers,
+                                isDiscoverLoading = false,
+                            )
+                        }
                     }
                     .onFailure { err ->
                         _uiState.update {
@@ -1003,26 +1104,144 @@ class BookshelfViewModel @Inject constructor(
 
     private fun loadDiscoverFeed() {
         val state = _uiState.value
-        _uiState.update { it.copy(isDiscoverLoading = true) }
-        viewModelScope.launch {
-            if (state.activeTab == BookshelfTab.MANGA) {
-                booksRepository.discoverManga(sort = state.mangaDiscoverSort)
+        discoverJob?.cancel()
+        if (state.discoverMediaTab == BookshelfTab.MANGA) {
+            val selectedGenres = state.mangaDiscoverGenres.toList().sorted()
+            val primaryGenre = selectedGenres.firstOrNull()
+            val cacheKey = "${state.mangaDiscoverSort}|${primaryGenre.orEmpty()}|${state.mangaDiscoverCountry.orEmpty()}|"
+            val cached = mangaDiscoverCache[cacheKey]
+            if (cached != null) {
+                val filtered = filterMangaByGenres(cached, selectedGenres)
+                discoverJob = viewModelScope.launch {
+                    val covers = resolveMangaDiscoverCovers(filtered)
+                    _uiState.update {
+                        it.copy(
+                            mangaDiscoverResults = filtered,
+                            discoverProxyCoverByKey = it.discoverProxyCoverByKey + covers,
+                            isDiscoverLoading = false,
+                        )
+                    }
+                }
+                return
+            }
+            _uiState.update { it.copy(isDiscoverLoading = true) }
+            discoverJob = viewModelScope.launch {
+                booksRepository.discoverManga(
+                    sort = state.mangaDiscoverSort,
+                    genre = primaryGenre,
+                    country = state.mangaDiscoverCountry,
+                )
                     .onSuccess { list ->
-                        _uiState.update { it.copy(mangaDiscoverResults = list, isDiscoverLoading = false) }
+                        mangaDiscoverCache[cacheKey] = list
+                        val filtered = filterMangaByGenres(list, selectedGenres)
+                        val covers = resolveMangaDiscoverCovers(filtered)
+                        _uiState.update {
+                            it.copy(
+                                mangaDiscoverResults = filtered,
+                                discoverProxyCoverByKey = it.discoverProxyCoverByKey + covers,
+                                isDiscoverLoading = false,
+                            )
+                        }
                     }
                     .onFailure {
                         _uiState.update { it.copy(isDiscoverLoading = false) }
                     }
-            } else {
-                booksRepository.discoverBooks(source = state.bookDiscoverSource)
+            }
+        } else {
+            val source = state.bookDiscoverSource
+            val value = state.bookDiscoverValue
+            val cacheKey = "$source|${value.orEmpty()}"
+            val cached = bookDiscoverCache[cacheKey]
+            if (cached != null) {
+                discoverJob = viewModelScope.launch {
+                    val covers = resolveBookDiscoverCovers(cached)
+                    _uiState.update {
+                        it.copy(
+                            bookDiscoverResults = cached,
+                            discoverProxyCoverByKey = it.discoverProxyCoverByKey + covers,
+                            isDiscoverLoading = false,
+                        )
+                    }
+                }
+                return
+            }
+            _uiState.update { it.copy(isDiscoverLoading = true) }
+            discoverJob = viewModelScope.launch {
+                booksRepository.discoverBooks(source = source, value = value)
                     .onSuccess { list ->
-                        _uiState.update { it.copy(bookDiscoverResults = list, isDiscoverLoading = false) }
+                        bookDiscoverCache[cacheKey] = list
+                        val covers = resolveBookDiscoverCovers(list)
+                        _uiState.update {
+                            it.copy(
+                                bookDiscoverResults = list,
+                                discoverProxyCoverByKey = it.discoverProxyCoverByKey + covers,
+                                isDiscoverLoading = false,
+                            )
+                        }
                     }
                     .onFailure {
                         _uiState.update { it.copy(isDiscoverLoading = false) }
                     }
             }
         }
+    }
+
+    private fun filterMangaByGenres(
+        items: List<MangaDiscoverDto>,
+        selectedGenres: List<String>,
+    ): List<MangaDiscoverDto> {
+        if (selectedGenres.size <= 1) return items
+        return items.filter { item ->
+            selectedGenres.all { target ->
+                item.Genres.any { it.equals(target, ignoreCase = true) }
+            }
+        }
+    }
+
+    private suspend fun resolveMangaDiscoverCovers(items: List<MangaDiscoverDto>): Map<String, String> {
+        val out = HashMap<String, String>()
+        items.forEach { item ->
+            booksRepository.resolveDiscoverCoverUrl(item.CoverUrl)?.let { resolved ->
+                out[mangaDiscoverCoverKey(item.Id)] = resolved
+            }
+        }
+        return out
+    }
+
+    private suspend fun resolveMangaSearchCovers(resp: MangaSearchResponseDto): Map<String, String> {
+        val out = HashMap<String, String>()
+        resp.Sources.forEach { source ->
+            source.Results.forEach { res ->
+                booksRepository.resolveDiscoverCoverUrl(
+                    rawUrl = res.ThumbnailUrl,
+                    mangaId = res.MangaId,
+                    title = res.Title,
+                )?.let { resolved ->
+                    out[mangaSearchCoverKey(res.MangaId)] = resolved
+                }
+            }
+        }
+        return out
+    }
+
+    private suspend fun resolveBookDiscoverCovers(items: List<BookDiscoverResultDto>): Map<String, String> {
+        val out = HashMap<String, String>()
+        items.forEach { item ->
+            booksRepository.resolveDiscoverCoverUrl(item.CoverUrl)?.let { resolved ->
+                out[bookDiscoverCoverKey(item.WorkId, item.Title)] = resolved
+            }
+        }
+        return out
+    }
+
+    private suspend fun resolveBookSearchCovers(items: List<BookSearchResultDto>): Map<String, String> {
+        val out = HashMap<String, String>()
+        items.forEach { item ->
+            booksRepository.resolveDiscoverCoverUrl(item.CoverUrl)?.let { resolved ->
+                out[bookSearchCoverKey(item.WorkId, item.Title)] = resolved
+            }
+        }
+        return out
     }
 
     fun requestBookSearchResult(result: BookSearchResultDto, bookType: String) {
@@ -1057,13 +1276,42 @@ class BookshelfViewModel @Inject constructor(
         viewModelScope.launch {
             booksRepository.requestManga(mangaId, title, addToLibrary = true)
                 .onSuccess { res ->
+                    val status = res.Status.lowercase()
+                    val isOk = status.isEmpty() || status == "ok" || status == "added" || status == "duplicate" || status == "queued"
+                    val key = BooksRepository.mangaSeriesKey(title)
+                    val existing = _uiState.value.mangaSeries.firstOrNull {
+                        it.mangaId == mangaId || it.key.removePrefix("s:") == key
+                    }
+                    val targetSeries = existing ?: MangaSeriesDisplayItem(
+                        key = key,
+                        title = title,
+                        author = null,
+                        status = null,
+                        coverUrl = booksRepository.mangaStreamCoverUrl(mangaId, title),
+                        mangaId = mangaId,
+                        chapterCount = res.TotalChapters,
+                        downloadedCount = 0,
+                        readCount = 0,
+                        latestUpload = 0L,
+                        lastReadAt = null,
+                        resumeChapterId = null,
+                        resumeStreamChapterId = null,
+                        firstChapterId = null,
+                    )
                     _uiState.update {
                         it.copy(
+                            showDiscoverSheet = if (isOk) false else it.showDiscoverSheet,
+                            isDiscoverLoading = false,
                             statusMessage = res.Message
                                 ?: "Added \"$title\" (${res.QueuedChapters}/${res.TotalChapters} chapters)",
                         )
                     }
-                    ensureTabDataLoaded(BookshelfTab.MANGA, force = true)
+                    viewModelScope.launch {
+                        ensureTabDataLoaded(BookshelfTab.MANGA, force = true)
+                    }
+                    if (isOk) {
+                        openMangaSeries(targetSeries)
+                    }
                 }
                 .onFailure { err ->
                     _uiState.update { it.copy(statusMessage = err.message ?: "Manga request failed") }
@@ -1072,17 +1320,76 @@ class BookshelfViewModel @Inject constructor(
     }
 
     fun requestMangaFromDiscover(item: MangaDiscoverDto) {
-        _uiState.update { it.copy(discoverQuery = item.Title, isDiscoverLoading = true) }
-        viewModelScope.launch {
-            booksRepository.searchManga(item.Title)
-                .onSuccess { resp ->
-                    _uiState.update { it.copy(mangaSearchResponse = resp, isDiscoverLoading = false) }
-                }
-                .onFailure { err ->
-                    _uiState.update {
-                        it.copy(isDiscoverLoading = false, statusMessage = err.message ?: "Source search failed")
+        val titleKey = BooksRepository.mangaSeriesKey(item.Title)
+        val altKey = item.AltTitle?.takeIf { it.isNotBlank() }?.let { BooksRepository.mangaSeriesKey(it) }
+        val existing = _uiState.value.mangaSeries.firstOrNull { series ->
+            val sKey = series.key.removePrefix("s:")
+            sKey == titleKey || (altKey != null && sKey == altKey)
+        }
+        if (existing != null) {
+            discoverJob?.cancel()
+            _uiState.update { it.copy(showDiscoverSheet = false, isDiscoverLoading = false) }
+            openMangaSeries(existing)
+            return
+        }
+
+        discoverJob?.cancel()
+        _uiState.update { it.copy(isDiscoverLoading = true) }
+        discoverJob = viewModelScope.launch {
+            val byKey = booksRepository.findMangaStreamByKey(titleKey)?.takeIf { it.MangaId > 0 }
+                ?: altKey?.let { booksRepository.findMangaStreamByKey(it)?.takeIf { r -> r.MangaId > 0 } }
+            if (byKey != null) {
+                val resolvedTitle = byKey.Title.ifBlank { item.Title }
+                val cover = booksRepository.mangaStreamCoverUrl(byKey.MangaId, resolvedTitle)
+                    ?: booksRepository.resolveDiscoverCoverUrl(item.CoverUrl)
+                val series = MangaSeriesDisplayItem(
+                    key = byKey.Key.ifBlank { titleKey },
+                    title = resolvedTitle,
+                    author = item.Author,
+                    status = item.Status,
+                    coverUrl = cover,
+                    mangaId = byKey.MangaId,
+                    chapterCount = 0,
+                    downloadedCount = 0,
+                    readCount = 0,
+                    latestUpload = 0L,
+                    lastReadAt = null,
+                    resumeChapterId = null,
+                    resumeStreamChapterId = null,
+                    firstChapterId = null,
+                )
+                _uiState.update { it.copy(showDiscoverSheet = false, isDiscoverLoading = false) }
+                openMangaSeries(series)
+                return@launch
+            }
+
+            _uiState.update { it.copy(discoverQuery = item.Title) }
+            val primarySearch = booksRepository.searchManga(item.Title)
+            var finalResp = primarySearch.getOrNull()
+            if ((finalResp == null || finalResp.Sources.all { it.Results.isEmpty() }) && !item.AltTitle.isNullOrBlank()) {
+                val altSearch = booksRepository.searchManga(item.AltTitle)
+                altSearch.getOrNull()?.let { altResp ->
+                    if (altResp.Sources.any { it.Results.isNotEmpty() } || finalResp == null) {
+                        finalResp = altResp
                     }
                 }
+            }
+            val resolvedResp = finalResp
+            if (resolvedResp != null) {
+                val covers = resolveMangaSearchCovers(resolvedResp)
+                _uiState.update {
+                    it.copy(
+                        mangaSearchResponse = resolvedResp,
+                        discoverProxyCoverByKey = it.discoverProxyCoverByKey + covers,
+                        isDiscoverLoading = false,
+                    )
+                }
+            } else {
+                val err = primarySearch.exceptionOrNull()
+                _uiState.update {
+                    it.copy(isDiscoverLoading = false, statusMessage = err?.message ?: "Source search failed")
+                }
+            }
         }
     }
 
@@ -1184,5 +1491,12 @@ class BookshelfViewModel @Inject constructor(
             else -> compareBy { it.title.lowercase() }
         }
         return if (state.sortDescending) filtered.sortedWith(comparator.reversed()) else filtered.sortedWith(comparator)
+    }
+
+    companion object {
+        fun mangaDiscoverCoverKey(id: Int): String = "md:$id"
+        fun mangaSearchCoverKey(mangaId: Int): String = "ms:$mangaId"
+        fun bookDiscoverCoverKey(workId: String, title: String): String = "bd:$workId|$title"
+        fun bookSearchCoverKey(workId: String, title: String): String = "bs:$workId|$title"
     }
 }

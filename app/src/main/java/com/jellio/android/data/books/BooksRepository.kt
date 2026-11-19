@@ -697,6 +697,32 @@ class BooksRepository @Inject constructor(
         return sb.toString()
     }
 
+    suspend fun resolveDiscoverCoverUrl(
+        rawUrl: String?,
+        mangaId: Int? = null,
+        title: String? = null,
+    ): String? {
+        if (mangaId != null && mangaId > 0) {
+            return mangaStreamCoverUrl(mangaId, title)
+        }
+        val trimmed = rawUrl?.trim()
+        if (trimmed.isNullOrEmpty()) return null
+        val server = sessionManager.serverAddress()?.trimEnd('/')
+        val token = sessionManager.accessToken()
+        if (trimmed.startsWith("/")) {
+            if (server.isNullOrBlank()) return null
+            val sep = if (trimmed.contains('?')) "&" else "?"
+            val auth = if (!token.isNullOrEmpty()) "${sep}ApiKey=$token&api_key=$token" else ""
+            return "$server$trimmed$auth"
+        }
+        if (trimmed.contains("anilist.co", ignoreCase = true) && !server.isNullOrBlank()) {
+            val encoded = URLEncoder.encode(trimmed, "UTF-8")
+            val auth = if (!token.isNullOrEmpty()) "&ApiKey=$token&api_key=$token" else ""
+            return "$server/Jellio/books/manga-cover?url=$encoded$auth"
+        }
+        return trimmed
+    }
+
     suspend fun mangaStreamPageUrl(chapterId: Int, pageIndex: Int): String? {
         val server = sessionManager.serverAddress()?.trimEnd('/') ?: return null
         val token = sessionManager.accessToken()

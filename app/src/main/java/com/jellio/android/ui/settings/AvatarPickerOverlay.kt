@@ -101,12 +101,13 @@ fun AvatarPickerOverlay(
             .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
+        val isCompact = com.jellio.android.ui.common.isCompactScreen()
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.7f)
-                .fillMaxHeight(0.8f)
+                .fillMaxWidth(if (isCompact) 0.94f else 0.7f)
+                .fillMaxHeight(if (isCompact) 0.84f else 0.8f)
                 .background(JellioBgElevated, RoundedCornerShape(16.dp))
-                .padding(32.dp)
+                .padding(if (isCompact) 16.dp else 32.dp)
                 .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = {}),
         ) {
             Text(text = com.jellio.android.ui.i18n.string("avatar_choose"), color = JellioText, style = MaterialTheme.typography.titleLarge)

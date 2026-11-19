@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -509,14 +510,25 @@ internal fun GuideSheet(
             .pointerInput(Unit) {
                 detectTapGestures { onClose() }
             },
-        contentAlignment = Alignment.CenterEnd,
+        contentAlignment = if (isCompact) Alignment.BottomCenter else Alignment.CenterEnd,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(0.92f)
-                .widthIn(max = 560.dp)
-                .background(JellioBgElevated)
+            modifier = (if (isCompact) {
+                Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.82f)
+                    .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                    .background(JellioBgElevated)
+                    .navigationBarsPadding()
+            } else {
+                Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.92f)
+                    .widthIn(max = 560.dp)
+                    .background(JellioBgElevated)
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+            })
                 .pointerInput(Unit) {
                     detectTapGestures { }
                 }

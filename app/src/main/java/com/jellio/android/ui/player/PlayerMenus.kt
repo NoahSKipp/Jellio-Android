@@ -17,13 +17,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.tv.material3.Border
+import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -94,12 +100,41 @@ import com.jellio.android.ui.theme.JellioTextSecondary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
+@Composable
+private fun isCompactPortrait(): Boolean {
+    val config = LocalConfiguration.current
+    return config.screenWidthDp < 600 && config.screenHeightDp > config.screenWidthDp
+}
+
+private fun Modifier.playerMenuContainer(
+    isPortrait: Boolean,
+    drawerMaxWidth: androidx.compose.ui.unit.Dp,
+): Modifier = if (isPortrait) {
+    this
+        .fillMaxWidth()
+        .heightIn(max = 460.dp)
+        .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+        .background(JellioBgElevated)
+        .navigationBarsPadding()
+} else {
+    this
+        .fillMaxWidth(0.88f)
+        .widthIn(max = drawerMaxWidth)
+        .fillMaxHeight()
+        .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+        .background(JellioBgElevated)
+        .statusBarsPadding()
+        .navigationBarsPadding()
+        .displayCutoutPadding()
+}
+
 // Speed drawer matching SubtitleMenu and AudioMenu right drawers.
 @Composable
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 internal fun SpeedMenu(selectedSpeed: Float, onSelect: (Float) -> Unit, onDismiss: () -> Unit) {
     BackHandler(onBack = onDismiss)
     val isCompact = com.jellio.android.ui.common.isCompactScreen()
+    val isPortrait = isCompactPortrait()
     val focusRequesters = remember { PLAYBACK_SPEEDS.map { FocusRequester() } }
     val activeIndex = PLAYBACK_SPEEDS.indexOfFirst { it == selectedSpeed }.coerceAtLeast(0)
     LaunchedEffect(Unit) {
@@ -115,16 +150,13 @@ internal fun SpeedMenu(selectedSpeed: Float, onSelect: (Float) -> Unit, onDismis
             .pointerInput(Unit) {
                 detectTapGestures { onDismiss() }
             },
-        contentAlignment = Alignment.CenterEnd,
+        contentAlignment = if (isPortrait) Alignment.BottomCenter else Alignment.CenterEnd,
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.88f)
-                .widthIn(max = 280.dp)
-                .fillMaxSize()
-                .background(JellioBgElevated)
+                .playerMenuContainer(isPortrait = isPortrait, drawerMaxWidth = 280.dp)
                 .pointerInput(Unit) { detectTapGestures { } }
-                .padding(vertical = if (isCompact) 16.dp else 48.dp),
+                .padding(vertical = if (isCompact || isPortrait) 16.dp else 48.dp),
         ) {
             Text(
                 text = Strings.get("tv_playback_speed"),
@@ -271,6 +303,7 @@ internal fun SleepMenu(
 ) {
     BackHandler(onBack = onDismiss)
     val isCompact = com.jellio.android.ui.common.isCompactScreen()
+    val isPortrait = isCompactPortrait()
     val firstItemFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(60)
@@ -283,16 +316,13 @@ internal fun SleepMenu(
             .pointerInput(Unit) {
                 detectTapGestures { onDismiss() }
             },
-        contentAlignment = Alignment.CenterEnd,
+        contentAlignment = if (isPortrait) Alignment.BottomCenter else Alignment.CenterEnd,
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.88f)
-                .widthIn(max = 280.dp)
-                .fillMaxSize()
-                .background(JellioBgElevated)
+                .playerMenuContainer(isPortrait = isPortrait, drawerMaxWidth = 280.dp)
                 .pointerInput(Unit) { detectTapGestures { } }
-                .padding(vertical = if (isCompact) 16.dp else 48.dp),
+                .padding(vertical = if (isCompact || isPortrait) 16.dp else 48.dp),
         ) {
             Text(
                 text = Strings.get("tv_sleep_timer"),
@@ -448,6 +478,7 @@ internal fun AudioMenu(
 ) {
     BackHandler(onBack = onDismiss)
     val isCompact = com.jellio.android.ui.common.isCompactScreen()
+    val isPortrait = isCompactPortrait()
     val focusRequesters = remember(tracks) { tracks.map { FocusRequester() } }
     val activeIndex = tracks.indexOfFirst {
         if (selectedStreamIndex == null) it.streamIndex == defaultStreamIndex else it.streamIndex == selectedStreamIndex
@@ -466,16 +497,13 @@ internal fun AudioMenu(
             .pointerInput(Unit) {
                 detectTapGestures { onDismiss() }
             },
-        contentAlignment = Alignment.CenterEnd,
+        contentAlignment = if (isPortrait) Alignment.BottomCenter else Alignment.CenterEnd,
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.88f)
-                .widthIn(max = 360.dp)
-                .fillMaxSize()
-                .background(JellioBgElevated)
+                .playerMenuContainer(isPortrait = isPortrait, drawerMaxWidth = 360.dp)
                 .pointerInput(Unit) { detectTapGestures { } }
-                .padding(vertical = if (isCompact) 16.dp else 48.dp),
+                .padding(vertical = if (isCompact || isPortrait) 16.dp else 48.dp),
         ) {
             Text(
                 text = Strings.get("tv_audio"),
@@ -581,7 +609,8 @@ internal fun SourcePanel(
             (selectedQuality == null || sourceQuality(source) == selectedQuality) &&
             (selectedEdition == null || com.jellio.android.ui.detail.EditionParser.detectSourceEdition(source, sources) == selectedEdition)
     }.sortedBy { if (it.Id in needsReencode) 1 else 0 }
-    val verticalPad = if (isCompact) 16.dp else 48.dp
+    val isPortrait = isCompactPortrait()
+    val verticalPad = if (isCompact || isPortrait) 16.dp else 48.dp
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -589,14 +618,11 @@ internal fun SourcePanel(
             .pointerInput(Unit) {
                 detectTapGestures { onDismiss() }
             },
-        contentAlignment = Alignment.CenterEnd,
+        contentAlignment = if (isPortrait) Alignment.BottomCenter else Alignment.CenterEnd,
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.88f)
-                .widthIn(max = 460.dp)
-                .fillMaxSize()
-                .background(JellioBgElevated)
+                .playerMenuContainer(isPortrait = isPortrait, drawerMaxWidth = 460.dp)
                 .pointerInput(Unit) { detectTapGestures { } }
                 .padding(start = 24.dp, end = 24.dp, top = verticalPad, bottom = verticalPad),
         ) {
@@ -698,7 +724,8 @@ internal fun EpisodesPanel(
         kotlinx.coroutines.delay(60)
         runCatching { firstFocusRequester.requestFocus() }
     }
-    val verticalPad = if (isCompact) 16.dp else 48.dp
+    val isPortrait = isCompactPortrait()
+    val verticalPad = if (isCompact || isPortrait) 16.dp else 48.dp
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -706,14 +733,11 @@ internal fun EpisodesPanel(
             .pointerInput(Unit) {
                 detectTapGestures { onDismiss() }
             },
-        contentAlignment = Alignment.CenterEnd,
+        contentAlignment = if (isPortrait) Alignment.BottomCenter else Alignment.CenterEnd,
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.88f)
-                .widthIn(max = 440.dp)
-                .fillMaxSize()
-                .background(JellioBgElevated)
+                .playerMenuContainer(isPortrait = isPortrait, drawerMaxWidth = 440.dp)
                 .pointerInput(Unit) { detectTapGestures { } }
                 .padding(start = 24.dp, end = 24.dp, top = verticalPad, bottom = verticalPad),
         ) {
@@ -845,6 +869,7 @@ internal fun SubtitleMenu(
 ) {
     BackHandler(onBack = onDismiss)
     val isCompact = com.jellio.android.ui.common.isCompactScreen()
+    val isPortrait = isCompactPortrait()
     val firstFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(60)
@@ -857,16 +882,13 @@ internal fun SubtitleMenu(
             .pointerInput(Unit) {
                 detectTapGestures { onDismiss() }
             },
-        contentAlignment = Alignment.CenterEnd,
+        contentAlignment = if (isPortrait) Alignment.BottomCenter else Alignment.CenterEnd,
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.88f)
-                .widthIn(max = 360.dp)
-                .fillMaxSize()
-                .background(JellioBgElevated)
+                .playerMenuContainer(isPortrait = isPortrait, drawerMaxWidth = 360.dp)
                 .pointerInput(Unit) { detectTapGestures { } }
-                .padding(vertical = if (isCompact) 16.dp else 48.dp),
+                .padding(vertical = if (isCompact || isPortrait) 16.dp else 48.dp),
         ) {
             Text(
                 text = Strings.get("tv_subtitles"),

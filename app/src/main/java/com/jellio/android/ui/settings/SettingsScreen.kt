@@ -55,6 +55,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -226,7 +227,7 @@ fun SettingsScreen(
     }
     val isCompact = com.jellio.android.ui.common.isCompactScreen()
     if (isCompact) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(top = 16.dp, start = 16.dp, end = 16.dp)) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(top = 16.dp, start = 16.dp, end = 16.dp)) {
             Text(text = string("settings_title"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
             androidx.compose.foundation.lazy.LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -401,23 +402,6 @@ fun SettingsScreen(
                                 checked = showPill,
                                 onToggle = { com.jellio.android.data.prefs.DisplayPreferences.setShowNowPlayingPill(displayContext, !showPill) },
                             )
-                            SettingsDivider()
-                            val clockStyle = com.jellio.android.data.prefs.DisplayPreferences.clockStyle
-                            SettingsPickerRow(
-                                label = string("settings_clock"),
-                                value = string(
-                                    when (clockStyle) {
-                                        com.jellio.android.data.prefs.ClockStyle.HOURS_24 -> "settings_clock_24h"
-                                        com.jellio.android.data.prefs.ClockStyle.HOURS_12 -> "settings_clock_12h"
-                                        com.jellio.android.data.prefs.ClockStyle.OFF -> "settings_clock_off"
-                                    },
-                                ),
-                                onClick = {
-                                    val styles = com.jellio.android.data.prefs.ClockStyle.entries
-                                    val next = styles[(styles.indexOf(clockStyle) + 1) % styles.size]
-                                    com.jellio.android.data.prefs.DisplayPreferences.setClockStyle(displayContext, next)
-                                },
-                            )
                         }
                     }
                     SettingsCategory.ABOUT -> {
@@ -444,7 +428,7 @@ fun SettingsScreen(
             }
         }
     } else {
-    Row(modifier = Modifier.fillMaxSize().padding(top = 32.dp, start = 48.dp, end = 48.dp)) {
+    Row(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(top = 32.dp, start = 48.dp, end = 48.dp)) {
         val currentCategoryFocus = categoryFocus.getValue(category)
         val categoryScrollState = rememberScrollState()
         Column(modifier = Modifier.width(310.dp)) {
@@ -467,7 +451,10 @@ fun SettingsScreen(
                             focusSeen = true
                             category = entry
                         },
-                        onClick = { runCatching { contentFocus.requestFocus() } },
+                        onClick = {
+                            category = entry
+                            runCatching { contentFocus.requestFocus() }
+                        },
                         modifier = Modifier
                             .focusRequester(categoryFocus.getValue(entry))
                             .focusProperties { right = contentFocus },
@@ -594,13 +581,6 @@ fun SettingsScreen(
                     )
                     SettingsDivider()
                     SettingsToggleRow(
-                        label = string("settings_match_frame_rate"),
-                        description = string("settings_match_frame_rate_desc"),
-                        checked = PlayerPrefs.matchFrameRate,
-                        onToggle = { PlayerPrefs.setMatchFrameRate(playerContext, !PlayerPrefs.matchFrameRate) },
-                    )
-                    SettingsDivider()
-                    SettingsToggleRow(
                         label = string("settings_skip_intros"),
                         description = string("settings_skip_intros_desc"),
                         checked = PlayerPrefs.autoSkipIntro,
@@ -612,13 +592,6 @@ fun SettingsScreen(
                         description = string("settings_dialogue_boost_desc"),
                         checked = PlayerPrefs.dialogueBoost,
                         onToggle = { PlayerPrefs.setDialogueBoost(playerContext, !PlayerPrefs.dialogueBoost) },
-                    )
-                    SettingsDivider()
-                    SettingsToggleRow(
-                        label = string("settings_audio_passthrough"),
-                        description = string("settings_audio_passthrough_desc"),
-                        checked = PlayerPrefs.audioPassthrough,
-                        onToggle = { PlayerPrefs.setAudioPassthrough(playerContext, !PlayerPrefs.audioPassthrough) },
                     )
                     SettingsDivider()
                     // Each press steps to the next level.
@@ -1112,7 +1085,7 @@ fun SettingsScreen(
                 }
                 SettingsCategory.DISPLAY -> {
                 val displayContext = androidx.compose.ui.platform.LocalContext.current
-                SettingsSection(title = string("settings_cat_display"), icon = Icons.Filled.Tv) {
+                SettingsSection(title = string("settings_cat_display"), icon = Icons.Filled.Palette) {
                     val activeLang = com.jellio.android.data.prefs.DisplayPreferences.displayLanguage
                     SettingsPickerRow(
                         label = string("settings_display_language"),
@@ -1128,23 +1101,6 @@ fun SettingsScreen(
                         description = string("settings_show_now_playing_pill_desc"),
                         checked = showPill,
                         onToggle = { com.jellio.android.data.prefs.DisplayPreferences.setShowNowPlayingPill(displayContext, !showPill) },
-                    )
-                    SettingsDivider()
-                    val clockStyle = com.jellio.android.data.prefs.DisplayPreferences.clockStyle
-                    SettingsPickerRow(
-                        label = string("settings_clock"),
-                        value = string(
-                            when (clockStyle) {
-                                com.jellio.android.data.prefs.ClockStyle.HOURS_24 -> "settings_clock_24h"
-                                com.jellio.android.data.prefs.ClockStyle.HOURS_12 -> "settings_clock_12h"
-                                com.jellio.android.data.prefs.ClockStyle.OFF -> "settings_clock_off"
-                            },
-                        ),
-                        onClick = {
-                            val styles = com.jellio.android.data.prefs.ClockStyle.entries
-                            val next = styles[(styles.indexOf(clockStyle) + 1) % styles.size]
-                            com.jellio.android.data.prefs.DisplayPreferences.setClockStyle(displayContext, next)
-                        },
                     )
                 }
                 }
