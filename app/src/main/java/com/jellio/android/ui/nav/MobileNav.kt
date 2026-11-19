@@ -75,10 +75,6 @@ fun MobileBottomNav(
     val mediaLibraries = remember(items) {
         buildList {
             items.filter { it is JellioRoute.LibraryTab || it is JellioRoute.LiveTv }.forEach { add(it) }
-            add(JellioRoute.Bookshelf("ebook"))
-            add(JellioRoute.Bookshelf("manga"))
-            add(JellioRoute.Bookshelf("audiobook"))
-            add(JellioRoute.Vocab)
             items.firstOrNull { it is JellioRoute.Feed }?.let { add(it) }
         }.distinct()
     }
@@ -86,8 +82,7 @@ fun MobileBottomNav(
     var librariesMenuOpen by remember { mutableStateOf(false) }
     val isLibraryOrMoreSelected = selected is JellioRoute.LibraryTab ||
         selected is JellioRoute.LiveTv ||
-        selected is JellioRoute.Feed ||
-        selected is JellioRoute.Vocab
+        selected is JellioRoute.Feed
 
     Box(
         contentAlignment = Alignment.BottomCenter,
@@ -138,8 +133,8 @@ fun MobileBottomNav(
                 )
                 BottomNavPillTab(
                     route = bookshelf,
-                    labelOverride = "Books",
-                    isSelected = selected is JellioRoute.Bookshelf,
+                    labelOverride = "Reader",
+                    isSelected = selected is JellioRoute.Bookshelf || selected is JellioRoute.Vocab,
                     enabled = enabled,
                     onClick = { onSelect(bookshelf) },
                     modifier = Modifier.weight(1f),
@@ -152,7 +147,6 @@ fun MobileBottomNav(
                         is JellioRoute.LibraryTab -> selected.label()
                         is JellioRoute.LiveTv -> selected.label()
                         is JellioRoute.Feed -> selected.label()
-                        is JellioRoute.Vocab -> "Vocab"
                         else -> "Browse"
                     }
                     Column(

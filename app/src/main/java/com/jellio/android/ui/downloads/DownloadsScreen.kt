@@ -108,26 +108,29 @@ fun DownloadsScreen(
             .navigationBarsPadding(),
     ) {
         // Header
+        val isCompact = com.jellio.android.ui.common.isCompactScreen()
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(JellioBgElevated),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = JellioText,
-                )
+            if (!isCompact) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(JellioBgElevated),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = JellioText,
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
             }
-            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Offline Downloads",
@@ -144,14 +147,13 @@ fun DownloadsScreen(
         }
 
         // Filter Chips
-        Row(
+        androidx.compose.foundation.lazy.LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            DownloadsFilter.entries.forEach { filter ->
+            items(DownloadsFilter.entries.size) { idx ->
+                val filter = DownloadsFilter.entries[idx]
                 val selected = uiState.filter == filter
                 FilterChip(
                     selected = selected,
@@ -161,6 +163,7 @@ fun DownloadsScreen(
                             text = filter.label,
                             fontSize = 12.sp,
                             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            maxLines = 1,
                         )
                     },
                     colors = FilterChipDefaults.filterChipColors(

@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,11 +26,14 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -280,10 +284,21 @@ fun NowPlayingDrawer(
             Column(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .then(if (isCompact) Modifier.fillMaxWidth(0.94f) else Modifier.width(DrawerWidth.scaled()))
-                    .background(Color(0xF2141414))
-                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)))
-                    .padding(vertical = if (isCompact) 16.dp else 24.dp, horizontal = if (isCompact) 14.dp else 22.dp)
+                    .then(
+                        if (isCompact) {
+                            Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF121214))
+                                .statusBarsPadding()
+                                .navigationBarsPadding()
+                        } else {
+                            Modifier
+                                .width(DrawerWidth.scaled())
+                                .background(Color(0xF2141414))
+                                .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)))
+                        },
+                    )
+                    .padding(vertical = if (isCompact) 14.dp else 24.dp, horizontal = if (isCompact) 16.dp else 22.dp)
                     .focusGroup()
                     .pointerInput(Unit) { detectTapGestures { } },
             ) {
@@ -293,7 +308,7 @@ fun NowPlayingDrawer(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
@@ -310,7 +325,7 @@ fun NowPlayingDrawer(
                             )
                         }
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = Strings.get("quick_hub_title"),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -353,6 +368,8 @@ fun NowPlayingDrawer(
                         }
                     }
 
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     // Close Button
                     Surface(
                         onClick = onDismiss,
@@ -383,7 +400,8 @@ fun NowPlayingDrawer(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 18.dp)
+                        .then(if (isCompact) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
+                        .padding(bottom = 16.dp)
                         .onPreviewKeyEvent { event ->
                             val step = when (event.key) {
                                 Key.DirectionLeft -> -1
@@ -408,6 +426,7 @@ fun NowPlayingDrawer(
                         badgeColor = Color.White.copy(alpha = 0.22f),
                         onSelect = { selectedTab = QuickHubTab.NOW_PLAYING },
                         onFallbackFocus = { if (quickHubPillHandsBack(QuickHubTab.NOW_PLAYING, selectedTab)) handBackToSelectedPill() },
+                        alwaysShowLabel = isCompact,
                         modifier = Modifier.focusRequester(tabFocus.requesterFor(QuickHubTab.NOW_PLAYING)),
                     )
 
@@ -419,6 +438,7 @@ fun NowPlayingDrawer(
                         badgeColor = Color(0xFFFF3B30),
                         onSelect = { selectedTab = QuickHubTab.NOTIFICATIONS },
                         onFallbackFocus = { if (quickHubPillHandsBack(QuickHubTab.NOTIFICATIONS, selectedTab)) handBackToSelectedPill() },
+                        alwaysShowLabel = isCompact,
                         modifier = Modifier.focusRequester(tabFocus.requesterFor(QuickHubTab.NOTIFICATIONS)),
                     )
 
@@ -427,12 +447,13 @@ fun NowPlayingDrawer(
                         ?: Strings.get("nav_group_watch")
                     QuickHubTabPill(
                         label = gwTabLabel,
-                        icon = Icons.Filled.Groups,
+                        icon = Icons.Filled.LiveTv,
                         selected = selectedTab == QuickHubTab.GROUP_WATCH,
                         badgeCount = groupWatchBadgeCount,
                         badgeColor = if (activeGroup != null) Color(0xFF22C55E) else Color.White.copy(alpha = 0.22f),
                         onSelect = { selectedTab = QuickHubTab.GROUP_WATCH },
                         onFallbackFocus = { if (quickHubPillHandsBack(QuickHubTab.GROUP_WATCH, selectedTab)) handBackToSelectedPill() },
+                        alwaysShowLabel = isCompact,
                         modifier = Modifier.focusRequester(tabFocus.requesterFor(QuickHubTab.GROUP_WATCH)),
                     )
 
@@ -445,6 +466,7 @@ fun NowPlayingDrawer(
                             badgeColor = Color(0xFFFF3B30),
                             onSelect = { selectedTab = QuickHubTab.FRIENDS },
                             onFallbackFocus = { if (quickHubPillHandsBack(QuickHubTab.FRIENDS, selectedTab)) handBackToSelectedPill() },
+                            alwaysShowLabel = isCompact,
                             modifier = Modifier.focusRequester(tabFocus.requesterFor(QuickHubTab.FRIENDS)),
                         )
                     }
@@ -787,7 +809,7 @@ fun NowPlayingDrawer(
 }
 }
 
-// Icon and badge only; the label appears while the tab is selected.
+// Icon and badge only; the label appears while the tab is selected (or always on compact mobile).
 @Composable
 private fun RowScope.QuickHubTabPill(
     label: String,
@@ -798,8 +820,9 @@ private fun RowScope.QuickHubTabPill(
     onSelect: () -> Unit,
     onFallbackFocus: () -> Unit,
     modifier: Modifier = Modifier,
+    alwaysShowLabel: Boolean = false,
 ) {
-    val expanded = quickHubPillExpanded(selected)
+    val expanded = alwaysShowLabel || quickHubPillExpanded(selected)
     val width by animateFloatAsState(
         targetValue = quickHubPillWeight(selected),
         animationSpec = tween(180),
@@ -824,7 +847,7 @@ private fun RowScope.QuickHubTabPill(
             focusedBorder = QuickHubHighlight.focusBorder(QuickHubHighlight.PillShape),
         ),
         modifier = modifier
-            .weight(width)
+            .then(if (alwaysShowLabel) Modifier else Modifier.weight(width))
             .semantics { contentDescription = label }
             .onFocusChanged { if (it.isFocused) onFallbackFocus() },
     ) {
@@ -832,8 +855,8 @@ private fun RowScope.QuickHubTabPill(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 9.dp, horizontal = 10.dp),
+                .then(if (alwaysShowLabel) Modifier else Modifier.fillMaxWidth())
+                .padding(vertical = 9.dp, horizontal = if (alwaysShowLabel) 12.dp else 10.dp),
         ) {
             Icon(
                 imageVector = icon,
@@ -849,8 +872,9 @@ private fun RowScope.QuickHubTabPill(
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                     ),
                     maxLines = 1,
+                    softWrap = false,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = if (alwaysShowLabel) Modifier else Modifier.weight(1f, fill = false),
                 )
             }
             if (badgeCount > 0) {

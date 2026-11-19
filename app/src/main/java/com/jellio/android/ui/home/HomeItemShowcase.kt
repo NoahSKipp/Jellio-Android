@@ -22,6 +22,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -74,6 +77,7 @@ fun HomeItemShowcase(
     imageUrl: (BaseItemDto, String, Int) -> String,
     modifier: Modifier = Modifier,
     onClick: ((BaseItemDto) -> Unit)? = null,
+    onPlay: ((BaseItemDto) -> Unit)? = null,
 ) {
     val isCompactPortrait = com.jellio.android.ui.common.rememberWindowLayoutMode() == com.jellio.android.ui.common.WindowLayoutMode.COMPACT_PORTRAIT
     val clickModifier = if (onClick != null && item != null) {
@@ -115,9 +119,9 @@ fun HomeItemShowcase(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            0f to JellioBg.copy(alpha = 0.25f),
-                            0.42f to JellioBg.copy(alpha = 0.35f),
-                            0.78f to JellioBg.copy(alpha = 0.82f),
+                            0f to JellioBg.copy(alpha = 0.22f),
+                            0.35f to JellioBg.copy(alpha = 0.30f),
+                            0.68f to JellioBg.copy(alpha = 0.84f),
                             1f to JellioBg,
                         ),
                     ),
@@ -143,13 +147,13 @@ fun HomeItemShowcase(
                     start = if (isCompactPortrait) 16.dp else RowStartPadding,
                     top = if (isCompactPortrait) 12.dp else 24.dp,
                     end = if (isCompactPortrait) 16.dp else 24.dp,
-                    bottom = if (isCompactPortrait) 16.dp else HeaderOverlap + 16.dp,
+                    bottom = if (isCompactPortrait) 14.dp else HeaderOverlap + 16.dp,
                 )
                 .width(if (isCompactPortrait) maxWidth else maxWidth * 0.42f),
             label = "showcaseText",
         ) { (details, series, isEpisode) ->
         Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom),
+            verticalArrangement = Arrangement.spacedBy(if (isCompactPortrait) 6.dp else 8.dp, Alignment.Bottom),
             modifier = Modifier.fillMaxHeight(),
         ) {
             ShowcaseLogo(
@@ -157,10 +161,16 @@ fun HomeItemShowcase(
                 series = series,
                 title = if (isEpisode) details.SeriesName ?: series?.Name ?: details.Name.orEmpty() else details.Name.orEmpty(),
                 imageUrl = imageUrl,
+                isCompactPortrait = isCompactPortrait,
             )
-            ShowcaseMetadata(details = details, series = series, isEpisode = isEpisode)
+            ShowcaseMetadata(
+                details = details,
+                series = series,
+                isEpisode = isEpisode,
+                isCompactPortrait = isCompactPortrait,
+            )
             val status = (series ?: details).Status
-            if (status.equals("Continuing", ignoreCase = true)) {
+            if (!isCompactPortrait && status.equals("Continuing", ignoreCase = true)) {
                 Text(
                     text = com.jellio.android.data.i18n.Strings.get("home_editorial_ongoing").uppercase(),
                     color = JellioText,
@@ -176,13 +186,70 @@ fun HomeItemShowcase(
             if (overview != null) {
                 Text(
                     text = overview,
-                    color = JellioText.copy(alpha = 0.86f),
-                    fontSize = 14.sp,
-                    lineHeight = 19.sp,
-                    maxLines = 3,
+                    color = JellioText.copy(alpha = 0.84f),
+                    fontSize = if (isCompactPortrait) 13.sp else 14.sp,
+                    lineHeight = if (isCompactPortrait) 18.sp else 19.sp,
+                    maxLines = if (isCompactPortrait) 2 else 3,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = if (isCompactPortrait) Modifier else Modifier.weight(1f, fill = false),
                 )
+            }
+            if (isCompactPortrait && (onPlay != null || onClick != null)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(top = 4.dp),
+                ) {
+                    if (onPlay != null) {
+                        androidx.compose.material3.Button(
+                            onClick = { onPlay(details) },
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = Color(0xFF0D0D0D),
+                            ),
+                            shape = RoundedCornerShape(999.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            androidx.compose.foundation.layout.Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = com.jellio.android.data.i18n.Strings.get("action_play"),
+                                color = Color(0xFF0D0D0D),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                    if (onClick != null) {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = { onClick(details) },
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.28f)),
+                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                                containerColor = Color.White.copy(alpha = 0.10f),
+                                contentColor = JellioText,
+                            ),
+                            shape = RoundedCornerShape(999.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = Icons.Filled.Info,
+                                contentDescription = null,
+                                tint = JellioText,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = com.jellio.android.data.i18n.Strings.get("card_menu_details"),
+                                color = JellioText,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                }
             }
         }
         }
@@ -265,16 +332,19 @@ private fun ShowcaseLogo(
     series: BaseItemDto?,
     title: String,
     imageUrl: (BaseItemDto, String, Int) -> String,
+    isCompactPortrait: Boolean = false,
 ) {
     val candidates = remember(item.Id, series?.Id) { posterLogoCandidates(item, imageUrl, 1200, series = series) }
     var index by remember(candidates) { mutableIntStateOf(0) }
     val url = candidates.getOrNull(index)
     val context = LocalContext.current
     val density = LocalDensity.current
-    val logoWidthPx = maxOf(with(density) { 340.dp.scaled().roundToPx() }, 1000)
-    val logoHeightPx = maxOf(with(density) { 72.dp.scaled().roundToPx() } * 3, 300)
-    Box(contentAlignment = Alignment.BottomStart, modifier = Modifier.height(72.dp.scaled())) {
-        if (url != null) {
+    val maxLogoHeight = if (isCompactPortrait) 64.dp else 72.dp.scaled()
+    val maxLogoWidth = if (isCompactPortrait) 260.dp else 340.dp.scaled()
+    val logoWidthPx = maxOf(with(density) { maxLogoWidth.roundToPx() }, 1000)
+    val logoHeightPx = maxOf(with(density) { maxLogoHeight.roundToPx() } * 3, 300)
+    if (url != null) {
+        Box(contentAlignment = Alignment.BottomStart, modifier = Modifier.height(maxLogoHeight)) {
             AsyncImage(
                 model = remember(url, logoWidthPx, logoHeightPx) { sizedImageRequest(context, url, logoWidthPx, logoHeightPx) },
                 contentDescription = title,
@@ -283,19 +353,19 @@ private fun ShowcaseLogo(
                 onError = { index += 1 },
                 modifier = Modifier
                     .fillMaxHeight()
-                    .widthIn(max = 340.dp.scaled()),
-            )
-        } else {
-            Text(
-                text = title,
-                color = JellioText,
-                fontSize = 30.sp,
-                lineHeight = 34.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+                    .widthIn(max = maxLogoWidth),
             )
         }
+    } else {
+        Text(
+            text = title,
+            color = JellioText,
+            fontSize = if (isCompactPortrait) 24.sp else 30.sp,
+            lineHeight = if (isCompactPortrait) 28.sp else 34.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -303,14 +373,30 @@ private fun ShowcaseLogo(
 // "S1 E3 • Episode name" in place of the type.
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ShowcaseMetadata(details: BaseItemDto, series: BaseItemDto?, isEpisode: Boolean) {
-    val parts = remember(details, series, com.jellio.android.data.prefs.DisplayPreferences.displayLanguage) {
+private fun ShowcaseMetadata(
+    details: BaseItemDto,
+    series: BaseItemDto?,
+    isEpisode: Boolean,
+    isCompactPortrait: Boolean = false,
+) {
+    val episodeHeading = remember(details, isEpisode) {
+        if (!isEpisode) return@remember null
+        val label = episodeLabel(details)
+        val epName = details.Name?.takeIf { it.isNotBlank() && label.isNotEmpty() }
+            ?.let { com.jellio.android.data.i18n.episodeDisplayName(it, details.IndexNumber) }
+        when {
+            label.isNotEmpty() && epName != null -> "$label · $epName"
+            label.isNotEmpty() -> label
+            else -> null
+        }
+    }
+    val parts = remember(details, series, isCompactPortrait, com.jellio.android.data.prefs.DisplayPreferences.displayLanguage) {
         buildList {
-            if (isEpisode) {
+            if (!isCompactPortrait && isEpisode) {
                 val label = episodeLabel(details)
                 if (label.isNotEmpty()) add(label)
                 details.Name?.takeIf { it.isNotBlank() && label.isNotEmpty() }?.let { add(com.jellio.android.data.i18n.episodeDisplayName(it, details.IndexNumber)) }
-            } else {
+            } else if (!isEpisode) {
                 when (details.Type?.lowercase(Locale.US)) {
                     "movie" -> add(com.jellio.android.data.i18n.Strings.get("search_filter_movies"))
                     "series" -> add(com.jellio.android.data.i18n.Strings.get("nav_shows"))
@@ -330,39 +416,94 @@ private fun ShowcaseMetadata(details: BaseItemDto, series: BaseItemDto?, isEpiso
         }
     }
     val rating = details.CommunityRating ?: series?.CommunityRating?.takeIf { isEpisode }
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        parts.forEachIndexed { index, part ->
-            if (index > 0) MetaDot(modifier = Modifier.align(Alignment.CenterVertically))
-            Text(
-                text = part,
-                color = JellioTextSecondary,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.align(Alignment.CenterVertically),
-            )
-        }
-        if (rating != null && rating > 0) {
-            if (parts.isNotEmpty()) MetaDot(modifier = Modifier.align(Alignment.CenterVertically))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.align(Alignment.CenterVertically),
-            ) {
-                TmdbBadge(width = 28.dp, height = 12.dp)
+    if (isCompactPortrait) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (episodeHeading != null) {
                 Text(
-                    text = String.format(Locale.US, "%.1f", rating),
+                    text = episodeHeading,
+                    color = JellioText.copy(alpha = 0.92f),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                parts.forEach { part ->
+                    Box(
+                        modifier = Modifier
+                            .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = part,
+                            color = JellioTextSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
+                }
+                if (rating != null && rating > 0) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier
+                            .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                    ) {
+                        TmdbBadge(width = 24.dp, height = 10.dp)
+                        Text(
+                            text = String.format(Locale.US, "%.1f", rating),
+                            color = JellioText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
+                }
+            }
+        }
+    } else {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            parts.forEachIndexed { index, part ->
+                if (index > 0) MetaDot(modifier = Modifier.align(Alignment.CenterVertically))
+                Text(
+                    text = part,
                     color = JellioTextSecondary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.align(Alignment.CenterVertically),
                 )
+            }
+            if (rating != null && rating > 0) {
+                if (parts.isNotEmpty()) MetaDot(modifier = Modifier.align(Alignment.CenterVertically))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.align(Alignment.CenterVertically),
+                ) {
+                    TmdbBadge(width = 28.dp, height = 12.dp)
+                    Text(
+                        text = String.format(Locale.US, "%.1f", rating),
+                        color = JellioTextSecondary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
             }
         }
     }
@@ -402,6 +543,7 @@ fun ShowcaseHost(
     imageUrl: (BaseItemDto, String, Int) -> String,
     modifier: Modifier = Modifier,
     onClick: ((BaseItemDto) -> Unit)? = null,
+    onPlay: ((BaseItemDto) -> Unit)? = null,
 ) {
     val active = highlighted.value ?: fallback
     var shownItem by remember { mutableStateOf<BaseItemDto?>(null) }
@@ -413,7 +555,14 @@ fun ShowcaseHost(
         showcaseInfo = ShowcaseInfo(target, null)
         showcaseInfo = loadInfo(target)
     }
-    HomeItemShowcase(item = shownItem, info = showcaseInfo, imageUrl = imageUrl, modifier = modifier, onClick = onClick)
+    HomeItemShowcase(
+        item = shownItem,
+        info = showcaseInfo,
+        imageUrl = imageUrl,
+        modifier = modifier,
+        onClick = onClick,
+        onPlay = onPlay,
+    )
 }
 
 suspend fun loadShowcaseInfo(repository: com.jellio.android.data.JellioRepository, userId: String, item: BaseItemDto): ShowcaseInfo {

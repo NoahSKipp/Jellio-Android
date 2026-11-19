@@ -101,12 +101,7 @@ fun LibraryScreen(
 
         BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         when {
-            uiState.isLoading -> Box(Modifier.fillMaxSize()) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Center)) {
-                    ScreenSpinner()
-                    Text(text = com.jellio.android.ui.i18n.string("status_loading"), color = JellioTextSecondary, modifier = Modifier.padding(top = 16.dp))
-                }
-            }
+            uiState.isLoading -> com.jellio.android.ui.home.HomeSkeleton(modifier = Modifier.fillMaxSize())
             uiState.error != null -> ErrorState(
                 message = com.jellio.android.ui.i18n.string("library_load_error"),
                 failure = uiState.error,

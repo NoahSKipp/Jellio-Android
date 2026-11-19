@@ -286,9 +286,10 @@ fun HomeScreen(
                                     loadInfo = { item -> viewModel.showcaseInfo(session, item) },
                                     imageUrl = imageUrl,
                                     onClick = onItemClick,
+                                    onPlay = onPlay,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height((screenHeight * 0.44f).coerceIn(320.dp, 420.dp)),
+                                        .height((screenHeight * 0.48f).coerceIn(360.dp, 450.dp)),
                                 )
                             }
                         }

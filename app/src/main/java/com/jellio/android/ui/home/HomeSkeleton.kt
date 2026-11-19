@@ -50,9 +50,10 @@ fun SkeletonPoster(modifier: Modifier = Modifier) {
 @Composable
 fun SkeletonRow(landscape: Boolean = false, modifier: Modifier = Modifier) {
     val pulse = skeletonPulse()
-    Column(modifier = modifier.fillMaxWidth().clipToBounds().padding(start = RowStartPadding, bottom = RowSpacing)) {
+    val startPad = responsiveRowStartPadding()
+    Column(modifier = modifier.fillMaxWidth().clipToBounds().padding(start = startPad, bottom = RowSpacing)) {
         Row(
-            modifier = Modifier.padding(top = 4.dp, bottom = 18.dp).width(160.dp).height(16.dp).skeletonFill(pulse, 6.dp),
+            modifier = Modifier.padding(top = 4.dp, bottom = 14.dp).width(150.dp).height(16.dp).skeletonFill(pulse, 6.dp),
         ) {}
         // Laid out at full size and cut off at the screen edge, never squeezed.
         Row(
@@ -72,19 +73,50 @@ fun SkeletonRow(landscape: Boolean = false, modifier: Modifier = Modifier) {
     }
 }
 
-// The whole Home while its first rows load: a banner and a few rows.
+// The whole Home while its first rows load: matches the mobile portrait hero + rows
+// or the wide/TV top banner + rows so placeholders sit where real items appear.
 @Composable
 fun HomeSkeleton(modifier: Modifier = Modifier) {
     val pulse = skeletonPulse()
+    val isCompactPortrait = com.jellio.android.ui.common.rememberWindowLayoutMode() ==
+        com.jellio.android.ui.common.WindowLayoutMode.COMPACT_PORTRAIT
     Column(modifier = modifier.fillMaxSize().clipToBounds()) {
-        Row(
-            modifier = Modifier
-                .padding(start = 48.dp, end = 48.dp, top = 28.dp)
-                .fillMaxWidth()
-                .height(200.dp)
-                .skeletonFill(pulse, 16.dp),
-        ) {}
-        SkeletonRow(landscape = true)
-        SkeletonRow()
+        if (isCompactPortrait) {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(360.dp)
+                    .skeletonFill(pulse, 0.dp),
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .align(androidx.compose.ui.Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 18.dp),
+                ) {
+                    Row(modifier = Modifier.width(220.dp).height(26.dp).skeletonFill(pulse, 8.dp)) {}
+                    Row(modifier = Modifier.width(180.dp).height(14.dp).skeletonFill(pulse, 6.dp)) {}
+                    Row(modifier = Modifier.fillMaxWidth(0.88f).height(14.dp).skeletonFill(pulse, 6.dp)) {}
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(modifier = Modifier.width(104.dp).height(38.dp).skeletonFill(pulse, 20.dp)) {}
+                        Row(modifier = Modifier.width(104.dp).height(38.dp).skeletonFill(pulse, 20.dp)) {}
+                    }
+                }
+            }
+            androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(16.dp))
+            SkeletonRow(landscape = false)
+            SkeletonRow(landscape = false)
+        } else {
+            Row(
+                modifier = Modifier
+                    .padding(start = 48.dp, end = 48.dp, top = 28.dp)
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .skeletonFill(pulse, 16.dp),
+            ) {}
+            SkeletonRow(landscape = true)
+            SkeletonRow()
+        }
     }
 }

@@ -16,11 +16,11 @@ import javax.inject.Inject
 
 enum class DownloadsFilter(val label: String) {
     ALL("All"),
-    VIDEO("Movies & Shows"),
+    VIDEO("Video"),
     BOOKS("Books"),
     MANGA("Manga"),
     AUDIOBOOKS("Audiobooks"),
-    ACTIVE("Active / Queued"),
+    ACTIVE("Active"),
 }
 
 @Immutable

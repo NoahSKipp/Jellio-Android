@@ -1,5 +1,6 @@
 package com.jellio.android.ui.books
 
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -310,9 +312,7 @@ fun BookshelfScreen(
             }
 
             if (state.isLoading && state.ebookItems.isEmpty() && state.mangaSeries.isEmpty() && state.audiobookItems.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = JellioSecondary)
-                }
+                BookshelfSkeleton(modifier = Modifier.fillMaxSize())
             } else if (state.error != null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -428,6 +428,71 @@ fun BookshelfScreen(
 }
 
 @Composable
+private fun BookshelfSkeleton(modifier: Modifier = Modifier) {
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "bookshelfSkeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.05f,
+        targetValue = 0.12f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(900),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "bookshelfSkeletonAlpha",
+    )
+    val fillColor = Color.White.copy(alpha = alpha)
+
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 136.dp),
+        contentPadding = PaddingValues(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        userScrollEnabled = false,
+        modifier = modifier,
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .width(140.dp)
+                        .height(18.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(fillColor),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    repeat(2) {
+                        Box(
+                            modifier = Modifier
+                                .width(260.dp)
+                                .height(102.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(fillColor),
+                        )
+                    }
+                }
+            }
+        }
+        items(6) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(2f / 3f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(fillColor),
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.75f)
+                        .height(14.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(fillColor),
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun BookshelfHeader(
     state: BookshelfUiState,
     onSelectTab: (BookshelfTab) -> Unit,
@@ -441,6 +506,7 @@ private fun BookshelfHeader(
         modifier = Modifier
             .fillMaxWidth()
             .background(JellioBg)
+            .statusBarsPadding()
             .padding(top = 12.dp, start = 16.dp, end = 16.dp, bottom = 4.dp),
     ) {
         Row(
@@ -449,7 +515,7 @@ private fun BookshelfHeader(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = "Bookshelf",
+                text = "Reader",
                 color = JellioText,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
@@ -512,13 +578,20 @@ private fun BookshelfHeader(
                     modifier = Modifier.weight(1f),
                 ) {
                     Row(
-                        modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
+                        modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(tab.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Icon(icon, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = tab.label,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
@@ -680,7 +753,7 @@ private fun ContinueReadingCard(
         color = JellioBgElevated,
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, JellioBorder),
-        modifier = Modifier.width(220.dp),
+        modifier = Modifier.width(260.dp),
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
