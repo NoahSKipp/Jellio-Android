@@ -6,17 +6,19 @@ import com.jellio.android.data.prefs.QuickHubTrigger
 internal enum class OnboardingStep {
     LANGUAGE,
     PLAYBACK,
+    READER,
     SUMMARY,
 }
 
 // With audio/subtitle preferences synced from the account, the playback step is skipped.
 internal fun onboardingSteps(hasSharedAccountSettings: Boolean): List<OnboardingStep> =
     if (hasSharedAccountSettings) {
-        listOf(OnboardingStep.LANGUAGE, OnboardingStep.SUMMARY)
+        listOf(OnboardingStep.LANGUAGE, OnboardingStep.READER, OnboardingStep.SUMMARY)
     } else {
         listOf(
             OnboardingStep.LANGUAGE,
             OnboardingStep.PLAYBACK,
+            OnboardingStep.READER,
             OnboardingStep.SUMMARY,
         )
     }

@@ -21,6 +21,7 @@ class SettingsViewModel @Inject constructor(
     private val repository: JellioRepository,
     private val streamPreferences: StreamPreferences,
     private val recommendationPreferences: com.jellio.android.data.prefs.RecommendationPreferences,
+    private val booksRepository: com.jellio.android.data.books.BooksRepository,
 ) : ViewModel() {
     private val _communityRowEnabled = MutableStateFlow(true)
     val communityRowEnabled: StateFlow<Boolean> = _communityRowEnabled.asStateFlow()
@@ -649,6 +650,76 @@ class SettingsViewModel @Inject constructor(
 
     fun clearAniSyncMessage() {
         _aniSyncMessage.value = null
+    }
+
+    private val _mihonImporting = MutableStateFlow(false)
+    val mihonImporting: StateFlow<Boolean> = _mihonImporting.asStateFlow()
+
+    private val _mihonImportMessage = MutableStateFlow<String?>(null)
+    val mihonImportMessage: StateFlow<String?> = _mihonImportMessage.asStateFlow()
+
+    private val _mihonImportError = MutableStateFlow(false)
+    val mihonImportError: StateFlow<Boolean> = _mihonImportError.asStateFlow()
+
+    private var mihonPollJob: kotlinx.coroutines.Job? = null
+
+    fun refreshMihonImportStatus() {
+        viewModelScope.launch {
+            booksRepository.getMihonImportStatus().onSuccess { status ->
+                val job = status.Job ?: return@onSuccess
+                if (job.Status == "running") {
+                    _mihonImporting.value = true
+                    _mihonImportError.value = false
+                    _mihonImportMessage.value = "Importing Mihon library: ${job.Processed} / ${job.Total} series..."
+                    startMihonPolling()
+                }
+            }
+        }
+    }
+
+    fun importMihonBackup(bytes: ByteArray, fileName: String) {
+        if (_mihonImporting.value) return
+        viewModelScope.launch {
+            _mihonImporting.value = true
+            _mihonImportError.value = false
+            _mihonImportMessage.value = "Uploading $fileName..."
+            booksRepository.importMihonBackup(bytes)
+                .onSuccess { status ->
+                    val job = status.Job
+                    if (job != null && job.Status == "running") {
+                        _mihonImportMessage.value = "Importing from $fileName: ${job.Processed} / ${job.Total} series..."
+                        startMihonPolling()
+                    } else {
+                        _mihonImporting.value = false
+                        _mihonImportMessage.value = "Mihon import started (${job?.Total ?: 0} series)."
+                    }
+                }
+                .onFailure { err ->
+                    _mihonImporting.value = false
+                    _mihonImportError.value = true
+                    _mihonImportMessage.value = err.message ?: "Could not import Mihon backup."
+                }
+        }
+    }
+
+    private fun startMihonPolling() {
+        mihonPollJob?.cancel()
+        mihonPollJob = viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(2_000L)
+                val res = booksRepository.getMihonImportStatus().getOrNull() ?: break
+                val job = res.Job ?: break
+                if (job.Status == "running") {
+                    _mihonImportMessage.value = "Importing Mihon library: ${job.Processed} / ${job.Total} series..."
+                } else {
+                    _mihonImporting.value = false
+                    _mihonImportError.value = false
+                    _mihonImportMessage.value = "Import complete: ${job.Processed} / ${job.Total} series processed."
+                    break
+                }
+            }
+            _mihonImporting.value = false
+        }
     }
 }
 

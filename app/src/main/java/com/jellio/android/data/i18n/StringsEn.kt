@@ -978,7 +978,7 @@ internal object StringsEn {
         m["outlook_may_stutter"] = "May stutter: {0}"
         m["outlook_wont_play"] = "Won't play: {0}"
         m["outlook_probably_wont_play"] = "Probably won't play: {0}"
-        m["outlook_reason_codec"] = "a video format this TV can't play"
+        m["outlook_reason_codec"] = "a video format this device can't play"
         m["outlook_reason_hdr_on_sdr"] = "HDR on a non-HDR screen"
         m["outlook_reason_dolby_vision"] = "Dolby Vision only"
         m["outlook_reason_interlaced"] = "interlaced video"
@@ -994,5 +994,35 @@ internal object StringsEn {
         m["player_start_over_error"] = "Could not start over. Try again."
         m["player_subtitle_switch_error"] = "Could not switch subtitles. Try again."
         m["player_audio_switch_error"] = "Could not switch the audio track. Try again."
+
+        // Missing keys used across Settings, Player, and AniSync
+        m["action_back"] = "Back"
+        m["settings_home_screen"] = "Home Screen"
+        m["settings_customize_home"] = "Customize Home"
+        m["anisync_last_synced"] = "Last synced: {0}"
+        m["anisync_never_synced"] = "Never synced"
+
+        // Mobile-appropriate overrides for legacy TV wording
+        m["now_playing_this_tv"] = "This device (Paused)"
+        m["onboarding_welcome_sub"] = "Let's personalize your Jellio experience in a few quick steps."
+        m["onboarding_wizard_card_desc"] = "Re-run the setup guide to adjust your language, playback preferences, or Reader and Mihon import."
+        m["settings_match_frame_rate_desc"] = "Switches the display to the video's frame rate (24 Hz for most films) for smoother motion. The screen may go dark for a moment as it switches."
+        m["tv_groupwatch_intro"] = "Watch in sync with others on Jellio or Jellyfin. Invites from other users pop up here too."
+        m["playback_err_unreachable_desc"] = "Check that your device is online and the Jellyfin server is running, then try again."
+        m["playback_err_cant_decode_title"] = "This device can't play this video format"
+
+        // Reader, Mihon Import & Onboarding
+        m["settings_cat_reader"] = "Reader & Manga"
+        m["settings_mihon_title"] = "Import from Mihon / Tachiyomi"
+        m["settings_mihon_desc"] = "In Mihon, go to Settings > Data and storage > Create backup, then select the .tachibk or .proto.gz file here to import your manga library and reading progress."
+        m["settings_mihon_choose"] = "Choose Mihon backup"
+        m["onboarding_reader_title"] = "Reader & Manga Setup"
+        m["onboarding_reader_sub"] = "Bring your manga library from Mihon and get started with built-in Books, Manga, Audiobooks, and Vocabulary."
+        m["onboarding_mihon_import"] = "Import from Mihon or Tachiyomi"
+        m["onboarding_mihon_import_desc"] = "Upload a .tachibk or .proto.gz backup to bring over your manga library, categories, and reading progress."
+        m["onboarding_choose_mihon_file"] = "Choose backup file"
+        m["onboarding_no_file_selected"] = "No file selected"
+        m["onboarding_vocab_title"] = "Tap-to-Define & Vocabulary"
+        m["onboarding_vocab_desc"] = "Long-press any word while reading EPUBs or PDFs to look up definitions and save flashcards for spaced-repetition review in Reader > Vocab."
     }
 }

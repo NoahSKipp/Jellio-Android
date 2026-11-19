@@ -22,7 +22,9 @@ import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.MovieFilter
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
@@ -134,6 +136,7 @@ private enum class ShortcutPickerField { BUTTON, TRIGGER }
 private enum class SettingsCategory(val labelKey: String, val icon: ImageVector) {
     ACCOUNT("settings_cat_account", Icons.Filled.Person),
     PLAYBACK("settings_cat_playback", Icons.Filled.PlayCircle),
+    READER("settings_cat_reader", androidx.compose.material.icons.Icons.Filled.AutoStories),
     RECOMMENDATIONS("settings_cat_recommendations", Icons.Filled.AutoAwesome),
     ANISYNC("settings_cat_anisync", Icons.Filled.Sync),
     DISPLAY("settings_cat_display", Icons.Filled.Palette),
@@ -362,6 +365,9 @@ fun SettingsScreen(
                                 onClick = { openField = LanguageField.SUBTITLE },
                             )
                         }
+                    }
+                    SettingsCategory.READER -> {
+                        ReaderSettingsCategoryContent(viewModel = viewModel)
                     }
                     SettingsCategory.RECOMMENDATIONS -> {
                         SettingsSection(title = string("settings_home_screen"), icon = Icons.Filled.Tune) {
@@ -672,6 +678,9 @@ fun SettingsScreen(
                 SettingsSection(title = string("settings_sleep_timer"), icon = Icons.Filled.Bedtime, form = true) {
                     SleepTimerSection(viewModel = viewModel)
                 }
+                }
+                SettingsCategory.READER -> {
+                    ReaderSettingsCategoryContent(viewModel = viewModel)
                 }
                 SettingsCategory.RECOMMENDATIONS -> {
                     val communityRowEnabled by viewModel.communityRowEnabled.collectAsState()
@@ -2442,6 +2451,60 @@ private fun AniSyncSetupGuideDialog(
                 label = string("anisync_guide_close"),
                 onClick = onDismiss,
                 modifier = Modifier.focusRequester(closeFocus),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReaderSettingsCategoryContent(viewModel: SettingsViewModel) {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val importing by viewModel.mihonImporting.collectAsState()
+    val message by viewModel.mihonImportMessage.collectAsState()
+    val isError by viewModel.mihonImportError.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshMihonImportStatus()
+    }
+
+    val filePicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val bytes = runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                }.getOrNull()
+                val fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "backup.tachibk"
+                if (bytes != null && bytes.isNotEmpty()) {
+                    viewModel.importMihonBackup(bytes, fileName)
+                }
+            }
+        }
+    }
+
+    SettingsSection(
+        title = string("settings_cat_reader"),
+        icon = androidx.compose.material.icons.Icons.Filled.AutoStories,
+    ) {
+        SettingsActionRow(
+            label = string("settings_mihon_title"),
+            description = string("settings_mihon_desc"),
+            icon = androidx.compose.material.icons.Icons.Filled.UploadFile,
+            onClick = {
+                if (!importing) {
+                    filePicker.launch(arrayOf("*/*"))
+                }
+            },
+        )
+        if (!message.isNullOrBlank()) {
+            SettingsDivider()
+            Text(
+                text = message.orEmpty(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isError) JellioDanger else JellioSecondary,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             )
         }
     }

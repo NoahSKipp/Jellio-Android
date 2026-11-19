@@ -648,6 +648,40 @@ class BooksRepository @Inject constructor(
             if (!token.isNullOrEmpty()) "?ApiKey=$token&api_key=$token" else ""
     }
 
+    suspend fun mangaSeriesCoverUrl(item: BaseItemDto, title: String? = null): String? {
+        val uid = currentUserId() ?: "default"
+        val offlineCover = offlineDownloads.getCompletedCoverFile(item.Id, uid)
+        if (offlineCover != null) return offlineCover.toURI().toString()
+        val server = sessionManager.serverAddress()?.trimEnd('/') ?: return null
+        val token = sessionManager.accessToken()
+        val primaryTag = item.ImageTags?.get("Primary")
+        if (!primaryTag.isNullOrBlank()) {
+            val base = "$server/Items/${item.Id}/Images/Primary?maxWidth=500&quality=90&tag=$primaryTag"
+            return if (!token.isNullOrEmpty()) "$base&ApiKey=$token&api_key=$token" else base
+        }
+        val sb = StringBuilder("$server/Jellio/manga/series-cover/${normalizeId(item.Id)}")
+        var hasQuery = false
+        if (!token.isNullOrEmpty()) {
+            sb.append("?ApiKey=").append(token).append("&api_key=").append(token)
+            hasQuery = true
+        }
+        if (!title.isNullOrBlank()) {
+            sb.append(if (hasQuery) "&" else "?").append("title=").append(URLEncoder.encode(title, "UTF-8"))
+        }
+        return sb.toString()
+    }
+
+    suspend fun importMihonBackup(bytes: ByteArray): Result<MangaImportStatusDto> = catching {
+        val body = okhttp3.RequestBody.Companion.run {
+            bytes.toRequestBody(okhttp3.MediaType.Companion.run { "application/octet-stream".toMediaType() })
+        }
+        api.importMihonBackup(body)
+    }
+
+    suspend fun getMihonImportStatus(): Result<MangaImportStatusDto> = catching {
+        api.getMihonImportStatus()
+    }
+
     suspend fun mangaStreamCoverUrl(mangaId: Int, title: String? = null): String? {
         val server = sessionManager.serverAddress()?.trimEnd('/') ?: return null
         val token = sessionManager.accessToken()

@@ -1031,13 +1031,19 @@ private fun MangaSeriesDetailSheet(
                         .background(JellioBgElevated)
                         .border(1.dp, JellioBorder, RoundedCornerShape(10.dp)),
                 ) {
-                    if (!series.coverUrl.isNullOrBlank()) {
+                    var coverFailed by remember(series.coverUrl) { mutableStateOf(false) }
+                    if (!series.coverUrl.isNullOrBlank() && !coverFailed) {
                         AsyncImage(
                             model = series.coverUrl,
                             contentDescription = series.title,
                             contentScale = ContentScale.Crop,
+                            onError = { coverFailed = true },
                             modifier = Modifier.fillMaxSize(),
                         )
+                    } else {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Filled.MenuBook, contentDescription = null, tint = JellioTextTertiary, modifier = Modifier.size(32.dp))
+                        }
                     }
                 }
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -501,7 +501,7 @@ class BookshelfViewModel @Inject constructor(
                 byKey[key] = existing.copy(localChapters = sortedChapters)
             } else {
                 val coverItem = sortedChapters.firstOrNull { !it.ImageTags?.get("Primary").isNullOrBlank() } ?: first
-                val cover = booksRepository.bookCoverUrl(coverItem)
+                val cover = booksRepository.mangaSeriesCoverUrl(coverItem, title)
                 if (cover != null) coverMap[key] = cover
                 val readCount = sortedChapters.count { ch ->
                     val norm = BooksRepository.normalizeId(ch.Id)

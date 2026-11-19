@@ -551,3 +551,16 @@ data class TrackerSyncRequest(
     val Key: String? = null,
     val MangaId: Int? = null,
 )
+
+@JsonClass(generateAdapter = true)
+data class MangaImportJobDto(
+    val Status: String = "running",
+    val Total: Int = 0,
+    val Processed: Int = 0,
+)
+
+@JsonClass(generateAdapter = true)
+data class MangaImportStatusDto(
+    val Job: MangaImportJobDto? = null,
+    val PendingChapters: Int = 0,
+)

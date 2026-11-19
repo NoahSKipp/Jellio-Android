@@ -29,11 +29,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,7 +44,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,6 +93,7 @@ fun OnboardingOverlay(
     initialAudioLang: String? = null,
     initialSubtitleLang: String? = null,
     onSavePreferences: (audio: String?, subtitle: String?) -> Unit,
+    onImportMihon: (suspend (ByteArray) -> Result<com.jellio.android.data.books.MangaImportStatusDto>)? = null,
     onComplete: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -277,6 +283,11 @@ fun OnboardingOverlay(
                                 onShowHelp = { title, desc -> activeHelpDialog = title to desc },
                                 nextFocusRequester = nextFocusRequester,
                                 backFocusRequester = backFocusRequester,
+                            )
+                        }
+                        OnboardingStep.READER -> {
+                            StepReaderContent(
+                                onImportMihon = onImportMihon,
                             )
                         }
                         OnboardingStep.SUMMARY -> {
@@ -958,6 +969,189 @@ private fun TvHelpExplanationModal(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StepReaderContent(
+    onImportMihon: (suspend (ByteArray) -> Result<com.jellio.android.data.books.MangaImportStatusDto>)?,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selectedFileName by remember { mutableStateOf<String?>(null) }
+    var importStatus by remember { mutableStateOf<String?>(null) }
+    var importError by remember { mutableStateOf(false) }
+    var importing by remember { mutableStateOf(false) }
+
+    val filePicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null && onImportMihon != null) {
+            val fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "backup.tachibk"
+            selectedFileName = fileName
+            importing = true
+            importError = false
+            importStatus = "Uploading $fileName..."
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val bytes = runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                }.getOrNull()
+                if (bytes == null || bytes.isEmpty()) {
+                    importing = false
+                    importError = true
+                    importStatus = "Could not read selected file."
+                    return@launch
+                }
+                onImportMihon(bytes)
+                    .onSuccess { res ->
+                        importing = false
+                        importError = false
+                        val total = res.Job?.Total ?: 0
+                        importStatus = "Import started ($total series). It will continue in the background."
+                    }
+                    .onFailure { err ->
+                        importing = false
+                        importError = true
+                        importStatus = err.message ?: "Could not import Mihon backup."
+                    }
+            }
+        }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = string("onboarding_reader_title"),
+            style = MaterialTheme.typography.titleMedium,
+            color = JellioText,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = string("onboarding_reader_sub"),
+            style = MaterialTheme.typography.bodySmall,
+            color = JellioTextSecondary,
+        )
+
+        // Mihon / Tachiyomi Backup Import Card
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.05f))
+                .border(1.dp, JellioBorder, RoundedCornerShape(14.dp))
+                .padding(14.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.AutoStories,
+                    contentDescription = null,
+                    tint = JellioSecondary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = string("onboarding_mihon_import"),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = JellioText,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Text(
+                text = string("onboarding_mihon_import_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = JellioTextSecondary,
+            )
+            if (onImportMihon != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Surface(
+                        onClick = {
+                            if (!importing) filePicker.launch(arrayOf("*/*"))
+                        },
+                        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = JellioSecondary.copy(alpha = 0.18f),
+                            contentColor = JellioSecondary,
+                            focusedContainerColor = JellioSecondary,
+                            focusedContentColor = Color.Black,
+                        ),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.UploadFile,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Text(
+                                text = string("onboarding_choose_mihon_file"),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                    Text(
+                        text = selectedFileName ?: string("onboarding_no_file_selected"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = JellioTextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (!importStatus.isNullOrBlank()) {
+                    Text(
+                        text = importStatus.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (importError) com.jellio.android.ui.theme.JellioDanger else JellioSecondary,
+                    )
+                }
+            }
+        }
+
+        // Tap-to-Define & Vocabulary Card
+        Column(
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.05f))
+                .border(1.dp, JellioBorder, RoundedCornerShape(14.dp))
+                .padding(14.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.School,
+                    contentDescription = null,
+                    tint = JellioSecondary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = string("onboarding_vocab_title"),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = JellioText,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Text(
+                text = string("onboarding_vocab_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = JellioTextSecondary,
+            )
         }
     }
 }

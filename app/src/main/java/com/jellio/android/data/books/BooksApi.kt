@@ -241,6 +241,12 @@ interface BooksApi {
     @GET("Jellio/manga/stream/chapter/{chapterId}/cbz")
     suspend fun downloadStreamChapterCbz(@Path("chapterId") chapterId: Int): ResponseBody
 
+    @POST("Jellio/manga/import")
+    suspend fun importMihonBackup(@Body body: okhttp3.RequestBody): MangaImportStatusDto
+
+    @GET("Jellio/manga/import")
+    suspend fun getMihonImportStatus(): MangaImportStatusDto
+
     // --- Offline download conversion slots ---
 
     @GET("Jellio/downloads/conversions")

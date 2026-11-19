@@ -144,7 +144,7 @@ fun FeedScreen(
                                 Text(
                                     text = com.jellio.android.data.i18n.Strings.get("tv_feed_empty_filtered"),
                                     color = JellioTextSecondary,
-                                    modifier = Modifier.padding(start = 48.dp, top = 8.dp),
+                                    modifier = Modifier.padding(start = horizontalPad, top = 8.dp),
                                 )
                             } else {
                                 FeedList(
@@ -153,16 +153,20 @@ fun FeedScreen(
                                     userImageUrl = userImageUrl,
                                     focusedEntry = focusedEntry,
                                     onUserClick = onUserClick,
+                                    horizontalPad = horizontalPad,
+                                    isCompact = isCompact,
                                 )
                             }
                         }
-                        FeedSpotlight(
-                            entry = focusedEntry,
-                            fallback = visible.firstOrNull(),
-                            imageUrl = imageUrl,
-                            userImageUrl = userImageUrl,
-                            modifier = Modifier.weight(1f).fillMaxHeight().padding(end = 32.dp, bottom = 28.dp),
-                        )
+                        if (!isCompact) {
+                            FeedSpotlight(
+                                entry = focusedEntry,
+                                fallback = visible.firstOrNull(),
+                                imageUrl = imageUrl,
+                                userImageUrl = userImageUrl,
+                                modifier = Modifier.weight(1f).fillMaxHeight().padding(end = 32.dp, bottom = 28.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -195,13 +199,19 @@ private fun FeedList(
     userImageUrl: (String, String?, Int) -> String,
     focusedEntry: MutableState<FeedEntryDto?>,
     onUserClick: (String) -> Unit,
+    horizontalPad: androidx.compose.ui.unit.Dp = 48.dp,
+    isCompact: Boolean = false,
 ) {
     // Entering the list from the filters lands on the newest entry, not the one nearest the focused chip.
     val firstEntry = androidx.compose.runtime.remember { androidx.compose.ui.focus.FocusRequester() }
     val first = groups.firstOrNull()?.entries?.firstOrNull()
     LazyColumn(
         state = rememberLazyListState(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 48.dp, end = 16.dp, bottom = 32.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = horizontalPad,
+            end = horizontalPad,
+            bottom = if (isCompact) com.jellio.android.ui.nav.MobileBottomNavHeight + 20.dp else 32.dp,
+        ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxSize().focusRestorer(firstEntry),
     ) {

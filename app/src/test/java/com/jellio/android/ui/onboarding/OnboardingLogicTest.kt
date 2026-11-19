@@ -21,6 +21,7 @@ class OnboardingLogicTest {
             listOf(
                 OnboardingStep.LANGUAGE,
                 OnboardingStep.PLAYBACK,
+                OnboardingStep.READER,
                 OnboardingStep.SUMMARY,
             ),
             onboardingSteps(hasSharedAccountSettings = false),
@@ -28,6 +29,7 @@ class OnboardingLogicTest {
         assertEquals(
             listOf(
                 OnboardingStep.LANGUAGE,
+                OnboardingStep.READER,
                 OnboardingStep.SUMMARY,
             ),
             onboardingSteps(hasSharedAccountSettings = true),

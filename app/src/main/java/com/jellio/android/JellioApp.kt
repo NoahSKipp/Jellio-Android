@@ -777,6 +777,9 @@ private fun JellioApp(
                     onSavePreferences = { audio, subtitle ->
                         appViewModel.saveLanguagePreferences(session, audio, subtitle)
                     },
+                    onImportMihon = { bytes ->
+                        appViewModel.booksRepository.importMihonBackup(bytes)
+                    },
                     onComplete = {
                         showOnboarding = false
                         runCatching { sidebarFocusRequester.requestFocus() }
