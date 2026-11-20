@@ -9,7 +9,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.jellio.android.data.i18n.Strings
@@ -23,6 +25,7 @@ data class ItemMenuExtras(
     val onShareLink: (() -> Unit)? = null,
     val isOnGrouplist: Boolean = false,
     val onToggleGrouplist: (() -> Unit)? = null,
+    val onDownload: (() -> Unit)? = null,
 )
 
 @Stable
@@ -30,6 +33,7 @@ class CardMenuExtras internal constructor(
     private val session: Session,
     private val context: Context,
     private val viewModel: CardMenuViewModel,
+    private val askDownload: (BaseItemDto) -> Unit,
 ) {
     // Composed only while a menu is open, which is when the flags get read.
     @Composable
@@ -44,7 +48,14 @@ class CardMenuExtras internal constructor(
             } else {
                 null
             },
+            onDownload = if (downloadKindFor(item.Type) != null) { { askDownload(item) } } else null,
         )
+    }
+
+    internal fun download(item: BaseItemDto, scope: EpisodeScope?, quality: DownloadQuality) {
+        viewModel.download(session, item, scope, quality) { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun toast(key: String) {
@@ -68,5 +79,17 @@ fun rememberCardMenuExtras(
     viewModel: CardMenuViewModel = hiltViewModel(),
 ): CardMenuExtras {
     val context = LocalContext.current
-    return remember(session, context, viewModel) { CardMenuExtras(session, context, viewModel) }
+    var downloadTarget by remember { mutableStateOf<BaseItemDto?>(null) }
+    val extras = remember(session, context, viewModel) {
+        CardMenuExtras(session, context, viewModel) { downloadTarget = it }
+    }
+    // The menu has closed by the time a choice is made, so the picker lives here.
+    downloadTarget?.let { target ->
+        DownloadChoiceDialog(
+            item = target,
+            onChoose = { scope, quality -> extras.download(target, scope, quality) },
+            onDismiss = { downloadTarget = null },
+        )
+    }
+    return extras
 }

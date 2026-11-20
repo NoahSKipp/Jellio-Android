@@ -1100,6 +1100,18 @@ class JellioRepository @Inject constructor(
             recentLists["episodes:$seriesId:$seasonId"] = System.currentTimeMillis() to it
         }
 
+    // Every episode of a show, or of one season, fresh and with what an
+    // offline copy shows for it. Not cached: the watched flags pick which ones.
+    suspend fun getEpisodesForDownload(seriesId: String, userId: String, seasonId: String?): List<BaseItemDto> =
+        withRetry {
+            api.getEpisodes(
+                seriesId,
+                userId,
+                seasonId,
+                fields = "Overview,PremiereDate,EndDate,RunTimeTicks,ProductionYear,CommunityRating,OfficialRating",
+            ).Items
+        }
+
     suspend fun getNextEpisode(userId: String, item: BaseItemDto): BaseItemDto? {
         if (item.Type != "Episode") return null
         val seriesId = item.SeriesId ?: return null

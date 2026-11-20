@@ -852,6 +852,9 @@ fun CardOptionsMenu(
                     }
                 }
                 onToggleWatched?.let { add(MenuAction(if (isPlayed) com.jellio.android.data.i18n.Strings.get("detail_mark_unwatched") else com.jellio.android.data.i18n.Strings.get("detail_mark_watched"), it)) }
+                extras?.onDownload?.let {
+                    add(MenuAction(com.jellio.android.data.i18n.Strings.get(if (downloadKindFor(item.Type) == DownloadKind.EPISODES) "menu_download_episodes" else "menu_download"), it))
+                }
                 onAddToFriendWatchlist?.let { add(MenuAction(com.jellio.android.data.i18n.Strings.get("friends_add_to_friend_watchlist"), it)) }
             }
         }

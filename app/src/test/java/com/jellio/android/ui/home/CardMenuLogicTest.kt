@@ -36,4 +36,40 @@ class CardMenuLogicTest {
         assertEquals("Look at Heat on Jellyfin - https://x", shareText("Heat", "https://x"))
         assertEquals("https://x", shareText("", "https://x"))
     }
+
+    @Test
+    fun onlyVideoAndShowsCanBeDownloaded() {
+        assertEquals(DownloadKind.VIDEO, downloadKindFor("Movie"))
+        assertEquals(DownloadKind.VIDEO, downloadKindFor("Episode"))
+        assertEquals(DownloadKind.EPISODES, downloadKindFor("Series"))
+        assertEquals(DownloadKind.EPISODES, downloadKindFor("Season"))
+        assertEquals(null, downloadKindFor("BoxSet"))
+        assertEquals(null, downloadKindFor("Book"))
+        assertEquals(null, downloadKindFor(null))
+    }
+
+    @Test
+    fun episodeScopesPickFromTheUnwatched() {
+        // 1..12, the first three watched.
+        val episodes = (1..12).toList()
+        val played = { n: Int -> n <= 3 }
+        assertEquals(listOf(4), pickEpisodes(EpisodeScope.NEXT_1, episodes, played))
+        assertEquals(listOf(4, 5, 6, 7, 8), pickEpisodes(EpisodeScope.NEXT_5, episodes, played))
+        assertEquals((4..12).toList(), pickEpisodes(EpisodeScope.NEXT_10, episodes, played))
+        assertEquals((4..12).toList(), pickEpisodes(EpisodeScope.UNWATCHED, episodes, played))
+        assertEquals(episodes, pickEpisodes(EpisodeScope.ALL, episodes, played))
+        assertEquals(emptyList<Int>(), pickEpisodes(EpisodeScope.NEXT_1, episodes) { true })
+    }
+
+    @Test
+    fun wholeLabelFollowsSeasonOrSeries() {
+        assertEquals("downloads_scope_season", EpisodeScope.ALL.labelKeyFor(true))
+        assertEquals("downloads_scope_series", EpisodeScope.ALL.labelKeyFor(false))
+        assertEquals("downloads_scope_next_5", EpisodeScope.NEXT_5.labelKeyFor(true))
+    }
+
+    @Test
+    fun qualitiesMatchTheDownloadManager() {
+        assertEquals(listOf("low", "high", "higher", "original"), DownloadQuality.values().map { it.value })
+    }
 }
