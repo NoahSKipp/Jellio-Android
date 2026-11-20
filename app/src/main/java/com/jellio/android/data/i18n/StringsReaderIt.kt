@@ -15,4 +15,5 @@ internal fun fillReaderIt(m: HashMap<String, String>) {
     m["reader_removed_server"] = "«{0}» rimosso dal server."
     m["reader_remove_failed"] = "Impossibile rimuoverlo. Riprova."
     m["reader_update_failed"] = "Impossibile aggiornarlo. Riprova."
+    m["reader_discover_genre"] = "Genere"
 }

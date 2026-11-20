@@ -15,4 +15,5 @@ internal fun fillReaderEn(m: HashMap<String, String>) {
     m["reader_removed_server"] = "Removed “{0}” from the server."
     m["reader_remove_failed"] = "Could not remove it. Try again."
     m["reader_update_failed"] = "Could not update it. Try again."
+    m["reader_discover_genre"] = "Genre"
 }

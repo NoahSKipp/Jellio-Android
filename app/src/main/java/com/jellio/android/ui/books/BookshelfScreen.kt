@@ -1753,28 +1753,31 @@ private val MANGA_COUNTRY_FILTERS: List<Pair<String?, String>> = listOf(
     "CN" to "Manhua (CN)",
 )
 
-private data class BookDiscoverOption(
-    val source: String,
-    val value: String?,
-    val label: String,
+private data class GenreOption(val value: String, val label: String)
+
+// Open Library subjects the web Discover offers; the server takes the slug.
+private val BOOK_GENRES: List<GenreOption> = listOf(
+    GenreOption("fantasy", "Fantasy"),
+    GenreOption("science_fiction", "Science fiction"),
+    GenreOption("mystery_and_detective_stories", "Mystery"),
+    GenreOption("thrillers", "Thriller"),
+    GenreOption("romance", "Romance"),
+    GenreOption("historical_fiction", "Historical fiction"),
+    GenreOption("horror", "Horror"),
+    GenreOption("classics", "Classics"),
+    GenreOption("young_adult_fiction", "Young adult"),
+    GenreOption("philosophy", "Philosophy"),
+    GenreOption("history", "History"),
+    GenreOption("biography", "Biography"),
+    GenreOption("psychology", "Psychology"),
+    GenreOption("science", "Science"),
+    GenreOption("self-help", "Self-help"),
+    GenreOption("economics", "Economics"),
+    GenreOption("politics", "Politics"),
+    GenreOption("poetry", "Poetry"),
 )
 
-private val BOOK_DISCOVER_OPTIONS = listOf(
-    BookDiscoverOption("trending", null, "Trending"),
-    BookDiscoverOption("subject", "fantasy", "Fantasy"),
-    BookDiscoverOption("subject", "science_fiction", "Sci-Fi"),
-    BookDiscoverOption("subject", "mystery_and_detective_stories", "Mystery"),
-    BookDiscoverOption("subject", "thrillers", "Thrillers"),
-    BookDiscoverOption("subject", "romance", "Romance"),
-    BookDiscoverOption("subject", "classics", "Classics"),
-    BookDiscoverOption("subject", "horror", "Horror"),
-    BookDiscoverOption("subject", "history", "History"),
-    BookDiscoverOption("subject", "philosophy", "Philosophy"),
-    BookDiscoverOption("subject", "biography", "Biography"),
-    BookDiscoverOption("subject", "psychology", "Psychology"),
-    BookDiscoverOption("subject", "science", "Science"),
-    BookDiscoverOption("subject", "poetry", "Poetry"),
-)
+private val MANGA_GENRE_OPTIONS: List<GenreOption> = ANILIST_MANGA_GENRES.map { GenreOption(it, it) }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1994,24 +1997,47 @@ private fun DiscoverAndRequestSheet(
                     }
                 }
             } else {
+                val selectedGenre = BOOK_GENRES.firstOrNull {
+                    state.bookDiscoverSource == "subject" && it.value == state.bookDiscoverValue
+                }
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    items(BOOK_DISCOVER_OPTIONS, key = { "${it.source}_${it.value.orEmpty()}" }) { opt ->
-                        val selected = state.bookDiscoverSource == opt.source && state.bookDiscoverValue == opt.value
+                    item {
+                        val trending = state.bookDiscoverSource == "trending"
                         FilterChip(
-                            selected = selected,
-                            onClick = { onSelectBookFilter(opt.source, opt.value) },
-                            label = { Text(opt.label, fontSize = 12.sp) },
+                            selected = trending,
+                            onClick = { onSelectBookFilter("trending", null) },
+                            label = { Text("Trending", fontSize = 12.sp) },
                             colors = jellioChipColors(),
                             border = FilterChipDefaults.filterChipBorder(
                                 enabled = true,
-                                selected = selected,
+                                selected = trending,
                                 borderColor = JellioBorder,
                                 selectedBorderColor = JellioSecondary,
                             ),
                         )
+                    }
+                    item {
+                        OutlinedButton(
+                            onClick = { showGenreDialog = true },
+                            border = BorderStroke(1.dp, if (selectedGenre != null) JellioSecondary else JellioBorder),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (selectedGenre != null) JellioSecondary else JellioText,
+                            ),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Icon(Icons.Filled.FilterList, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = selectedGenre?.let { "${Strings.get("reader_discover_genre")}: ${it.label}" }
+                                    ?: Strings.get("reader_discover_genre"),
+                                fontSize = 12.sp,
+                                fontWeight = if (selectedGenre != null) FontWeight.SemiBold else FontWeight.Normal,
+                            )
+                        }
                     }
                 }
             }
@@ -2137,24 +2163,51 @@ private fun DiscoverAndRequestSheet(
     }
 
     if (showGenreDialog) {
-        MangaGenrePickerDialog(
-            selectedGenres = state.mangaDiscoverGenres,
-            onDismiss = { showGenreDialog = false },
-            onApply = { next ->
-                onSetMangaGenres(next)
-                showGenreDialog = false
-            },
-        )
+        if (isManga) {
+            GenrePickerDialog(
+                options = MANGA_GENRE_OPTIONS,
+                selected = state.mangaDiscoverGenres,
+                singleSelect = false,
+                onDismiss = { showGenreDialog = false },
+                onApply = { next ->
+                    onSetMangaGenres(next)
+                    showGenreDialog = false
+                },
+            )
+        } else {
+            // Open Library browses one subject at a time; none selected is Trending.
+            GenrePickerDialog(
+                options = BOOK_GENRES,
+                selected = setOfNotNull(state.bookDiscoverValue.takeIf { state.bookDiscoverSource == "subject" }),
+                singleSelect = true,
+                onDismiss = { showGenreDialog = false },
+                onApply = { next ->
+                    val subject = next.firstOrNull()
+                    if (subject == null) onSelectBookFilter("trending", null) else onSelectBookFilter("subject", subject)
+                    showGenreDialog = false
+                },
+            )
+        }
     }
 }
 
 @Composable
-private fun MangaGenrePickerDialog(
-    selectedGenres: Set<String>,
+private fun GenrePickerDialog(
+    options: List<GenreOption>,
+    selected: Set<String>,
+    singleSelect: Boolean,
     onDismiss: () -> Unit,
     onApply: (Set<String>) -> Unit,
 ) {
-    var draft by remember(selectedGenres) { mutableStateOf(selectedGenres) }
+    var draft by remember(selected) { mutableStateOf(selected) }
+
+    fun toggle(value: String, on: Boolean) {
+        draft = when {
+            singleSelect -> if (on) setOf(value) else emptySet()
+            on -> draft + value
+            else -> draft - value
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2164,24 +2217,20 @@ private fun MangaGenrePickerDialog(
         title = { Text("Filter by Genre", fontWeight = FontWeight.Bold) },
         text = {
             LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
-                items(ANILIST_MANGA_GENRES) { genre ->
-                    val checked = genre in draft
+                items(options, key = { it.value }) { genre ->
+                    val checked = genre.value in draft
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                draft = if (checked) draft - genre else draft + genre
-                            },
+                            .clickable { toggle(genre.value, !checked) },
                     ) {
                         Checkbox(
                             checked = checked,
-                            onCheckedChange = { isChecked ->
-                                draft = if (isChecked) draft + genre else draft - genre
-                            },
+                            onCheckedChange = { isChecked -> toggle(genre.value, isChecked) },
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text(genre, color = JellioText, fontSize = 14.sp)
+                        Text(genre.label, color = JellioText, fontSize = 14.sp)
                     }
                 }
             }
