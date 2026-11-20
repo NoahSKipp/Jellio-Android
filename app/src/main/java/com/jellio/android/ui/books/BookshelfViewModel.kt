@@ -13,6 +13,8 @@ import com.jellio.android.data.books.CachedContinueCard
 import com.jellio.android.data.books.ShelfSnapshot
 import com.jellio.android.data.books.ShelfSnapshotStore
 import com.jellio.android.data.books.isMangaContinueDismissed
+import com.jellio.android.data.books.mangaDismissalMarker
+import com.jellio.android.data.books.mangaShelfKey
 import com.jellio.android.data.books.InProgressReadingDto
 import com.jellio.android.data.books.MangaDiscoverDto
 import com.jellio.android.data.books.MangaSearchResponseDto
@@ -385,6 +387,8 @@ class BookshelfViewModel @Inject constructor(
                 runGuarded {
                     val shelf = booksRepository.getShelf(tab.kind)
                     _uiState.update { it.copy(shelfByKind = it.shelfByKind + (tab.kind to shelf)) }
+                    // Removals made on other devices apply once the shelf is in.
+                    if (tab == BookshelfTab.MANGA) publishManga()
                 }
             }
             launch {
@@ -569,7 +573,7 @@ class BookshelfViewModel @Inject constructor(
         val seriesList = withContext(Dispatchers.Default) {
             buildMangaSeriesList(stream.orEmpty(), local.orEmpty(), progress, coverMap)
         }
-        val dismissed = booksRepository.mangaContinueDismissals()
+        val dismissed = _uiState.value.shelfByKind[BookshelfTab.MANGA.kind]?.Series.orEmpty()
         val continueCards = seriesList
             .filter { it.readCount in 1 until it.chapterCount || it.resumeChapterId != null }
             .filterNot { isMangaContinueDismissed(dismissed, it.key, it.lastReadAt) }
@@ -822,9 +826,21 @@ class BookshelfViewModel @Inject constructor(
         when (target.tab) {
             BookshelfTab.MANGA -> {
                 val key = target.seriesKey ?: return
-                booksRepository.dismissMangaContinue(key, target.lastReadAt)
+                val marker = mangaDismissalMarker(target.lastReadAt)
                 _uiState.update { state ->
-                    state.copy(continueManga = state.continueManga.filterNot { it.seriesKey == key })
+                    val shelf = state.shelfByKind[BookshelfTab.MANGA.kind] ?: ShelfDto()
+                    val shelfKey = mangaShelfKey(key)
+                    val prefs = (shelf.Series[shelfKey] ?: SeriesPrefsDto()).copy(ContinueDismissedAt = marker)
+                    state.copy(
+                        continueManga = state.continueManga.filterNot { it.seriesKey == key },
+                        shelfByKind = state.shelfByKind + (BookshelfTab.MANGA.kind to shelf.copy(Series = shelf.Series + (shelfKey to prefs))),
+                    )
+                }
+                viewModelScope.launch {
+                    if (!booksRepository.dismissMangaContinue(key, target.lastReadAt)) {
+                        tell(Strings.get("reader_update_failed"))
+                        loadTab(BookshelfTab.MANGA, force = true)
+                    }
                 }
             }
             BookshelfTab.EBOOK -> {

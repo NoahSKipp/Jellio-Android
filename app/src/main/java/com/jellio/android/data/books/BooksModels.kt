@@ -181,6 +181,7 @@ data class SeriesPrefsDto(
     val ChapterDisplay: String? = null,
     val SkipUpdates: Boolean? = null,
     val DeleteAfterRead: Boolean? = null,
+    val ContinueDismissedAt: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -236,6 +237,7 @@ data class UpdateSeriesPrefsRequest(
     val Reset: Boolean? = null,
     val SkipUpdates: Boolean? = null,
     val DeleteAfterRead: Boolean? = null,
+    val ContinueDismissedAt: String? = null,
 )
 
 @JsonClass(generateAdapter = true)

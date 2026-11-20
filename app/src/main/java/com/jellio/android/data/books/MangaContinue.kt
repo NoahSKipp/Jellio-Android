@@ -1,13 +1,12 @@
 package com.jellio.android.data.books
 
-private const val SEPARATOR = '\t'
+fun mangaShelfKey(seriesKey: String): String = if (seriesKey.startsWith("s:")) seriesKey else "s:$seriesKey"
 
-private fun entry(seriesKey: String, lastReadAt: String?) = "$seriesKey$SEPARATOR${lastReadAt.orEmpty()}"
+// What is stored when a series is removed from Continue reading: the last
+// read time it was removed at, so reading it again brings the card back.
+fun mangaDismissalMarker(lastReadAt: String?): String = lastReadAt?.takeIf { it.isNotBlank() } ?: "-"
 
-// A dismissal is tied to the last read time it was made at: reading the
-// series again changes that time and the card comes back.
-fun isMangaContinueDismissed(entries: Set<String>, seriesKey: String, lastReadAt: String?): Boolean =
-    entry(seriesKey, lastReadAt) in entries
-
-fun withMangaDismissal(entries: Set<String>, seriesKey: String, lastReadAt: String?): Set<String> =
-    entries.filterNot { it.startsWith("$seriesKey$SEPARATOR") }.toSet() + entry(seriesKey, lastReadAt)
+fun isMangaContinueDismissed(prefs: Map<String, SeriesPrefsDto>, seriesKey: String, lastReadAt: String?): Boolean {
+    val stored = (prefs[mangaShelfKey(seriesKey)] ?: prefs[seriesKey])?.ContinueDismissedAt ?: return false
+    return stored == mangaDismissalMarker(lastReadAt)
+}

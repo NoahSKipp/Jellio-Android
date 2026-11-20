@@ -586,15 +586,14 @@ class BooksRepository @Inject constructor(
     suspend fun markItemUnplayed(userId: String, itemId: String): Boolean =
         catching { jellyfinApi.markUnplayed(userId, itemId) }.isSuccess
 
-    // Manga has no server side continue list to edit, so dismissals live on
-    // this device and lapse once the series is read again.
-    fun mangaContinueDismissals(): Set<String> =
-        readerPrefs.getStringSet(PREF_MANGA_CONTINUE_DISMISSED, emptySet()).orEmpty().toSet()
-
-    fun dismissMangaContinue(seriesKey: String, lastReadAt: String?) {
-        val next = withMangaDismissal(mangaContinueDismissals(), seriesKey, lastReadAt)
-        readerPrefs.edit().putStringSet(PREF_MANGA_CONTINUE_DISMISSED, next).apply()
-    }
+    // The removal lives in the series prefs on the server, so every device
+    // sees it; it lapses once the series is read again.
+    suspend fun dismissMangaContinue(seriesKey: String, lastReadAt: String?): Boolean =
+        catching {
+            api.updateSeriesPrefs(
+                UpdateSeriesPrefsRequest(Key = mangaShelfKey(seriesKey), ContinueDismissedAt = mangaDismissalMarker(lastReadAt)),
+            )
+        }.isSuccess
 
     suspend fun searchBookAgain(chaptarrBookId: Int): Result<Unit> =
         catching {
@@ -851,7 +850,6 @@ class BooksRepository @Inject constructor(
     }
 
     companion object {
-        private const val PREF_MANGA_CONTINUE_DISMISSED = "manga_continue_dismissed"
 
         private val COMIC_REGEX = Regex("""\.(cbz|cbr|cb7|cbt)$""", RegexOption.IGNORE_CASE)
         private val CHAPTER_NAME_REGEX = Regex(
