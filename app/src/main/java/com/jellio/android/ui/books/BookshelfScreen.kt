@@ -26,6 +26,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -341,17 +344,20 @@ fun BookshelfScreen(
                     state.mangaSeries, state.searchQuery, state.sortOption, state.sortDescending,
                     state.selectedCategoryId, state.shelfByKind, state.activeTab,
                 ) { viewModel.filteredMangaSeries() }
-                BookshelfMainGrid(
-                    state = state,
-                    filteredEbooks = filteredEbooks,
-                    filteredAudiobooks = filteredAudiobooks,
-                    filteredManga = filteredManga,
-                    onOpenReader = onOpenReader,
-                    onOpenAudiobook = onOpenAudiobook,
-                    onOpenMangaSeries = viewModel::openMangaSeries,
-                    onDownloadItem = viewModel::downloadBookOrAudiobook,
-                    onAssignCategories = { key -> viewModel.openAssignCategoriesFor(key) },
-                )
+                // One scroll state per tab, so each opens on its own continue row.
+                androidx.compose.runtime.key(state.activeTab) {
+                    BookshelfMainGrid(
+                        state = state,
+                        filteredEbooks = filteredEbooks,
+                        filteredAudiobooks = filteredAudiobooks,
+                        filteredManga = filteredManga,
+                        onOpenReader = onOpenReader,
+                        onOpenAudiobook = onOpenAudiobook,
+                        onOpenMangaSeries = viewModel::openMangaSeries,
+                        onDownloadItem = viewModel::downloadBookOrAudiobook,
+                        onAssignCategories = { key -> viewModel.openAssignCategoriesFor(key) },
+                    )
+                }
             }
         }
 
@@ -645,7 +651,27 @@ private fun BookshelfMainGrid(
 
     val isCompact = isCompactScreen()
     val bottomBarPadding = if (isCompact) LocalBottomBarPadding.current else 0.dp
+    val continueTitle = if (state.activeTab == BookshelfTab.AUDIOBOOK) "Continue Listening" else "Continue Reading"
+    val searching = state.searchQuery.isNotBlank()
+    val hasContinue = continueList.isNotEmpty() && !searching
+    // Until the continue row has answered, a placeholder holds its place under
+    // the same key, so the library never slides up into view before it.
+    val continuePending = state.activeTab !in state.continueLoadedTabs && !searching
+    val gridState = rememberLazyGridState()
+    var userScrolled by remember { mutableStateOf(false) }
+    var hadContinue by remember { mutableStateOf(hasContinue || continuePending) }
+    LaunchedEffect(gridState) {
+        gridState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) userScrolled = true
+        }
+    }
+    LaunchedEffect(hasContinue, continuePending) {
+        // The row appeared above a library the person has not touched: stay on it.
+        if ((hasContinue || continuePending) && !hadContinue && !userScrolled) gridState.scrollToItem(0)
+        hadContinue = hasContinue || continuePending
+    }
     LazyVerticalGrid(
+        state = gridState,
         columns = GridCells.Adaptive(minSize = 136.dp),
         contentPadding = PaddingValues(
             start = 16.dp,
@@ -657,11 +683,15 @@ private fun BookshelfMainGrid(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        if (continueList.isNotEmpty() && state.searchQuery.isBlank()) {
+        if (continuePending && !hasContinue) {
+            item(key = "continue_section", span = { GridItemSpan(maxLineSpan) }, contentType = "continue_section") {
+                ContinueRowSkeleton(continueTitle)
+            }
+        } else if (hasContinue) {
             item(key = "continue_section", span = { GridItemSpan(maxLineSpan) }, contentType = "continue_section") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = if (state.activeTab == BookshelfTab.AUDIOBOOK) "Continue Listening" else "Continue Reading",
+                        text = continueTitle,
                         color = JellioText,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,

@@ -470,6 +470,7 @@ class BookshelfViewModel @Inject constructor(
                 // Stale data stays on screen; an error only replaces an empty shelf.
                 error = if (failed != null && tab !in state.loadedTabs) (failed.message ?: "Failed to load bookshelf") else null,
                 loadedTabs = if (failed == null) state.loadedTabs + tab else state.loadedTabs,
+                continueLoadedTabs = state.continueLoadedTabs + tab,
             )
         }
         if (failed == null && _uiState.value.libraries.isNotEmpty() && tab in _uiState.value.loadedTabs) saveSnapshot(tab, uid)
