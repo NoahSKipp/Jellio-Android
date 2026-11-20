@@ -830,7 +830,7 @@ fun CardOptionsMenu(
                 onRemoveFromRow?.let { add(MenuAction(com.jellio.android.data.i18n.Strings.get("menu_remove_continue"), it, danger = true)) }
             }
             upNext -> {
-                onGoToDetails?.let { add(MenuAction(com.jellio.android.data.i18n.Strings.get("card_go_to_details"), it)) }
+                onGoToDetails?.let { add(MenuAction(com.jellio.android.data.i18n.Strings.get("menu_go_to_details"), it)) }
                 onGoToSeries?.let { add(MenuAction(com.jellio.android.data.i18n.Strings.get("menu_go_to_series"), it)) }
                 // Jellyfin can't hide one episode from Next Up; marking it
                 // played is what drops it off the row.

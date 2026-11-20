@@ -747,7 +747,6 @@ internal object StringsIt {
         m["service_shows_on"] = "Serie su {0}"
         m["coming_soon_in_days"] = "Tra {0} giorni"
         m["card_minutes_left"] = "{0} min rimasti"
-        m["card_go_to_details"] = "Vai ai dettagli"
         m["row_show"] = "Mostra riga"
         m["row_hide"] = "Nascondi riga"
         m["row_titles_loading_more"] = "{0} titoli, caricamento in corso..."

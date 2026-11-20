@@ -747,7 +747,6 @@ internal object StringsPt {
         m["service_shows_on"] = "Séries no {0}"
         m["coming_soon_in_days"] = "Em {0} dias"
         m["card_minutes_left"] = "Faltam {0} min"
-        m["card_go_to_details"] = "Ir para detalhes"
         m["row_show"] = "Mostrar linha"
         m["row_hide"] = "Ocultar linha"
         m["row_titles_loading_more"] = "{0} títulos, carregando mais..."

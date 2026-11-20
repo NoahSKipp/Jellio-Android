@@ -747,7 +747,6 @@ internal object StringsFr {
         m["service_shows_on"] = "Séries sur {0}"
         m["coming_soon_in_days"] = "Dans {0} jours"
         m["card_minutes_left"] = "{0} min restantes"
-        m["card_go_to_details"] = "Voir les détails"
         m["row_show"] = "Afficher la rangée"
         m["row_hide"] = "Masquer la rangée"
         m["row_titles_loading_more"] = "{0} titres, chargement de la suite..."

@@ -747,7 +747,6 @@ internal object StringsEs {
         m["service_shows_on"] = "Series en {0}"
         m["coming_soon_in_days"] = "En {0} días"
         m["card_minutes_left"] = "Quedan {0} min"
-        m["card_go_to_details"] = "Ir a detalles"
         m["row_show"] = "Mostrar fila"
         m["row_hide"] = "Ocultar fila"
         m["row_titles_loading_more"] = "{0} títulos, cargando más..."

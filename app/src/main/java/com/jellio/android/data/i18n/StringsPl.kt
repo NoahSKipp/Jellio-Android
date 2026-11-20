@@ -747,7 +747,6 @@ internal object StringsPl {
         m["service_shows_on"] = "Seriale w {0}"
         m["coming_soon_in_days"] = "Za {0} dni"
         m["card_minutes_left"] = "Pozostało {0} min"
-        m["card_go_to_details"] = "Przejdź do szczegółów"
         m["row_show"] = "Pokaż rząd"
         m["row_hide"] = "Ukryj rząd"
         m["row_titles_loading_more"] = "{0} tytułów, wczytywanie kolejnych..."
