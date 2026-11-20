@@ -83,6 +83,7 @@ fun LibraryScreen(
         val highlightedItem = remember { mutableStateOf<BaseItemDto?>(null) }
         val onCardFocus = remember { { item: BaseItemDto -> highlightedItem.value = item } }
         val openItemOptions = rememberCardOptionsHost(
+            session = session,
             onToggleWatchlist = { viewModel.toggleWatchlist(session, it) },
             onToggleWatched = { viewModel.toggleWatched(session, it) },
         )

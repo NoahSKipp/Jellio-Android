@@ -812,11 +812,16 @@ fun CardOptionsMenu(
     onAddToFriendWatchlist: (() -> Unit)? = null,
     comingSoon: Boolean = false,
     onRemoveFromComingSoon: (() -> Unit)? = null,
+    extras: ItemMenuExtras? = null,
     onDismiss: () -> Unit,
 ) {
     val isWatchlisted = item.UserData?.IsFavorite == true
     val isPlayed = item.UserData?.Played == true
     val actions = buildList {
+        // A coming soon card only has a title and a date, nothing to link to.
+        if (!comingSoon) {
+            extras?.onShareLink?.let { add(MenuAction(com.jellio.android.data.i18n.Strings.get("menu_share_link"), it)) }
+        }
         when {
             comingSoon -> {
                 onGoToDetails?.let { add(MenuAction(com.jellio.android.data.i18n.Strings.get("menu_go_to_details"), it)) }

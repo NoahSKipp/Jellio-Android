@@ -113,6 +113,7 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val friendsState by friendsViewModel.state.collectAsState()
+    val cardMenuExtras = rememberCardMenuExtras(session)
     var friendShareTarget by remember { mutableStateOf<BaseItemDto?>(null) }
     val nowPlayingSessions by viewModel.nowPlayingSessions.collectAsState()
     val nowPlayingActiveCount by viewModel.nowPlayingActiveCount.collectAsState()
@@ -485,6 +486,7 @@ fun HomeScreen(
             }
             CardOptionsMenu(
                 item = itemWithFavorite,
+                extras = cardMenuExtras.forItem(item),
                 continueWatching = continueWatching,
                 upNext = upNext,
                 onGoToDetails = if (continueWatching || upNext) { { onItemClick(item) } } else null,

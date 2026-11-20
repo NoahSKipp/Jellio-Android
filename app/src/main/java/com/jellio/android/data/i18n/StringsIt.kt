@@ -20,6 +20,7 @@ internal object StringsIt {
         fillErrors(m)
         fillAniSyncIt(m)
         fillReaderIt(m)
+        fillCardMenu(m)
         m
     }
 
@@ -1013,5 +1014,11 @@ internal object StringsIt {
         m["onboarding_no_file_selected"] = "Nessun file selezionato"
         m["onboarding_vocab_title"] = "Definizioni e Vocabolario"
         m["onboarding_vocab_desc"] = "Tieni premuta una parola mentre leggi EPUB o PDF per cercarne la definizione e salvare flashcard in Reader > Vocab."
+    }
+
+    private fun fillCardMenu(m: HashMap<String, String>) {
+        m["menu_share_link"] = "Condividi link"
+        m["toast_link_copied"] = "Link copiato. Chiunque abbia un account su questo server può aprirlo."
+        m["toast_copy_link_error"] = "Impossibile copiare il link."
     }
 }

@@ -105,6 +105,7 @@ fun ServiceScreen(
         onDispose { com.jellio.android.ui.perf.ScrollActivity.scrolling = false }
     }
     val openItemOptions = rememberCardOptionsHost(
+        session = session,
         onToggleWatchlist = { viewModel.toggleWatchlist(session, it) },
         onToggleWatched = { viewModel.toggleWatched(session, it) },
     )

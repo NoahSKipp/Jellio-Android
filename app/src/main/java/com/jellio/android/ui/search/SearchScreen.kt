@@ -204,6 +204,7 @@ fun SearchScreen(
     }
 
     val openItemOptions = rememberCardOptionsHost(
+        session = session,
         onToggleWatchlist = { viewModel.toggleWatchlist(session, it) },
         onToggleWatched = { viewModel.toggleWatched(session, it) },
     )

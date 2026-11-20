@@ -8,12 +8,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.jellio.android.data.model.BaseItemDto
+import com.jellio.android.data.session.Session
 import com.jellio.android.ui.friends.FriendWatchlistPickerDialog
 import com.jellio.android.ui.friends.FriendsViewModel
 import com.jellio.android.ui.friends.canShareType
 
 @Composable
 fun rememberCardOptionsHost(
+    session: Session,
     onToggleWatchlist: (BaseItemDto) -> Unit,
     onToggleWatched: (BaseItemDto) -> Unit,
     friendsViewModel: FriendsViewModel = hiltViewModel(),
@@ -21,10 +23,12 @@ fun rememberCardOptionsHost(
     var menuTarget by remember { mutableStateOf<BaseItemDto?>(null) }
     var shareTarget by remember { mutableStateOf<BaseItemDto?>(null) }
     val friends by friendsViewModel.state.collectAsState()
+    val extras = rememberCardMenuExtras(session)
 
     menuTarget?.let { item ->
         CardOptionsMenu(
             item = item,
+            extras = extras.forItem(item),
             onToggleWatchlist = { onToggleWatchlist(item) },
             onToggleWatched = { onToggleWatched(item) },
             onAddToFriendWatchlist = if (canShareType(item.Type) && friends.available && friends.friends.isNotEmpty()) {

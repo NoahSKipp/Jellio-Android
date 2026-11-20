@@ -20,6 +20,7 @@ internal object StringsDe {
         fillErrors(m)
         fillAniSyncDe(m)
         fillReaderDe(m)
+        fillCardMenu(m)
         m
     }
 
@@ -1013,5 +1014,11 @@ internal object StringsDe {
         m["onboarding_no_file_selected"] = "Keine Datei ausgewählt"
         m["onboarding_vocab_title"] = "Nachschlagen & Vokabeln"
         m["onboarding_vocab_desc"] = "Halte beim Lesen von EPUBs oder PDFs ein Wort gedrückt, um Definitionen nachzuschlagen und Karteikarten unter Reader > Vocab zu speichern."
+    }
+
+    private fun fillCardMenu(m: HashMap<String, String>) {
+        m["menu_share_link"] = "Link teilen"
+        m["toast_link_copied"] = "Link kopiert. Jeder mit einem Konto auf diesem Server kann ihn öffnen."
+        m["toast_copy_link_error"] = "Link konnte nicht kopiert werden."
     }
 }

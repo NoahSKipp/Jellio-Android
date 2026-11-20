@@ -20,6 +20,7 @@ internal object StringsFr {
         fillErrors(m)
         fillAniSyncFr(m)
         fillReaderFr(m)
+        fillCardMenu(m)
         m
     }
 
@@ -1013,5 +1014,11 @@ internal object StringsFr {
         m["onboarding_no_file_selected"] = "Aucun fichier sélectionné"
         m["onboarding_vocab_title"] = "Définitions et Vocabulaire"
         m["onboarding_vocab_desc"] = "Appuyez longuement sur un mot dans un EPUB ou PDF pour consulter sa définition et enregistrer des cartes dans Reader > Vocab."
+    }
+
+    private fun fillCardMenu(m: HashMap<String, String>) {
+        m["menu_share_link"] = "Partager le lien"
+        m["toast_link_copied"] = "Lien copié. Toute personne ayant un compte sur ce serveur peut l’ouvrir."
+        m["toast_copy_link_error"] = "Impossible de copier le lien."
     }
 }
