@@ -191,7 +191,11 @@ interface BooksApi {
     suspend fun requestBook(@Body body: BookRequestBody): BookRequestResultDto
 
     @GET("Jellio/books/requests")
-    suspend fun getBookRequests(@Query("mediaType") mediaType: String): BookRequestsResponseDto
+    suspend fun getBookRequests(
+        @Query("mediaType") mediaType: String,
+        // The server asks Chaptarr three times; the default 30s read timeout is tight.
+        @retrofit2.http.Header("X-Read-Timeout-Seconds") readTimeoutSeconds: Int? = 60,
+    ): BookRequestsResponseDto
 
     @POST("Jellio/books/requests/{bookId}/search")
     suspend fun searchBookAgain(@Path("bookId") bookId: Int): Response<Unit>

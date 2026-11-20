@@ -98,6 +98,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.jellio.android.data.books.BooksRepository
+import com.jellio.android.data.i18n.Strings
 import com.jellio.android.data.books.SeriesPrefsDto
 import com.jellio.android.data.books.ShelfCategoryDto
 import com.jellio.android.data.model.BaseItemDto
@@ -411,7 +412,7 @@ fun BookshelfScreen(
         // Pending Requests Sheet
         if (state.showPendingRequestsSheet) {
             PendingRequestsSheet(
-                configured = state.chaptarrConfigured,
+                status = state.chaptarrStatus,
                 requests = state.pendingBookRequests,
                 onDismiss = { viewModel.openPendingRequestsSheet(false) },
                 onRetrySearch = viewModel::retryBookRequestSearch,
@@ -2230,7 +2231,7 @@ private fun DiscoverRowCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PendingRequestsSheet(
-    configured: Boolean,
+    status: com.jellio.android.data.books.ChaptarrStatus,
     requests: List<com.jellio.android.data.books.BookRequestEntryDto>,
     onDismiss: () -> Unit,
     onRetrySearch: (Int) -> Unit,
@@ -2250,8 +2251,14 @@ private fun PendingRequestsSheet(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text("Pending Book Requests", color = JellioText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            if (!configured) {
+            if (status == com.jellio.android.data.books.ChaptarrStatus.LOADING) {
+                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = JellioSecondary, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                }
+            } else if (status == com.jellio.android.data.books.ChaptarrStatus.NOT_CONFIGURED) {
                 Text("Chaptarr is not configured on the server.", color = JellioTextSecondary, fontSize = 13.sp)
+            } else if (status == com.jellio.android.data.books.ChaptarrStatus.UNREACHABLE) {
+                Text(Strings.get("reader_chaptarr_unreachable"), color = JellioTextSecondary, fontSize = 13.sp)
             } else if (requests.isEmpty()) {
                 Text("No active requests.", color = JellioTextSecondary, fontSize = 13.sp)
             } else {

@@ -19,6 +19,7 @@ internal object StringsEs {
         fillPlaybackOutlook(m)
         fillErrors(m)
         fillAniSyncEs(m)
+        fillReaderEs(m)
         m
     }
 

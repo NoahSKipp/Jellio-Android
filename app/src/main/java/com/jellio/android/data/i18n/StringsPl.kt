@@ -19,6 +19,7 @@ internal object StringsPl {
         fillPlaybackOutlook(m)
         fillErrors(m)
         fillAniSyncPl(m)
+        fillReaderPl(m)
         m
     }
 

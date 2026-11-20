@@ -6,6 +6,8 @@ import com.jellio.android.data.books.BookDiscoverResultDto
 import com.jellio.android.data.books.BookRequestEntryDto
 import com.jellio.android.data.books.BookSearchResultDto
 import com.jellio.android.data.books.BookShelfInfoDto
+import com.jellio.android.data.books.ChaptarrStatus
+import com.jellio.android.data.books.resolveChaptarrStatus
 import com.jellio.android.data.books.BooksRepository
 import com.jellio.android.data.books.InProgressReadingDto
 import com.jellio.android.data.books.MangaDiscoverDto
@@ -166,7 +168,7 @@ data class BookshelfUiState(
     val discoverProxyCoverByKey: Map<String, String> = emptyMap(),
     val isDiscoverLoading: Boolean = false,
     val pendingBookRequests: List<BookRequestEntryDto> = emptyList(),
-    val chaptarrConfigured: Boolean = false,
+    val chaptarrStatus: ChaptarrStatus = ChaptarrStatus.LOADING,
     val showPendingRequestsSheet: Boolean = false,
 
     // Offline downloads snapshot keyed by normalized item id
@@ -1436,19 +1438,25 @@ class BookshelfViewModel @Inject constructor(
     }
 
     fun openPendingRequestsSheet(open: Boolean) {
-        _uiState.update { it.copy(showPendingRequestsSheet = open) }
+        _uiState.update {
+            // Keep a known-good status so reopening does not flash a loader.
+            it.copy(
+                showPendingRequestsSheet = open,
+                chaptarrStatus = if (open && it.chaptarrStatus != ChaptarrStatus.CONFIGURED) ChaptarrStatus.LOADING else it.chaptarrStatus,
+            )
+        }
         if (open) {
             val mediaType = if (_uiState.value.activeTab == BookshelfTab.AUDIOBOOK) "audiobook" else "ebook"
             viewModelScope.launch {
-                booksRepository.getBookRequests(mediaType)
-                    .onSuccess { resp ->
-                        _uiState.update {
-                            it.copy(
-                                chaptarrConfigured = resp.Configured,
-                                pendingBookRequests = resp.Items,
-                            )
-                        }
-                    }
+                val result = booksRepository.getBookRequests(mediaType)
+                val response = result.getOrNull()
+                val status = resolveChaptarrStatus(response, result.exceptionOrNull())
+                _uiState.update {
+                    it.copy(
+                        chaptarrStatus = status,
+                        pendingBookRequests = response?.Items ?: it.pendingBookRequests,
+                    )
+                }
             }
         }
     }
