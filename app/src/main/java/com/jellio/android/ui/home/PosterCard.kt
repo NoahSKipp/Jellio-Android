@@ -846,6 +846,11 @@ fun CardOptionsMenu(
             }
             else -> {
                 onToggleWatchlist?.let { add(MenuAction(if (isWatchlisted) com.jellio.android.data.i18n.Strings.get("menu_remove_watchlist") else com.jellio.android.data.i18n.Strings.get("menu_add_watchlist"), it)) }
+                if (extras != null) {
+                    extras.onToggleGrouplist?.let {
+                        add(MenuAction(com.jellio.android.data.i18n.Strings.get(if (extras.isOnGrouplist) "menu_remove_grouplist" else "menu_add_grouplist"), it))
+                    }
+                }
                 onToggleWatched?.let { add(MenuAction(if (isPlayed) com.jellio.android.data.i18n.Strings.get("detail_mark_unwatched") else com.jellio.android.data.i18n.Strings.get("detail_mark_watched"), it)) }
                 onAddToFriendWatchlist?.let { add(MenuAction(com.jellio.android.data.i18n.Strings.get("friends_add_to_friend_watchlist"), it)) }
             }

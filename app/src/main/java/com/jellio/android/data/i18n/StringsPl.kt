@@ -1020,5 +1020,8 @@ internal object StringsPl {
         m["menu_share_link"] = "Udostępnij link"
         m["toast_link_copied"] = "Link skopiowany. Każdy posiadający konto na tym serwerze może go otworzyć."
         m["toast_copy_link_error"] = "Nie udało się skopiować linku."
+        m["menu_add_grouplist"] = "Dodaj do listy grupowej"
+        m["menu_remove_grouplist"] = "Usuń z listy grupowej"
+        m["toast_grouplist_error"] = "Nie udało się zaktualizować listy grupowej. Spróbuj ponownie."
     }
 }

@@ -172,6 +172,15 @@ interface JellyfinApi {
     @GET("Jellio/introcredits/{itemId}")
     suspend fun getJellioIntroCredits(@Path("itemId") itemId: String): IntroSkipperSegmentsDto
 
+    @GET("Jellio/grouplist")
+    suspend fun getGrouplist(): com.jellio.android.data.model.GrouplistDto
+
+    @POST("Jellio/grouplist/{itemId}")
+    suspend fun addToGrouplist(@Path("itemId") itemId: String): com.jellio.android.data.model.GrouplistDto
+
+    @DELETE("Jellio/grouplist/{itemId}")
+    suspend fun removeFromGrouplist(@Path("itemId") itemId: String): com.jellio.android.data.model.GrouplistDto
+
     @POST("Items/{itemId}/PlaybackInfo")
     suspend fun getPlaybackInfo(
         @Path("itemId") itemId: String,

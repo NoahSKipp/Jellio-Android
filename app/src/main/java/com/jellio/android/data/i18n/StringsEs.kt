@@ -1020,5 +1020,8 @@ internal object StringsEs {
         m["menu_share_link"] = "Compartir enlace"
         m["toast_link_copied"] = "Enlace copiado. Cualquiera con una cuenta en este servidor puede abrirlo."
         m["toast_copy_link_error"] = "No se pudo copiar el enlace."
+        m["menu_add_grouplist"] = "Añadir a la lista de grupo"
+        m["menu_remove_grouplist"] = "Quitar de la lista de grupo"
+        m["toast_grouplist_error"] = "No se pudo actualizar tu lista de grupo. Inténtalo de nuevo."
     }
 }

@@ -1031,5 +1031,8 @@ internal object StringsEn {
         m["menu_share_link"] = "Share link"
         m["toast_link_copied"] = "Link copied. Anyone with an account on this server can open it."
         m["toast_copy_link_error"] = "Could not copy the link."
+        m["menu_add_grouplist"] = "Add to Grouplist"
+        m["menu_remove_grouplist"] = "Remove from Grouplist"
+        m["toast_grouplist_error"] = "Could not update your Grouplist. Try again."
     }
 }

@@ -652,6 +652,13 @@ data class ProfileDto(
     @Json(name = "subtitleStyle") val subtitleStyle: SubtitleStyleDto? = null,
     val FriendsCanAddToWatchlist: Boolean = true,
     val FriendRequestsFrom: String = "everyone",
+    val GrouplistEnabled: Boolean = false,
+)
+
+// GET/POST/DELETE /Jellio/grouplist: the reader's own list, as item GUIDs.
+@JsonClass(generateAdapter = true)
+data class GrouplistDto(
+    val ItemIds: List<String> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)

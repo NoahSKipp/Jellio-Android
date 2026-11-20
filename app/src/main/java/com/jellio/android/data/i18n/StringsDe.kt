@@ -1020,5 +1020,8 @@ internal object StringsDe {
         m["menu_share_link"] = "Link teilen"
         m["toast_link_copied"] = "Link kopiert. Jeder mit einem Konto auf diesem Server kann ihn öffnen."
         m["toast_copy_link_error"] = "Link konnte nicht kopiert werden."
+        m["menu_add_grouplist"] = "Zur Gruppenliste hinzufügen"
+        m["menu_remove_grouplist"] = "Aus Gruppenliste entfernen"
+        m["toast_grouplist_error"] = "Gruppenliste konnte nicht aktualisiert werden. Bitte erneut versuchen."
     }
 }
