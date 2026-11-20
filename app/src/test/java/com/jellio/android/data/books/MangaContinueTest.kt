@@ -37,3 +37,20 @@ class MangaContinueTest {
         assertFalse(isMangaContinueDismissed(mapOf("s:k" to SeriesPrefsDto()), "k", null))
     }
 }
+
+class LocalMangaDismissalTest {
+    @Test
+    fun aLocalRemovalLapsesWhenTheSeriesIsReadAgain() {
+        val entries = withLocalMangaDismissal(emptySet(), "one-piece", "2026-01-01")
+        assertTrue(isLocallyDismissedManga(entries, "s:one-piece", "2026-01-01"))
+        assertFalse(isLocallyDismissedManga(entries, "one-piece", "2026-02-01"))
+    }
+
+    @Test
+    fun removingAgainReplacesTheOldEntry() {
+        val first = withLocalMangaDismissal(emptySet(), "k", "2026-01-01")
+        val second = withLocalMangaDismissal(first, "s:k", "2026-02-01")
+        assertEquals(1, second.size)
+        assertTrue(isLocallyDismissedManga(second, "k", "2026-02-01"))
+    }
+}

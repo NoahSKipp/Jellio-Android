@@ -12,6 +12,7 @@ import com.jellio.android.data.books.BooksRepository
 import com.jellio.android.data.books.CachedContinueCard
 import com.jellio.android.data.books.ShelfSnapshot
 import com.jellio.android.data.books.ShelfSnapshotStore
+import com.jellio.android.data.books.isLocallyDismissedManga
 import com.jellio.android.data.books.isMangaContinueDismissed
 import com.jellio.android.data.books.mangaDismissalMarker
 import com.jellio.android.data.books.mangaShelfKey
@@ -574,9 +575,10 @@ class BookshelfViewModel @Inject constructor(
             buildMangaSeriesList(stream.orEmpty(), local.orEmpty(), progress, coverMap)
         }
         val dismissed = _uiState.value.shelfByKind[BookshelfTab.MANGA.kind]?.Series.orEmpty()
+        val localDismissed = booksRepository.localMangaDismissals()
         val continueCards = seriesList
             .filter { it.readCount in 1 until it.chapterCount || it.resumeChapterId != null }
-            .filterNot { isMangaContinueDismissed(dismissed, it.key, it.lastReadAt) }
+            .filterNot { isMangaContinueDismissed(dismissed, it.key, it.lastReadAt) || isLocallyDismissedManga(localDismissed, it.key, it.lastReadAt) }
             .take(15)
             .mapNotNull { series ->
                 val chId = series.resumeStreamChapterId

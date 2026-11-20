@@ -587,13 +587,22 @@ class BooksRepository @Inject constructor(
         catching { jellyfinApi.markUnplayed(userId, itemId) }.isSuccess
 
     // The removal lives in the series prefs on the server, so every device
-    // sees it; it lapses once the series is read again.
-    suspend fun dismissMangaContinue(seriesKey: String, lastReadAt: String?): Boolean =
-        catching {
-            api.updateSeriesPrefs(
-                UpdateSeriesPrefsRequest(Key = mangaShelfKey(seriesKey), ContinueDismissedAt = mangaDismissalMarker(lastReadAt)),
-            )
-        }.isSuccess
+    // sees it; it lapses once the series is read again. A server that does
+    // not store it yet (an older plugin) leaves it on this device only.
+    suspend fun dismissMangaContinue(seriesKey: String, lastReadAt: String?): Boolean {
+        val marker = mangaDismissalMarker(lastReadAt)
+        val saved = catching {
+            api.updateSeriesPrefs(UpdateSeriesPrefsRequest(Key = mangaShelfKey(seriesKey), ContinueDismissedAt = marker))
+        }.getOrNull() ?: return false
+        if (saved.ContinueDismissedAt != marker) {
+            val next = withLocalMangaDismissal(localMangaDismissals(), seriesKey, lastReadAt)
+            readerPrefs.edit().putStringSet(PREF_MANGA_CONTINUE_DISMISSED, next).apply()
+        }
+        return true
+    }
+
+    fun localMangaDismissals(): Set<String> =
+        readerPrefs.getStringSet(PREF_MANGA_CONTINUE_DISMISSED, emptySet()).orEmpty().toSet()
 
     suspend fun searchBookAgain(chaptarrBookId: Int): Result<Unit> =
         catching {
@@ -850,6 +859,7 @@ class BooksRepository @Inject constructor(
     }
 
     companion object {
+        private const val PREF_MANGA_CONTINUE_DISMISSED = "manga_continue_dismissed"
 
         private val COMIC_REGEX = Regex("""\.(cbz|cbr|cb7|cbt)$""", RegexOption.IGNORE_CASE)
         private val CHAPTER_NAME_REGEX = Regex(

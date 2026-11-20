@@ -10,3 +10,15 @@ fun isMangaContinueDismissed(prefs: Map<String, SeriesPrefsDto>, seriesKey: Stri
     val stored = (prefs[mangaShelfKey(seriesKey)] ?: prefs[seriesKey])?.ContinueDismissedAt ?: return false
     return stored == mangaDismissalMarker(lastReadAt)
 }
+
+// A server that predates the stored removal answers without it. The removal
+// is then kept on this device so the card still goes away here.
+private const val LOCAL_SEPARATOR = '\t'
+
+fun withLocalMangaDismissal(entries: Set<String>, seriesKey: String, lastReadAt: String?): Set<String> {
+    val key = mangaShelfKey(seriesKey)
+    return entries.filterNot { it.startsWith("$key$LOCAL_SEPARATOR") }.toSet() + "$key$LOCAL_SEPARATOR${mangaDismissalMarker(lastReadAt)}"
+}
+
+fun isLocallyDismissedManga(entries: Set<String>, seriesKey: String, lastReadAt: String?): Boolean =
+    "${mangaShelfKey(seriesKey)}$LOCAL_SEPARATOR${mangaDismissalMarker(lastReadAt)}" in entries
