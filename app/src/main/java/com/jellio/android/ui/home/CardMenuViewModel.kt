@@ -74,7 +74,7 @@ class CardMenuViewModel @Inject constructor(
 
     // Looks for intro and credits timestamps; a show's scan can run for minutes,
     // so this outlives the menu and says how it went in toasts.
-    fun scanSkipTimestamps(item: BaseItemDto, action: SkipAction, toast: (String) -> Unit) {
+    internal fun scanSkipTimestamps(item: BaseItemDto, action: SkipAction, toast: (String) -> Unit) {
         viewModelScope.launch {
             toast(Strings.format("skip_looking", item.Name ?: Strings.get("skip_this_title")))
             catching { menu.scanSkipTimestamps(item.Id, action.useAnalyzerFallback) }
@@ -88,7 +88,7 @@ class CardMenuViewModel @Inject constructor(
 
     // A film or an episode is queued as it is; a show or a season queues the
     // episodes the scope picks, skipping any already on the device.
-    fun download(session: Session, item: BaseItemDto, scope: EpisodeScope?, quality: DownloadQuality, toast: (String) -> Unit) {
+    internal fun download(session: Session, item: BaseItemDto, scope: EpisodeScope?, quality: DownloadQuality, toast: (String) -> Unit) {
         viewModelScope.launch {
             when (downloadKindFor(item.Type)) {
                 DownloadKind.VIDEO -> downloadOne(session, item, quality, toast)
