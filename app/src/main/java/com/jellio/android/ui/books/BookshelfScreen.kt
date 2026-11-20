@@ -27,7 +27,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -133,6 +136,8 @@ fun BookshelfScreen(
     remember(initialKind) { viewModel.openKind(initialKind) }
     val state by viewModel.uiState.collectAsState()
     var sortMenuOpen by remember { mutableStateOf(false) }
+    var menuTarget by remember { mutableStateOf<ShelfMenuTarget?>(null) }
+    var removeTarget by remember { mutableStateOf<ShelfMenuTarget?>(null) }
 
     Box(
         modifier = modifier
@@ -356,9 +361,59 @@ fun BookshelfScreen(
                         onOpenMangaSeries = viewModel::openMangaSeries,
                         onDownloadItem = viewModel::downloadBookOrAudiobook,
                         onAssignCategories = { key -> viewModel.openAssignCategoriesFor(key) },
+                        onLongPress = { menuTarget = it },
                     )
                 }
             }
+        }
+
+        // Long-press menu on library and continue cards
+        menuTarget?.let { target ->
+            val isManga = target.tab == BookshelfTab.MANGA
+            val series = if (isManga) state.mangaSeries.firstOrNull { it.key == target.seriesKey } else null
+            val itemId = target.itemId
+            val categoryKey = when {
+                isManga -> target.seriesKey?.let { if (it.startsWith("s:")) it else "s:$it" }
+                itemId != null -> BooksRepository.normalizeId(itemId)
+                else -> null
+            }
+            ShelfItemMenu(
+                target = target,
+                finished = when {
+                    target.tab == BookshelfTab.AUDIOBOOK -> null
+                    isManga -> series?.let { it.chapterCount > 0 && it.readCount >= it.chapterCount }
+                    itemId != null -> viewModel.isBookFinished(itemId)
+                    else -> null
+                },
+                onMarkRead = when {
+                    isManga && series != null -> ({ read: Boolean -> viewModel.markSeriesRead(series, read) })
+                    !isManga && itemId != null -> ({ read: Boolean -> viewModel.markBookRead(itemId, read) })
+                    else -> null
+                },
+                onOpenSeries = if (isManga && target.fromContinue && series != null) {
+                    { viewModel.openMangaSeries(series) }
+                } else {
+                    null
+                },
+                onCategories = categoryKey?.let { key -> { viewModel.openAssignCategoriesFor(key) } },
+                onRemoveContinue = if (target.fromContinue) {
+                    { viewModel.removeFromContinue(target) }
+                } else {
+                    null
+                },
+                onRemoveLibrary = { removeTarget = target },
+                onDismiss = { menuTarget = null },
+            )
+        }
+        removeTarget?.let { target ->
+            ConfirmRemoveFromLibraryDialog(
+                target = target,
+                onConfirm = {
+                    viewModel.removeFromLibrary(target)
+                    removeTarget = null
+                },
+                onDismiss = { removeTarget = null },
+            )
         }
 
         // Manga Series Detail Modal Sheet
@@ -642,7 +697,13 @@ private fun BookshelfMainGrid(
     onOpenMangaSeries: (MangaSeriesDisplayItem) -> Unit,
     onDownloadItem: (BaseItemDto) -> Unit,
     onAssignCategories: (String) -> Unit,
+    onLongPress: (ShelfMenuTarget) -> Unit,
 ) {
+    val haptic = LocalHapticFeedback.current
+    val longPress: (ShelfMenuTarget) -> Unit = { target ->
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        onLongPress(target)
+    }
     val continueList = when (state.activeTab) {
         BookshelfTab.AUDIOBOOK -> state.continueListening
         BookshelfTab.MANGA -> state.continueManga
@@ -709,6 +770,18 @@ private fun BookshelfMainGrid(
                                         onOpenReader(card.itemId, card.kind, card.mangaId, card.chapterId)
                                     }
                                 },
+                                onLongClick = {
+                                    longPress(
+                                        ShelfMenuTarget(
+                                            tab = state.activeTab,
+                                            title = card.title,
+                                            itemId = card.itemId,
+                                            fromContinue = true,
+                                            seriesKey = card.seriesKey,
+                                            lastReadAt = card.lastReadAt,
+                                        ),
+                                    )
+                                },
                             )
                         }
                     }
@@ -736,6 +809,9 @@ private fun BookshelfMainGrid(
                             downloadItem = dl,
                             badgeText = item.Path?.substringAfterLast('.', "")?.uppercase()?.takeIf { it.isNotBlank() },
                             onClick = { onOpenReader(item.Id, "book", null, null) },
+                            onLongClick = {
+                                longPress(ShelfMenuTarget(BookshelfTab.EBOOK, item.Name.orEmpty(), item.Id, fromContinue = false))
+                            },
                             onDownload = { onDownloadItem(item) },
                             onAssignCategories = { onAssignCategories(norm) },
                         )
@@ -764,6 +840,18 @@ private fun BookshelfMainGrid(
                             downloadItem = null,
                             badgeText = badge,
                             onClick = { onOpenMangaSeries(series) },
+                            onLongClick = {
+                                longPress(
+                                    ShelfMenuTarget(
+                                        BookshelfTab.MANGA,
+                                        series.title,
+                                        itemId = null,
+                                        fromContinue = false,
+                                        seriesKey = series.key,
+                                        lastReadAt = series.lastReadAt,
+                                    ),
+                                )
+                            },
                             onDownload = null,
                             onAssignCategories = {
                                 val sKey = if (series.key.startsWith("s:")) series.key else "s:${series.key}"
@@ -793,6 +881,9 @@ private fun BookshelfMainGrid(
                             downloadItem = dl,
                             badgeText = "AUDIO",
                             onClick = { onOpenAudiobook(item.Id) },
+                            onLongClick = {
+                                longPress(ShelfMenuTarget(BookshelfTab.AUDIOBOOK, item.Name.orEmpty(), item.Id, fromContinue = false))
+                            },
                             onDownload = { onDownloadItem(item) },
                             onAssignCategories = { onAssignCategories(norm) },
                         )
@@ -807,14 +898,16 @@ private fun BookshelfMainGrid(
 private fun ContinueReadingCard(
     card: ContinueReadingCardModel,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     val pctText = "${(card.progress * 100).roundToInt().coerceIn(0, 100)}%"
     Surface(
-        onClick = onClick,
         color = JellioBgElevated,
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, JellioBorder),
-        modifier = Modifier.width(260.dp),
+        modifier = Modifier
+            .width(260.dp)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
@@ -908,14 +1001,15 @@ private fun BookShelfGridCard(
     downloadItem: OfflineDownloadItem?,
     badgeText: String?,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onDownload: (() -> Unit)?,
     onAssignCategories: () -> Unit,
 ) {
     Surface(
-        onClick = onClick,
         color = JellioBgElevated,
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, JellioBorder),
+        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Column {
             Box(

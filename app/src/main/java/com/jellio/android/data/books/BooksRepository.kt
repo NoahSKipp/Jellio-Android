@@ -54,6 +54,8 @@ class BooksRepository @Inject constructor(
     private val updateAnnotationAdapter by lazy { moshi.adapter(UpdateAnnotationRequest::class.java) }
     private val createVocabAdapter by lazy { moshi.adapter(CreateVocabRequest::class.java) }
 
+    private val readerPrefs by lazy { context.getSharedPreferences("jellio_reader", Context.MODE_PRIVATE) }
+
     private val bookCacheDir: File by lazy {
         File(context.cacheDir, "jellio_book_files").apply { mkdirs() }
     }
@@ -559,6 +561,35 @@ class BooksRepository @Inject constructor(
     suspend fun getBookRequests(mediaType: String): Result<BookRequestsResponseDto> =
         catching { api.getBookRequests(mediaType) }
 
+    // Takes a book off this reader's shelf; deletes it server side when nobody else has it.
+    suspend fun removeBookFromLibrary(mediaType: String, itemId: String): Result<BookRemoveResultDto> =
+        catching { api.removeBookFromLibrary(BookRemoveRequest(MediaType = mediaType, ItemId = itemId)) }
+
+    // An audiobook is a Continue Listening entry through the resume position
+    // of its tracks; zeroing them drops it without marking it played.
+    suspend fun clearAudiobookResume(userId: String, item: BaseItemDto): Boolean {
+        val tracks = catching { getAudiobookTracks(userId, item) }.getOrDefault(listOf(item))
+        var ok = true
+        for (track in tracks) {
+            val result = catching { jellyfinApi.updateUserData(track.Id, userId, com.jellio.android.data.model.UserDataUpdate(0L)) }
+            if (result.isFailure) ok = false
+        }
+        return ok
+    }
+
+    suspend fun markItemUnplayed(userId: String, itemId: String): Boolean =
+        catching { jellyfinApi.markUnplayed(userId, itemId) }.isSuccess
+
+    // Manga has no server side continue list to edit, so dismissals live on
+    // this device and lapse once the series is read again.
+    fun mangaContinueDismissals(): Set<String> =
+        readerPrefs.getStringSet(PREF_MANGA_CONTINUE_DISMISSED, emptySet()).orEmpty().toSet()
+
+    fun dismissMangaContinue(seriesKey: String, lastReadAt: String?) {
+        val next = withMangaDismissal(mangaContinueDismissals(), seriesKey, lastReadAt)
+        readerPrefs.edit().putStringSet(PREF_MANGA_CONTINUE_DISMISSED, next).apply()
+    }
+
     suspend fun searchBookAgain(chaptarrBookId: Int): Result<Unit> =
         catching {
             api.searchBookAgain(chaptarrBookId)
@@ -814,6 +845,8 @@ class BooksRepository @Inject constructor(
     }
 
     companion object {
+        private const val PREF_MANGA_CONTINUE_DISMISSED = "manga_continue_dismissed"
+
         private val COMIC_REGEX = Regex("""\.(cbz|cbr|cb7|cbt)$""", RegexOption.IGNORE_CASE)
         private val CHAPTER_NAME_REGEX = Regex(
             """\b(ch(apter)?|ep(isode)?|vol(ume)?|issue|part)\s*\d+|\b(prologue|epilogue|oneshot|one-shot)\b""",

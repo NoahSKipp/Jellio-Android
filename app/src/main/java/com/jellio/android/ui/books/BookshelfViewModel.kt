@@ -12,6 +12,7 @@ import com.jellio.android.data.books.BooksRepository
 import com.jellio.android.data.books.CachedContinueCard
 import com.jellio.android.data.books.ShelfSnapshot
 import com.jellio.android.data.books.ShelfSnapshotStore
+import com.jellio.android.data.books.isMangaContinueDismissed
 import com.jellio.android.data.books.InProgressReadingDto
 import com.jellio.android.data.books.MangaDiscoverDto
 import com.jellio.android.data.books.MangaSearchResponseDto
@@ -25,6 +26,7 @@ import com.jellio.android.data.books.SeriesPrefsDto
 import com.jellio.android.data.books.ShelfCategoryDto
 import com.jellio.android.data.books.ShelfDto
 import com.jellio.android.data.books.UpdateSeriesPrefsRequest
+import com.jellio.android.data.i18n.Strings
 import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.data.offline.OfflineDownloadItem
 import com.jellio.android.data.offline.OfflineDownloadManager
@@ -71,6 +73,19 @@ data class ContinueReadingCardModel(
     val kind: String,
     val mangaId: Int? = null,
     val chapterId: Int? = null,
+    val seriesKey: String? = null,
+    val lastReadAt: String? = null,
+)
+
+// What a long press was on: a library card or a continue card.
+data class ShelfMenuTarget(
+    val tab: BookshelfTab,
+    val title: String,
+    val itemId: String?,
+    val fromContinue: Boolean,
+    // Manga: the series shelf key ("s:...") and its last read time.
+    val seriesKey: String? = null,
+    val lastReadAt: String? = null,
 )
 
 data class MangaSeriesDisplayItem(
@@ -554,8 +569,10 @@ class BookshelfViewModel @Inject constructor(
         val seriesList = withContext(Dispatchers.Default) {
             buildMangaSeriesList(stream.orEmpty(), local.orEmpty(), progress, coverMap)
         }
+        val dismissed = booksRepository.mangaContinueDismissals()
         val continueCards = seriesList
             .filter { it.readCount in 1 until it.chapterCount || it.resumeChapterId != null }
+            .filterNot { isMangaContinueDismissed(dismissed, it.key, it.lastReadAt) }
             .take(15)
             .mapNotNull { series ->
                 val chId = series.resumeStreamChapterId
@@ -574,6 +591,8 @@ class BookshelfViewModel @Inject constructor(
                     kind = "manga",
                     mangaId = series.mangaId,
                     chapterId = chId,
+                    seriesKey = series.key,
+                    lastReadAt = series.lastReadAt,
                 )
             }
         _uiState.update {
@@ -759,6 +778,130 @@ class BookshelfViewModel @Inject constructor(
         }
 
         return byKey.values.toList()
+    }
+
+    // --- Long-press menu actions ---
+
+    private fun tell(message: String) {
+        _uiState.update { it.copy(statusMessage = message) }
+    }
+
+    private fun mediaTypeOf(tab: BookshelfTab) = if (tab == BookshelfTab.AUDIOBOOK) "audiobook" else "ebook"
+
+    fun isBookFinished(itemId: String): Boolean =
+        (_uiState.value.readingProgressById[BooksRepository.normalizeId(itemId)]?.Progress ?: 0.0) >= 0.98
+
+    fun markBookRead(itemId: String, read: Boolean) {
+        viewModelScope.launch {
+            if (booksRepository.markReadingProgress(listOf(itemId), read)) {
+                loadTab(BookshelfTab.EBOOK, force = true)
+            } else {
+                tell(Strings.get("reader_update_failed"))
+            }
+        }
+    }
+
+    fun markSeriesRead(series: MangaSeriesDisplayItem, read: Boolean) {
+        viewModelScope.launch {
+            val ids = ArrayList<String>()
+            series.localChapters.forEach { ids += it.Id }
+            series.mangaId?.let { id ->
+                booksRepository.getMangaStreamSeries(id).getOrNull()?.Chapters?.forEach { ids += it.Id }
+            }
+            val ok = ids.isEmpty() || booksRepository.markReadingProgress(ids, read)
+            if (ok && !read) {
+                val uid = _uiState.value.userId
+                series.localChapters.filter { it.UserData?.Played == true }.forEach { booksRepository.markItemUnplayed(uid, it.Id) }
+            }
+            if (ok) loadTab(BookshelfTab.MANGA, force = true) else tell(Strings.get("reader_update_failed"))
+        }
+    }
+
+    fun removeFromContinue(target: ShelfMenuTarget) {
+        val itemId = target.itemId
+        when (target.tab) {
+            BookshelfTab.MANGA -> {
+                val key = target.seriesKey ?: return
+                booksRepository.dismissMangaContinue(key, target.lastReadAt)
+                _uiState.update { state ->
+                    state.copy(continueManga = state.continueManga.filterNot { it.seriesKey == key })
+                }
+            }
+            BookshelfTab.EBOOK -> {
+                if (itemId == null) return
+                viewModelScope.launch {
+                    if (booksRepository.markReadingProgress(listOf(itemId), false)) {
+                        val norm = BooksRepository.normalizeId(itemId)
+                        _uiState.update { state ->
+                            state.copy(
+                                continueReading = state.continueReading.filterNot { BooksRepository.normalizeId(it.itemId) == norm },
+                                readingProgressById = state.readingProgressById - norm,
+                            )
+                        }
+                        ebookContinuePairs = ebookContinuePairs.filterNot { BooksRepository.normalizeId(it.first.Id) == norm }
+                    } else {
+                        tell(Strings.get("reader_update_failed"))
+                    }
+                }
+            }
+            BookshelfTab.AUDIOBOOK -> {
+                val norm = itemId?.let { BooksRepository.normalizeId(it) } ?: return
+                val item = audiobookContinueItems.firstOrNull { BooksRepository.normalizeId(it.Id) == norm }
+                    ?: _uiState.value.audiobookItems.firstOrNull { BooksRepository.normalizeId(it.Id) == norm }
+                    ?: return
+                viewModelScope.launch {
+                    if (booksRepository.clearAudiobookResume(_uiState.value.userId, item)) {
+                        _uiState.update { state ->
+                            state.copy(continueListening = state.continueListening.filterNot { BooksRepository.normalizeId(it.itemId) == norm })
+                        }
+                        audiobookContinueItems = audiobookContinueItems.filterNot { BooksRepository.normalizeId(it.Id) == norm }
+                    } else {
+                        tell(Strings.get("reader_update_failed"))
+                    }
+                }
+            }
+        }
+    }
+
+    fun removeFromLibrary(target: ShelfMenuTarget) {
+        when (target.tab) {
+            BookshelfTab.MANGA -> {
+                val key = target.seriesKey ?: return
+                viewModelScope.launch {
+                    booksRepository.setMangaInLibrary(key, false)
+                        .onSuccess {
+                            val shelf = booksRepository.getShelf(BookshelfTab.MANGA.kind)
+                            _uiState.update { it.copy(shelfByKind = it.shelfByKind + (BookshelfTab.MANGA.kind to shelf)) }
+                        }
+                        .onFailure { tell(Strings.get("reader_remove_failed")) }
+                }
+            }
+            else -> {
+                val itemId = target.itemId ?: return
+                viewModelScope.launch {
+                    booksRepository.removeBookFromLibrary(mediaTypeOf(target.tab), itemId)
+                        .onSuccess { result ->
+                            val norm = BooksRepository.normalizeId(itemId)
+                            _uiState.update { state ->
+                                state.copy(
+                                    ebookItems = state.ebookItems.filterNot { BooksRepository.normalizeId(it.Id) == norm },
+                                    audiobookItems = state.audiobookItems.filterNot { BooksRepository.normalizeId(it.Id) == norm },
+                                    continueReading = state.continueReading.filterNot { BooksRepository.normalizeId(it.itemId) == norm },
+                                    continueListening = state.continueListening.filterNot { BooksRepository.normalizeId(it.itemId) == norm },
+                                    statusMessage = if (result.Mode == "personal") {
+                                        Strings.get("reader_removed_personal")
+                                    } else {
+                                        Strings.format("reader_removed_server", target.title)
+                                    },
+                                )
+                            }
+                            rawItemsCache.clear()
+                            loadTab(target.tab, force = true)
+                        }
+                        .onFailure { tell(Strings.get("reader_remove_failed")) }
+                }
+            }
+        }
     }
 
     // --- Category management ---

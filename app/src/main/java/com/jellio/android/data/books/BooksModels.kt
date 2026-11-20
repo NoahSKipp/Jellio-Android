@@ -351,6 +351,13 @@ data class BookRemoveRequest(
     val Title: String? = null,
 )
 
+// Mode is "personal" when other readers still have the book, so only this
+// reader's copy is gone; anything else means it was deleted from the server.
+@JsonClass(generateAdapter = true)
+data class BookRemoveResultDto(
+    val Mode: String? = null,
+)
+
 @JsonClass(generateAdapter = true)
 data class MangaStatusDto(
     val Configured: Boolean = false,

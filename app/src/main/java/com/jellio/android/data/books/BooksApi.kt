@@ -201,7 +201,7 @@ interface BooksApi {
     suspend fun searchBookAgain(@Path("bookId") bookId: Int): Response<Unit>
 
     @POST("Jellio/books/library/remove")
-    suspend fun removeBookFromLibrary(@Body body: BookRemoveRequest): Response<Unit>
+    suspend fun removeBookFromLibrary(@Body body: BookRemoveRequest): BookRemoveResultDto
 
     // --- Manga stream & requests ---
 
