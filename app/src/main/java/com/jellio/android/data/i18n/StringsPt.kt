@@ -1055,5 +1055,12 @@ internal object StringsPt {
         m["skip_found_count"] = "Marcas de pulo encontradas para {hits} de {total} item(ns)."
         m["toast_skip_timestamps_error"] = "Não foi possível verificar marcações de pulo. Tente novamente."
         m["skip_this_title"] = "este título"
+        m["detail_mark_season_unwatched"] = "Marcar temporada como não assistida"
+        m["menu_download_episode"] = "Baixar episódio"
+        m["menu_download_season"] = "Baixar temporada"
+        m["menu_quick_skip_episode"] = "Busca rápida de pulos (episódio)"
+        m["menu_deep_skip_episode"] = "Busca detalhada de pulos (episódio)"
+        m["menu_quick_skip_season"] = "Busca rápida de pulos (temporada)"
+        m["menu_deep_skip_season"] = "Busca detalhada de pulos (temporada)"
     }
 }

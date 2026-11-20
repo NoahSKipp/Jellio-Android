@@ -83,9 +83,11 @@ internal enum class SkipAction(val useAnalyzerFallback: Boolean) {
     DEEP(true),
 }
 
+internal fun canScanSkips(isAdmin: Boolean, menuEnabled: Boolean): Boolean = isAdmin && menuEnabled
+
 // A film gets one scan; a show gets the quick and the deep one.
 internal fun skipActionsFor(type: String?, isAdmin: Boolean, menuEnabled: Boolean): List<SkipAction> {
-    if (!isAdmin || !menuEnabled) return emptyList()
+    if (!canScanSkips(isAdmin, menuEnabled)) return emptyList()
     return when (type) {
         "Movie" -> listOf(SkipAction.FIND)
         "Series" -> listOf(SkipAction.QUICK, SkipAction.DEEP)

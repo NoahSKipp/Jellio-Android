@@ -644,6 +644,25 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    fun markSeasonUnwatched(session: Session) {
+        val episodes = _uiState.value.selectedSeasonEpisodes
+        val prevMap = episodes.associate { it.Id to (it.UserData ?: UserItemDataDto()) }
+        applyEpisodeUpdates(episodes.map { it.Id to (it.UserData ?: UserItemDataDto()).copy(Played = false) })
+        if (_uiState.value.item?.Id in prevMap) {
+            _uiState.value = _uiState.value.copy(isWatched = false)
+        }
+        viewModelScope.launch {
+            val results = episodes.map { ep ->
+                async { ep.Id to catching { repository.setPlayed(session.userId, ep.Id, false) } }
+            }.awaitAll()
+            val updates = results.map { (id, res) ->
+                id to (res.getOrNull() ?: if (res.isFailure) prevMap[id] else null)
+            }
+            applyEpisodeUpdates(updates)
+            refreshWatchlisted(session)
+        }
+    }
+
     // Watching the last episode can take the series off the watchlist on the server.
     private suspend fun refreshWatchlisted(session: Session) {
         val currentItemId = _uiState.value.item?.Id ?: return

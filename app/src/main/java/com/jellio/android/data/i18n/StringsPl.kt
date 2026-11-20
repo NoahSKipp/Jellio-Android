@@ -1055,5 +1055,12 @@ internal object StringsPl {
         m["skip_found_count"] = "Znaleziono znaczniki pomijania dla {hits} z {total} elementów."
         m["toast_skip_timestamps_error"] = "Nie udało się wyszukać znaczników czasu pomijania. Spróbuj ponownie."
         m["skip_this_title"] = "ten tytuł"
+        m["detail_mark_season_unwatched"] = "Oznacz sezon jako nieobejrzany"
+        m["menu_download_episode"] = "Pobierz odcinek"
+        m["menu_download_season"] = "Pobierz sezon"
+        m["menu_quick_skip_episode"] = "Szybkie szukanie pomijania (odcinek)"
+        m["menu_deep_skip_episode"] = "Głębokie szukanie pomijania (odcinek)"
+        m["menu_quick_skip_season"] = "Szybkie szukanie pomijania (sezon)"
+        m["menu_deep_skip_season"] = "Głębokie szukanie pomijania (sezon)"
     }
 }

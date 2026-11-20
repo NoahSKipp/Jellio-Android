@@ -31,6 +31,17 @@ data class ItemMenuExtras(
     val onDeepSkip: (() -> Unit)? = null,
 )
 
+// The extra entries of a season's episode menu: the episode itself, and its
+// season for the downloads and scans that cover all of it.
+data class EpisodeMenuExtras(
+    val onDownloadEpisode: (() -> Unit)? = null,
+    val onDownloadSeason: (() -> Unit)? = null,
+    val onQuickSkipEpisode: (() -> Unit)? = null,
+    val onDeepSkipEpisode: (() -> Unit)? = null,
+    val onQuickSkipSeason: (() -> Unit)? = null,
+    val onDeepSkipSeason: (() -> Unit)? = null,
+)
+
 @Stable
 class CardMenuExtras internal constructor(
     private val session: Session,
@@ -56,6 +67,29 @@ class CardMenuExtras internal constructor(
             onFindSkip = skipAction(item, skip, SkipAction.FIND),
             onQuickSkip = skipAction(item, skip, SkipAction.QUICK),
             onDeepSkip = skipAction(item, skip, SkipAction.DEEP),
+        )
+    }
+
+    @Composable
+    fun forEpisode(episode: BaseItemDto, season: BaseItemDto?): EpisodeMenuExtras {
+        LaunchedEffect(session.userId) { viewModel.load(session) }
+        val state by viewModel.state.collectAsState()
+        val scans = canScanSkips(state.isAdmin, state.skipMenuEnabled)
+        val seasonId = episode.SeasonId
+        val seriesId = episode.SeriesId
+        val seasonItem = if (seasonId != null && seriesId != null) {
+            BaseItemDto(Id = seasonId, Name = season?.Name, Type = "Season", SeriesId = seriesId)
+        } else {
+            null
+        }
+        val seasonScan = season?.takeIf { scans }
+        return EpisodeMenuExtras(
+            onDownloadEpisode = { askDownload(episode) },
+            onDownloadSeason = seasonItem?.let { target -> { askDownload(target) } },
+            onQuickSkipEpisode = if (scans) { { scanSkipTimestamps(episode, SkipAction.QUICK) } } else null,
+            onDeepSkipEpisode = if (scans) { { scanSkipTimestamps(episode, SkipAction.DEEP) } } else null,
+            onQuickSkipSeason = seasonScan?.let { target -> { scanSkipTimestamps(target, SkipAction.QUICK) } },
+            onDeepSkipSeason = seasonScan?.let { target -> { scanSkipTimestamps(target, SkipAction.DEEP) } },
         )
     }
 

@@ -1055,5 +1055,12 @@ internal object StringsIt {
         m["skip_found_count"] = "Marcatori di salto trovati per {hits} su {total} elemento/i."
         m["toast_skip_timestamps_error"] = "Impossibile scansionare i timestamp di salto. Riprova."
         m["skip_this_title"] = "questo titolo"
+        m["detail_mark_season_unwatched"] = "Segna stagione come non vista"
+        m["menu_download_episode"] = "Scarica episodio"
+        m["menu_download_season"] = "Scarica stagione"
+        m["menu_quick_skip_episode"] = "Ricerca rapida salti (episodio)"
+        m["menu_deep_skip_episode"] = "Ricerca approfondita salti (episodio)"
+        m["menu_quick_skip_season"] = "Ricerca rapida salti (stagione)"
+        m["menu_deep_skip_season"] = "Ricerca approfondita salti (stagione)"
     }
 }

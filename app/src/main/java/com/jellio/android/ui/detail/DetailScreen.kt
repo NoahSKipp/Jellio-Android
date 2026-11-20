@@ -14,6 +14,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -160,6 +162,7 @@ fun DetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val friendsState by friendsViewModel.state.collectAsState()
+    val cardMenuExtras = com.jellio.android.ui.home.rememberCardMenuExtras(session)
     var friendPickerOpen by remember { mutableStateOf(false) }
     val availableEditions by viewModel.availableEditions.collectAsState()
     val selectedEdition by viewModel.selectedEdition.collectAsState()
@@ -424,6 +427,8 @@ fun DetailScreen(
                 onToggleWatched = { viewModel.toggleEpisodeWatched(session, menuTarget) },
                 onMarkPreviousWatched = { viewModel.markPreviousWatched(session, menuTarget) },
                 onMarkSeasonWatched = { viewModel.markSeasonWatched(session) },
+                onMarkSeasonUnwatched = { viewModel.markSeasonUnwatched(session) },
+                extras = cardMenuExtras.forEpisode(menuTarget, uiState.selectedSeason),
                 onDismiss = { episodeMenuTarget = null },
             )
         }
@@ -437,6 +442,8 @@ private fun EpisodeOptionsMenu(
     onToggleWatched: () -> Unit,
     onMarkPreviousWatched: () -> Unit,
     onMarkSeasonWatched: () -> Unit,
+    onMarkSeasonUnwatched: () -> Unit,
+    extras: com.jellio.android.ui.home.EpisodeMenuExtras,
     onDismiss: () -> Unit,
 ) {
     val isPlayed = episode.UserData?.Played == true
@@ -449,6 +456,7 @@ private fun EpisodeOptionsMenu(
             modifier = Modifier
                 .widthIn(min = 320.dp, max = 460.dp)
                 .background(JellioBgElevated, RoundedCornerShape(16.dp))
+                .verticalScroll(rememberScrollState())
                 .padding(vertical = 12.dp),
         ) {
             if (episodeTitle.isNotBlank()) {
@@ -486,6 +494,30 @@ private fun EpisodeOptionsMenu(
                     onDismiss()
                 },
             )
+            CardOptionsMenuRow(
+                label = com.jellio.android.ui.i18n.string("detail_mark_season_unwatched"),
+                onClick = {
+                    onMarkSeasonUnwatched()
+                    onDismiss()
+                },
+            )
+            val rows = listOfNotNull(
+                extras.onDownloadEpisode?.let { "menu_download_episode" to it },
+                extras.onDownloadSeason?.let { "menu_download_season" to it },
+                extras.onQuickSkipEpisode?.let { "menu_quick_skip_episode" to it },
+                extras.onDeepSkipEpisode?.let { "menu_deep_skip_episode" to it },
+                extras.onQuickSkipSeason?.let { "menu_quick_skip_season" to it },
+                extras.onDeepSkipSeason?.let { "menu_deep_skip_season" to it },
+            )
+            rows.forEach { (key, action) ->
+                CardOptionsMenuRow(
+                    label = com.jellio.android.ui.i18n.string(key),
+                    onClick = {
+                        action()
+                        onDismiss()
+                    },
+                )
+            }
         }
     }
 }

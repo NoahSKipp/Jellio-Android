@@ -1055,5 +1055,12 @@ internal object StringsDe {
         m["skip_found_count"] = "Überspring-Markierungen für {hits} von {total} Element(en) gefunden."
         m["toast_skip_timestamps_error"] = "Überspring-Zeitstempel konnten nicht gesucht werden. Bitte erneut versuchen."
         m["skip_this_title"] = "diesen Titel"
+        m["detail_mark_season_unwatched"] = "Staffel als ungesehen markieren"
+        m["menu_download_episode"] = "Folge herunterladen"
+        m["menu_download_season"] = "Staffel herunterladen"
+        m["menu_quick_skip_episode"] = "Schnellsuche nach Skip-Marken (Folge)"
+        m["menu_deep_skip_episode"] = "Tiefensuche nach Skip-Marken (Folge)"
+        m["menu_quick_skip_season"] = "Schnellsuche nach Skip-Marken (Staffel)"
+        m["menu_deep_skip_season"] = "Tiefensuche nach Skip-Marken (Staffel)"
     }
 }

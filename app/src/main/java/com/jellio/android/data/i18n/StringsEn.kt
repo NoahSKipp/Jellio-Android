@@ -1066,5 +1066,12 @@ internal object StringsEn {
         m["skip_found_count"] = "Skip timestamps found for {hits} of {total} item(s)."
         m["toast_skip_timestamps_error"] = "Could not scan for skip timestamps. Try again."
         m["skip_this_title"] = "this title"
+        m["detail_mark_season_unwatched"] = "Mark season as unwatched"
+        m["menu_download_episode"] = "Download episode"
+        m["menu_download_season"] = "Download season"
+        m["menu_quick_skip_episode"] = "Quick skip search (episode)"
+        m["menu_deep_skip_episode"] = "Deep skip search (episode)"
+        m["menu_quick_skip_season"] = "Quick skip search (season)"
+        m["menu_deep_skip_season"] = "Deep skip search (season)"
     }
 }

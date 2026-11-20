@@ -1055,5 +1055,12 @@ internal object StringsFr {
         m["skip_found_count"] = "Repères de saut trouvés pour {hits} sur {total} élément(s)."
         m["toast_skip_timestamps_error"] = "Impossible de rechercher les marqueurs de saut. Veuillez réessayer."
         m["skip_this_title"] = "ce titre"
+        m["detail_mark_season_unwatched"] = "Marquer la saison comme non vue"
+        m["menu_download_episode"] = "Télécharger l'épisode"
+        m["menu_download_season"] = "Télécharger la saison"
+        m["menu_quick_skip_episode"] = "Recherche rapide de saut (épisode)"
+        m["menu_deep_skip_episode"] = "Recherche approfondie de saut (épisode)"
+        m["menu_quick_skip_season"] = "Recherche rapide de saut (saison)"
+        m["menu_deep_skip_season"] = "Recherche approfondie de saut (saison)"
     }
 }

@@ -1055,5 +1055,12 @@ internal object StringsEs {
         m["skip_found_count"] = "Marcas de omisión encontradas para {hits} de {total} elemento(s)."
         m["toast_skip_timestamps_error"] = "No se pudieron buscar marcas de tiempo para omitir. Inténtalo de nuevo."
         m["skip_this_title"] = "este título"
+        m["detail_mark_season_unwatched"] = "Marcar temporada como no vista"
+        m["menu_download_episode"] = "Descargar episodio"
+        m["menu_download_season"] = "Descargar temporada"
+        m["menu_quick_skip_episode"] = "Búsqueda rápida de saltos (episodio)"
+        m["menu_deep_skip_episode"] = "Búsqueda profunda de saltos (episodio)"
+        m["menu_quick_skip_season"] = "Búsqueda rápida de saltos (temporada)"
+        m["menu_deep_skip_season"] = "Búsqueda profunda de saltos (temporada)"
     }
 }
