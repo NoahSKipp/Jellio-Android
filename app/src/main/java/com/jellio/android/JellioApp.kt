@@ -289,8 +289,9 @@ private fun JellioApp(
         }
     }
 
+    // Home is the stack root, so back from any other tab or Settings returns to Home before the app exits.
     fun switchTab(target: JellioRoute) {
-        routeStack = listOf(target)
+        routeStack = if (target is JellioRoute.Home) listOf(target) else listOf(JellioRoute.Home(), target)
     }
 
     fun push(target: JellioRoute) {
