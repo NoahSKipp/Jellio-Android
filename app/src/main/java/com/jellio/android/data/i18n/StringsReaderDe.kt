@@ -16,4 +16,5 @@ internal fun fillReaderDe(m: HashMap<String, String>) {
     m["reader_remove_failed"] = "Konnte nicht entfernt werden. Bitte erneut versuchen."
     m["reader_update_failed"] = "Konnte nicht aktualisiert werden. Bitte erneut versuchen."
     m["reader_discover_genre"] = "Genre"
+    m["reader_page_failed"] = "Diese Seite wurde nicht geladen"
 }

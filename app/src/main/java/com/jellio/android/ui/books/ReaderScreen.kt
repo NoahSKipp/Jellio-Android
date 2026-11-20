@@ -77,6 +77,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -101,7 +102,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import coil3.request.ImageRequest
+import com.jellio.android.data.i18n.Strings
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import com.jellio.android.data.books.AnnotationDto
@@ -969,56 +974,74 @@ private fun MangaReaderBody(
     val colorFilter = mangaColorFilterFor(state.mangaColorFilter)
     val coroutineScope = rememberCoroutineScope()
 
+    // Pages ahead (and the next chapter's first ones) are fetched while the
+    // current one is read; whatever the reader has left behind is cancelled.
+    val context = LocalContext.current
+    val prefetcher = remember { MangaPagePrefetcher(context) }
+    DisposableEffect(prefetcher) { onDispose { prefetcher.cancelAll() } }
+    LaunchedEffect(state.mangaCurrentPage, state.mangaStreamPageUrls, state.nextChapterPrefetchUrls) {
+        prefetcher.update(state.mangaStreamPageUrls, state.mangaCurrentPage, state.nextChapterPrefetchUrls)
+    }
+
     when (state.mangaReadingMode) {
         MangaReadingMode.VERTICAL, MangaReadingMode.VERTICAL_GAPS -> {
             val gap = if (state.mangaReadingMode == MangaReadingMode.VERTICAL_GAPS) 12.dp else 0.dp
-            val listState = rememberLazyListState(initialFirstVisibleItemIndex = state.mangaCurrentPage)
-            LaunchedEffect(state.mangaCurrentPage) {
-                if (listState.firstVisibleItemIndex != state.mangaCurrentPage &&
-                    kotlin.math.abs(listState.firstVisibleItemIndex - state.mangaCurrentPage) > 1
-                ) {
-                    listState.scrollToItem(state.mangaCurrentPage)
-                }
-            }
-            LaunchedEffect(listState) {
-                snapshotFlow { listState.firstVisibleItemIndex }.collect { idx ->
-                    if (idx < totalPages) onPageChanged(idx)
-                }
-            }
-            LazyColumn(
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(gap),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(onClick = onToggleHud),
-            ) {
-                if (state.prevChapter != null) {
-                    item(key = "prev_ch_card") {
-                        ChapterTransitionCard(
-                            label = "Previous Chapter",
-                            chapter = state.prevChapter,
-                            onClick = { onOpenAdjacentChapter(state.prevChapter) },
-                        )
+            // The previous chapter card, once known, sits above page one.
+            val offsetStart = if (state.prevChapter != null) 1 else 0
+            androidx.compose.runtime.key(offsetStart) {
+                val listState = rememberLazyListState(initialFirstVisibleItemIndex = state.mangaCurrentPage + offsetStart)
+                LaunchedEffect(state.mangaCurrentPage) {
+                    val target = state.mangaCurrentPage + offsetStart
+                    if (listState.firstVisibleItemIndex != target &&
+                        kotlin.math.abs(listState.firstVisibleItemIndex - target) > 1
+                    ) {
+                        listState.scrollToItem(target)
                     }
                 }
-                items(totalPages, key = { "page_$it" }) { pageIdx ->
-                    MangaPageView(
-                        pageIndex = pageIdx,
-                        streamUrl = state.mangaStreamPageUrls.getOrNull(pageIdx),
-                        renderCbzPage = renderCbzPage,
-                        colorFilter = colorFilter,
-                        allowPinchZoom = false,
-                        onTapPosition = { _, _ -> onToggleHud() },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                LaunchedEffect(listState) {
+                    snapshotFlow { listState.firstVisibleItemIndex }.collect { idx ->
+                        val pageIdx = idx - offsetStart
+                        if (pageIdx in 0 until totalPages) onPageChanged(pageIdx)
+                    }
                 }
-                if (state.nextChapter != null) {
-                    item(key = "next_ch_card") {
-                        ChapterTransitionCard(
-                            label = "Next Chapter",
-                            chapter = state.nextChapter,
-                            onClick = { onOpenAdjacentChapter(state.nextChapter) },
+                LazyColumn(
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(gap),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(onClick = onToggleHud),
+                ) {
+                    if (state.prevChapter != null) {
+                        item(key = "prev_ch_card") {
+                            ChapterTransitionCard(
+                                label = "Previous Chapter",
+                                chapter = state.prevChapter,
+                                onClick = { onOpenAdjacentChapter(state.prevChapter) },
+                            )
+                        }
+                    }
+                    items(totalPages, key = { "page_$it" }) { pageIdx ->
+                        MangaPageView(
+                            pageIndex = pageIdx,
+                            streamUrl = state.mangaStreamPageUrls.getOrNull(pageIdx),
+                            renderCbzPage = renderCbzPage,
+                            colorFilter = colorFilter,
+                            allowPinchZoom = false,
+                            onTapPosition = { _, _ -> onToggleHud() },
+                            // A page that has not loaded yet keeps a page-sized slot, so
+                            // only the pages in view are requested, not the whole chapter.
+                            placeholderMinHeight = 480.dp,
+                            modifier = Modifier.fillMaxWidth(),
                         )
+                    }
+                    if (state.nextChapter != null) {
+                        item(key = "next_ch_card") {
+                            ChapterTransitionCard(
+                                label = "Next Chapter",
+                                chapter = state.nextChapter,
+                                onClick = { onOpenAdjacentChapter(state.nextChapter) },
+                            )
+                        }
                     }
                 }
             }
@@ -1077,79 +1100,83 @@ private fun MangaReaderBody(
             val hasNext = state.nextChapter != null
             val hasPrev = state.prevChapter != null
             val offsetStart = if (hasPrev) 1 else 0
-            val pagerTotal = totalPages + offsetStart + (if (hasNext) 1 else 0)
-            val pagerState = rememberPagerState(
-                initialPage = (state.mangaCurrentPage + offsetStart).coerceIn(0, pagerTotal - 1),
-            ) { pagerTotal }
+            // Slots shift when the previous chapter card appears, so the pager restarts then.
+            androidx.compose.runtime.key(offsetStart) {
+                val pagerTotal = totalPages + offsetStart + (if (hasNext) 1 else 0)
+                val pagerState = rememberPagerState(
+                    initialPage = (state.mangaCurrentPage + offsetStart).coerceIn(0, pagerTotal - 1),
+                ) { pagerTotal }
 
-            LaunchedEffect(state.mangaCurrentPage) {
-                val target = (state.mangaCurrentPage + offsetStart).coerceIn(0, pagerTotal - 1)
-                if (pagerState.currentPage != target) {
-                    pagerState.scrollToPage(target)
-                }
-            }
-            LaunchedEffect(pagerState) {
-                snapshotFlow { pagerState.currentPage }.collect { slot ->
-                    val pageIdx = slot - offsetStart
-                    if (pageIdx in 0 until totalPages) {
-                        onPageChanged(pageIdx)
+                LaunchedEffect(state.mangaCurrentPage) {
+                    val target = (state.mangaCurrentPage + offsetStart).coerceIn(0, pagerTotal - 1)
+                    if (pagerState.currentPage != target) {
+                        pagerState.scrollToPage(target)
                     }
                 }
-            }
+                LaunchedEffect(pagerState) {
+                    snapshotFlow { pagerState.currentPage }.collect { slot ->
+                        val pageIdx = slot - offsetStart
+                        if (pageIdx in 0 until totalPages) {
+                            onPageChanged(pageIdx)
+                        }
+                    }
+                }
 
-            HorizontalPager(
-                state = pagerState,
-                reverseLayout = isRtl,
-                modifier = Modifier.fillMaxSize(),
-            ) { slot ->
-                when {
-                    hasPrev && slot == 0 -> {
-                        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                            ChapterTransitionCard(
-                                label = "Previous Chapter",
-                                chapter = state.prevChapter!!,
-                                onClick = { onOpenAdjacentChapter(state.prevChapter) },
-                            )
-                        }
-                    }
-                    hasNext && slot == pagerTotal - 1 -> {
-                        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                            ChapterTransitionCard(
-                                label = "Next Chapter",
-                                chapter = state.nextChapter!!,
-                                onClick = { onOpenAdjacentChapter(state.nextChapter) },
-                            )
-                        }
-                    }
-                    else -> {
-                        val pageIdx = (slot - offsetStart).coerceIn(0, totalPages - 1)
-                        MangaPageView(
-                            pageIndex = pageIdx,
-                            streamUrl = state.mangaStreamPageUrls.getOrNull(pageIdx),
-                            renderCbzPage = renderCbzPage,
-                            colorFilter = colorFilter,
-                            allowPinchZoom = true,
-                            onTapPosition = { nx, ny ->
-                                val action = resolveTapZoneAction(
-                                    nx = nx,
-                                    ny = ny,
-                                    zoneMode = state.mangaTapZoneMode,
-                                    isRtl = isRtl,
+                HorizontalPager(
+                    state = pagerState,
+                    reverseLayout = isRtl,
+                    beyondViewportPageCount = 1,
+                    modifier = Modifier.fillMaxSize(),
+                ) { slot ->
+                    when {
+                        hasPrev && slot == 0 -> {
+                            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                                ChapterTransitionCard(
+                                    label = "Previous Chapter",
+                                    chapter = state.prevChapter!!,
+                                    onClick = { onOpenAdjacentChapter(state.prevChapter) },
                                 )
-                                when (action) {
-                                    TapAction.CENTER -> onToggleHud()
-                                    TapAction.NEXT -> {
-                                        val nextSlot = (pagerState.currentPage + 1).coerceAtMost(pagerTotal - 1)
-                                        coroutineScope.launch { pagerState.animateScrollToPage(nextSlot) }
+                            }
+                        }
+                        hasNext && slot == pagerTotal - 1 -> {
+                            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                                ChapterTransitionCard(
+                                    label = "Next Chapter",
+                                    chapter = state.nextChapter!!,
+                                    onClick = { onOpenAdjacentChapter(state.nextChapter) },
+                                )
+                            }
+                        }
+                        else -> {
+                            val pageIdx = (slot - offsetStart).coerceIn(0, totalPages - 1)
+                            MangaPageView(
+                                pageIndex = pageIdx,
+                                streamUrl = state.mangaStreamPageUrls.getOrNull(pageIdx),
+                                renderCbzPage = renderCbzPage,
+                                colorFilter = colorFilter,
+                                allowPinchZoom = true,
+                                onTapPosition = { nx, ny ->
+                                    val action = resolveTapZoneAction(
+                                        nx = nx,
+                                        ny = ny,
+                                        zoneMode = state.mangaTapZoneMode,
+                                        isRtl = isRtl,
+                                    )
+                                    when (action) {
+                                        TapAction.CENTER -> onToggleHud()
+                                        TapAction.NEXT -> {
+                                            val nextSlot = (pagerState.currentPage + 1).coerceAtMost(pagerTotal - 1)
+                                            coroutineScope.launch { pagerState.animateScrollToPage(nextSlot) }
+                                        }
+                                        TapAction.PREV -> {
+                                            val prevSlot = (pagerState.currentPage - 1).coerceAtLeast(0)
+                                            coroutineScope.launch { pagerState.animateScrollToPage(prevSlot) }
+                                        }
                                     }
-                                    TapAction.PREV -> {
-                                        val prevSlot = (pagerState.currentPage - 1).coerceAtLeast(0)
-                                        coroutineScope.launch { pagerState.animateScrollToPage(prevSlot) }
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                                },
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
                     }
                 }
             }
@@ -1191,6 +1218,8 @@ private fun resolveTapZoneAction(
     return raw
 }
 
+private enum class MangaPageLoad { LOADING, SUCCESS, ERROR }
+
 @Composable
 private fun MangaPageView(
     pageIndex: Int,
@@ -1200,6 +1229,7 @@ private fun MangaPageView(
     allowPinchZoom: Boolean,
     onTapPosition: (nx: Float, ny: Float) -> Unit,
     modifier: Modifier = Modifier,
+    placeholderMinHeight: Dp = 0.dp,
 ) {
     var scale by remember(pageIndex) { mutableFloatStateOf(1f) }
     var offset by remember(pageIndex) { mutableStateOf(Offset.Zero) }
@@ -1254,20 +1284,62 @@ private fun MangaPageView(
         contentAlignment = Alignment.Center,
     ) {
         if (streamUrl != null) {
-            AsyncImage(
-                model = streamUrl,
-                contentDescription = "Page ${pageIndex + 1}",
-                contentScale = if (allowPinchZoom) ContentScale.Fit else ContentScale.FillWidth,
-                colorFilter = colorFilter,
+            val context = LocalContext.current
+            var attempt by remember(streamUrl) { mutableIntStateOf(0) }
+            var pageState by remember(streamUrl, attempt) { mutableStateOf(MangaPageLoad.LOADING) }
+            val request = remember(streamUrl, attempt) {
+                ImageRequest.Builder(context)
+                    .data(streamUrl)
+                    // A retry is a different request, so a failure is not replayed.
+                    .memoryCacheKeyExtra("attempt", attempt.toString())
+                    .build()
+            }
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        translationX = offset.x
-                        translationY = offset.y
-                    },
-            )
+                    .then(if (pageState == MangaPageLoad.SUCCESS) Modifier else Modifier.heightIn(min = placeholderMinHeight)),
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(
+                    model = request,
+                    contentDescription = "Page ${pageIndex + 1}",
+                    contentScale = if (allowPinchZoom) ContentScale.Fit else ContentScale.FillWidth,
+                    colorFilter = colorFilter,
+                    onLoading = { pageState = MangaPageLoad.LOADING },
+                    onSuccess = { pageState = MangaPageLoad.SUCCESS },
+                    onError = { pageState = MangaPageLoad.ERROR },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationX = offset.x
+                            translationY = offset.y
+                        },
+                )
+                when (pageState) {
+                    MangaPageLoad.LOADING -> Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        CircularProgressIndicator(color = JellioSecondary, modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
+                        Text("${pageIndex + 1}", color = JellioTextSecondary, fontSize = 12.sp)
+                    }
+                    MangaPageLoad.ERROR -> Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(Strings.get("reader_page_failed"), color = JellioTextSecondary, fontSize = 13.sp)
+                        Button(
+                            onClick = { attempt += 1 },
+                            colors = ButtonDefaults.buttonColors(containerColor = JellioSecondary, contentColor = JellioBg),
+                        ) {
+                            Text(Strings.get("action_retry"))
+                        }
+                    }
+                    MangaPageLoad.SUCCESS -> Unit
+                }
+            }
         } else {
             val bmp = cbzBitmap
             if (bmp != null) {

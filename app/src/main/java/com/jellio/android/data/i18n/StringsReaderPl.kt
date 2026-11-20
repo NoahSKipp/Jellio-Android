@@ -16,4 +16,5 @@ internal fun fillReaderPl(m: HashMap<String, String>) {
     m["reader_remove_failed"] = "Nie udało się usunąć. Spróbuj ponownie."
     m["reader_update_failed"] = "Nie udało się zaktualizować. Spróbuj ponownie."
     m["reader_discover_genre"] = "Gatunek"
+    m["reader_page_failed"] = "Ta strona się nie załadowała"
 }

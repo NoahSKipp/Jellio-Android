@@ -344,6 +344,12 @@ class BooksRepository @Inject constructor(
         }
     }
 
+    // The CBZ of a chapter kept on this device, without touching the network.
+    suspend fun offlineStreamChapterFile(itemId: String): File? {
+        val uid = currentUserId() ?: "default"
+        return offlineDownloads.getCompletedFile(itemId, uid)
+    }
+
     suspend fun openStreamChapterCbz(chapterId: Int, itemId: String): Result<OpenedBookFile> {
         val uid = currentUserId() ?: "default"
         val offlineFile = offlineDownloads.getCompletedFile(itemId, uid)

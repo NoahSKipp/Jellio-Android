@@ -17,6 +17,7 @@ import com.jellio.android.data.books.EpubSearchHit
 import com.jellio.android.data.books.EpubTocEntry
 import com.jellio.android.data.books.MangaReadingDirection
 import com.jellio.android.data.books.MangaStreamChapterDto
+import com.jellio.android.data.books.MangaStreamSeriesDto
 import com.jellio.android.data.books.PdfBookEngine
 import com.jellio.android.data.books.ReadingNowPlayingRequest
 import com.jellio.android.data.books.ReadingSessionRequest
@@ -26,6 +27,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -162,6 +165,8 @@ data class ReaderUiState(
     val mangaChapterNumber: Float? = null,
     val prevChapter: MangaStreamChapterDto? = null,
     val nextChapter: MangaStreamChapterDto? = null,
+    // First pages of the next chapter, for the screen to fetch ahead.
+    val nextChapterPrefetchUrls: List<String> = emptyList(),
 
     // Annotations
     val annotations: List<AnnotationDto> = emptyList(),
@@ -191,6 +196,8 @@ class ReaderViewModel @Inject constructor(
     private var startPageIndex: Int = 0
     private var maxPageReached: Int = 0
     private var sessionFlushed: Boolean = false
+    private var loadJob: Job? = null
+    private var nextPrefetchChapterId: Int? = null
 
     fun load(itemId: String, kind: String, mangaId: Int?, chapterId: Int?) {
         val current = _uiState.value
@@ -202,6 +209,7 @@ class ReaderViewModel @Inject constructor(
         startPageIndex = 0
         maxPageReached = 0
         sessionFlushed = false
+        nextPrefetchChapterId = null
 
         _uiState.value = ReaderUiState(
             itemId = itemId,
@@ -211,15 +219,22 @@ class ReaderViewModel @Inject constructor(
             mode = ReaderContentMode.LOADING,
         )
 
-        viewModelScope.launch {
-            val metadata = booksRepository.getBookMetadata(itemId)
-            val savedProgress = booksRepository.getReadingProgress(itemId)
-            val annotations = booksRepository.getAnnotations(itemId)
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            val streamed = kind == "manga" && chapterId != null
+            // Streamed chapters are not library items, so there is no metadata to ask for.
+            val metadataDeferred = if (streamed) null else async { booksRepository.getBookMetadata(itemId) }
+            val progressDeferred = async { booksRepository.getReadingProgress(itemId) }
+            launch {
+                val annotations = booksRepository.getAnnotations(itemId)
+                _uiState.update { it.copy(annotations = annotations) }
+            }
 
+            val savedProgress = progressDeferred.await()
+            val metadata = metadataDeferred?.await()
             _uiState.update {
                 it.copy(
                     title = metadata?.Title ?: it.title,
-                    annotations = annotations,
                     progress = savedProgress.Progress,
                 )
             }
@@ -398,37 +413,84 @@ class ReaderViewModel @Inject constructor(
         chapterId: Int,
         savedLocator: String,
     ) {
-        val chapterInfo = booksRepository.getMangaStreamChapter(itemId, mangaId).getOrNull()
-        val resolvedMangaId = mangaId ?: chapterInfo?.MangaId
-        val seriesInfo = resolvedMangaId?.let { booksRepository.getMangaStreamSeries(it).getOrNull() }
-        val seriesKey = seriesInfo?.Key?.takeIf { it.isNotBlank() } ?: chapterInfo?.SeriesKey
-        val shelf = booksRepository.getShelf("manga")
-        val prefs = seriesKey?.let { key ->
-            val prefixed = if (key.startsWith("s:")) key else "s:$key"
-            shelf.Series[prefixed] ?: shelf.Series[key]
-        } ?: shelf.SeriesDefaults
+        // A chapter kept on this device is checked locally; the stream path
+        // never downloads the whole CBZ first.
+        val offlineFile = booksRepository.offlineStreamChapterFile(itemId)
+        coroutineScope {
+            val chapterInfoDeferred = async { booksRepository.getMangaStreamChapter(itemId, mangaId).getOrNull() }
+            val shelfDeferred = async { booksRepository.getShelf("manga") }
+            val pageCountDeferred = async {
+                if (offlineFile != null) 0 else booksRepository.getMangaStreamPageCount(chapterId)
+            }
+            // Previous and next chapter come from the whole series, the slowest
+            // answer; the first page does not wait for them.
+            val seriesDeferred = async {
+                val id = mangaId ?: chapterInfoDeferred.await()?.MangaId
+                id?.let { booksRepository.getMangaStreamSeries(it).getOrNull() }
+            }
 
-        val preferredMode = MangaReadingMode.entries.firstOrNull {
-            it.key == prefs?.ComicLayout || it.key == prefs?.ComicDirection
-        } ?: MangaReadingMode.RTL
+            val chapterInfo = chapterInfoDeferred.await()
+            val resolvedMangaId = mangaId ?: chapterInfo?.MangaId
+            val seriesKey = chapterInfo?.SeriesKey?.takeIf { it.isNotBlank() }
+            val shelf = shelfDeferred.await()
+            val prefs = seriesKey?.let { key ->
+                val prefixed = if (key.startsWith("s:")) key else "s:$key"
+                shelf.Series[prefixed] ?: shelf.Series[key]
+            } ?: shelf.SeriesDefaults
 
-        // Find prev / next chapters in ascending order
-        val orderedChapters = seriesInfo?.Chapters
-            ?.sortedWith(compareBy<MangaStreamChapterDto> { it.Number }.thenBy { it.SourceOrder })
-            .orEmpty()
-        val curIdx = orderedChapters.indexOfFirst { it.ChapterId == chapterId || it.Id == itemId }
-        val prevCh = if (curIdx > 0) orderedChapters[curIdx - 1] else null
-        val nextCh = if (curIdx >= 0 && curIdx < orderedChapters.lastIndex) orderedChapters[curIdx + 1] else null
+            val preferredMode = MangaReadingMode.entries.firstOrNull {
+                it.key == prefs?.ComicLayout || it.key == prefs?.ComicDirection
+            } ?: MangaReadingMode.RTL
 
-        // Offline CBZ check first
-        val offlineCbz = booksRepository.openStreamChapterCbz(chapterId, itemId)
-        if (offlineCbz.isSuccess && offlineCbz.getOrThrow().fromOfflineDownload) {
-            val engine = withContext(Dispatchers.IO) { CbzBookEngine(offlineCbz.getOrThrow().file) }
-            activeEngine = engine
-            val total = engine.pageCount
+            if (offlineFile != null) {
+                val engine = withContext(Dispatchers.IO) { CbzBookEngine(offlineFile) }
+                activeEngine = engine
+                val total = engine.pageCount
+                val initialPage = parsePageLocator(savedLocator, total)
+                startPageIndex = initialPage
+                maxPageReached = initialPage
+                _uiState.update {
+                    it.copy(
+                        mode = ReaderContentMode.MANGA,
+                        kind = "manga",
+                        mangaId = resolvedMangaId,
+                        chapterId = chapterId,
+                        title = chapterInfo?.Name ?: "Chapter",
+                        subtitle = chapterInfo?.SeriesTitle,
+                        fromOfflineDownload = true,
+                        mangaPageCount = total,
+                        mangaCurrentPage = initialPage,
+                        mangaReadingMode = preferredMode,
+                        mangaSeriesTitle = chapterInfo?.SeriesTitle,
+                        mangaSeriesKey = seriesKey,
+                        mangaChapterNumber = chapterInfo?.Number,
+                        progress = if (total > 0) (initialPage + 1).toDouble() / total else 0.0,
+                    )
+                }
+                startHeartbeat()
+                applySeries(seriesDeferred.await(), itemId, chapterId)
+                return@coroutineScope
+            }
+
+            // Streamed chapter page URLs
+            val countFromApi = pageCountDeferred.await()
+            val total = if (countFromApi > 0) countFromApi else (chapterInfo?.PageCount ?: 0)
+            if (total <= 0) {
+                _uiState.update {
+                    it.copy(
+                        mode = ReaderContentMode.ERROR,
+                        error = "No pages available for this chapter",
+                    )
+                }
+                return@coroutineScope
+            }
+            val urls = (0 until total).mapNotNull { idx ->
+                booksRepository.mangaStreamPageUrl(chapterId, idx)
+            }
             val initialPage = parsePageLocator(savedLocator, total)
             startPageIndex = initialPage
             maxPageReached = initialPage
+
             _uiState.update {
                 it.copy(
                     mode = ReaderContentMode.MANGA,
@@ -436,63 +498,59 @@ class ReaderViewModel @Inject constructor(
                     mangaId = resolvedMangaId,
                     chapterId = chapterId,
                     title = chapterInfo?.Name ?: "Chapter",
-                    subtitle = seriesInfo?.Title ?: chapterInfo?.SeriesTitle,
-                    fromOfflineDownload = true,
-                    mangaPageCount = total,
+                    subtitle = chapterInfo?.SeriesTitle,
+                    mangaPageCount = urls.size,
                     mangaCurrentPage = initialPage,
+                    mangaStreamPageUrls = urls,
                     mangaReadingMode = preferredMode,
-                    mangaSeriesTitle = seriesInfo?.Title ?: chapterInfo?.SeriesTitle,
+                    mangaSeriesTitle = chapterInfo?.SeriesTitle,
                     mangaSeriesKey = seriesKey,
                     mangaChapterNumber = chapterInfo?.Number,
-                    prevChapter = prevCh,
-                    nextChapter = nextCh,
-                    progress = if (total > 0) (initialPage + 1).toDouble() / total else 0.0,
+                    progress = if (urls.isNotEmpty()) (initialPage + 1).toDouble() / urls.size else 0.0,
                 )
             }
             startHeartbeat()
-            return
+            applySeries(seriesDeferred.await(), itemId, chapterId)
         }
+    }
 
-        // Streamed chapter page URLs
-        val countFromApi = booksRepository.getMangaStreamPageCount(chapterId)
-        val total = if (countFromApi > 0) countFromApi else (chapterInfo?.PageCount ?: 0)
-        if (total <= 0) {
-            _uiState.update {
-                it.copy(
-                    mode = ReaderContentMode.ERROR,
-                    error = "No pages available for this chapter",
-                )
-            }
-            return
-        }
-        val urls = (0 until total).mapNotNull { idx ->
-            booksRepository.mangaStreamPageUrl(chapterId, idx)
-        }
-        val initialPage = parsePageLocator(savedLocator, total)
-        startPageIndex = initialPage
-        maxPageReached = initialPage
-
+    // Fills in the series title and the neighbouring chapters once the series answers.
+    private fun applySeries(series: MangaStreamSeriesDto?, itemId: String, chapterId: Int) {
+        if (series == null || _uiState.value.chapterId != chapterId) return
+        val ordered = series.Chapters
+            .sortedWith(compareBy<MangaStreamChapterDto> { it.Number }.thenBy { it.SourceOrder })
+        val curIdx = ordered.indexOfFirst { it.ChapterId == chapterId || it.Id == itemId }
+        val prevCh = if (curIdx > 0) ordered[curIdx - 1] else null
+        val nextCh = if (curIdx >= 0 && curIdx < ordered.lastIndex) ordered[curIdx + 1] else null
         _uiState.update {
             it.copy(
-                mode = ReaderContentMode.MANGA,
-                kind = "manga",
-                mangaId = resolvedMangaId,
-                chapterId = chapterId,
-                title = chapterInfo?.Name ?: "Chapter",
-                subtitle = seriesInfo?.Title ?: chapterInfo?.SeriesTitle,
-                mangaPageCount = urls.size,
-                mangaCurrentPage = initialPage,
-                mangaStreamPageUrls = urls,
-                mangaReadingMode = preferredMode,
-                mangaSeriesTitle = seriesInfo?.Title ?: chapterInfo?.SeriesTitle,
-                mangaSeriesKey = seriesKey,
-                mangaChapterNumber = chapterInfo?.Number,
                 prevChapter = prevCh,
                 nextChapter = nextCh,
-                progress = if (urls.isNotEmpty()) (initialPage + 1).toDouble() / urls.size else 0.0,
+                subtitle = series.Title.ifBlank { null } ?: it.subtitle,
+                mangaSeriesTitle = series.Title.ifBlank { null } ?: it.mangaSeriesTitle,
+                mangaSeriesKey = it.mangaSeriesKey ?: series.Key.takeIf { key -> key.isNotBlank() },
             )
         }
-        startHeartbeat()
+        maybePrefetchNextChapter()
+    }
+
+    // Near the end of a streamed chapter, ask for the next chapter's page
+    // count and hand its first pages to the screen to warm the image cache.
+    private fun maybePrefetchNextChapter() {
+        val st = _uiState.value
+        val next = st.nextChapter ?: return
+        if (st.mode != ReaderContentMode.MANGA || st.mangaStreamPageUrls.isEmpty()) return
+        if (st.mangaCurrentPage < st.mangaPageCount - NEXT_CHAPTER_PREFETCH_LEAD) return
+        if (next.ChapterId <= 0 || nextPrefetchChapterId == next.ChapterId) return
+        nextPrefetchChapterId = next.ChapterId
+        viewModelScope.launch {
+            val count = booksRepository.getMangaStreamPageCount(next.ChapterId)
+            if (count <= 0) return@launch
+            val urls = (0 until minOf(count, NEXT_CHAPTER_PREFETCH_PAGES)).mapNotNull { idx ->
+                booksRepository.mangaStreamPageUrl(next.ChapterId, idx)
+            }
+            _uiState.update { it.copy(nextChapterPrefetchUrls = urls) }
+        }
     }
 
     // --- Page & Chapter Rendering ---
@@ -587,6 +645,7 @@ class ReaderViewModel @Inject constructor(
         val progress = (clamped + 1).toDouble() / total.toDouble()
         _uiState.update { it.copy(mangaCurrentPage = clamped, progress = progress) }
         scheduleProgressSave("page:${clamped + 1}", progress, total)
+        maybePrefetchNextChapter()
     }
 
     // --- EPUB & PDF Settings ---
@@ -1008,5 +1067,11 @@ class ReaderViewModel @Inject constructor(
             return (direct - 1).coerceIn(0, totalPages - 1)
         }
         return 0
+    }
+
+    private companion object {
+        // Start fetching the next chapter this many pages before the end.
+        const val NEXT_CHAPTER_PREFETCH_LEAD = 4
+        const val NEXT_CHAPTER_PREFETCH_PAGES = 3
     }
 }

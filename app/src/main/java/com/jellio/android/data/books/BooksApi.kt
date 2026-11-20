@@ -239,7 +239,11 @@ interface BooksApi {
     ): MangaStreamChapterDto
 
     @GET("Jellio/manga/stream/chapter/{chapterId}/pages")
-    suspend fun getMangaStreamChapterPages(@Path("chapterId") chapterId: Int): MangaPagesCountDto
+    suspend fun getMangaStreamChapterPages(
+        @Path("chapterId") chapterId: Int,
+        // The source can take a while to list a chapter; the web waits 60s.
+        @retrofit2.http.Header("X-Read-Timeout-Seconds") readTimeoutSeconds: Int? = 60,
+    ): MangaPagesCountDto
 
     @Streaming
     @GET("Jellio/manga/stream/chapter/{chapterId}/cbz")
