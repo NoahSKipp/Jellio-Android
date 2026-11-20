@@ -1,6 +1,8 @@
 package com.jellio.android.ui.player
 
 import com.jellio.android.data.i18n.Strings
+import com.jellio.android.ui.common.sideOverlayInsets
+import com.jellio.android.ui.common.topOverlayInsets
 import com.jellio.android.data.prefs.PlayerPrefs
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -1414,7 +1416,7 @@ internal fun PlayerSurface(
                 SwipeGestureHudPill(
                     kind = hudKind,
                     percent = swipeHudPercent,
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 36.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).topOverlayInsets().padding(top = 36.dp),
                 )
             }
 
@@ -1422,6 +1424,7 @@ internal fun PlayerSurface(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
+                        .topOverlayInsets()
                         .padding(top = 36.dp)
                         .clip(androidx.compose.foundation.shape.RoundedCornerShape(999.dp))
                         .background(com.jellio.android.ui.theme.JellioBgElevated.copy(alpha = 0.88f))
@@ -1443,7 +1446,7 @@ internal fun PlayerSurface(
                     holding = holdSeekTargetMs != null,
                     durationMs = shownDurationMs,
                     onExpired = { seekFlash = null },
-                    modifier = Modifier.align(Alignment.TopCenter),
+                    modifier = Modifier.align(Alignment.TopCenter).topOverlayInsets(),
                 )
             }
 
@@ -1650,7 +1653,7 @@ internal fun PlayerSurface(
                     onDismiss = { dismissPrompt() },
                     takeFocus = !controlsVisible,
                     focusKey = activeSkip.kind,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = promptBottom),
+                    modifier = Modifier.align(Alignment.BottomEnd).sideOverlayInsets().padding(end = 48.dp, bottom = promptBottom),
                 )
             }
             if (nearEndUpNextVisible && upNextInfo != null && !isLocked) {
@@ -1670,7 +1673,7 @@ internal fun PlayerSurface(
                     onDismiss = { dismissPrompt() },
                     takeFocus = !controlsVisible,
                     focusKey = upNextInfo.itemId,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = promptBottom),
+                    modifier = Modifier.align(Alignment.BottomEnd).sideOverlayInsets().padding(end = 48.dp, bottom = promptBottom),
                 )
             }
 
@@ -1680,7 +1683,7 @@ internal fun PlayerSurface(
                     secondsRemaining = upNextCountdown,
                     onPlayNow = { onPlayNext(upNextInfo.itemId) },
                     onDismiss = { upNextDismissed = true },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 40.dp),
+                    modifier = Modifier.align(Alignment.BottomEnd).sideOverlayInsets().padding(end = 48.dp, bottom = 40.dp),
                 )
             }
 

@@ -46,6 +46,7 @@ import com.jellio.android.data.catching
 import com.jellio.android.data.i18n.Strings
 import com.jellio.android.data.model.JellioNotificationDto
 import com.jellio.android.data.network.JellyfinApi
+import com.jellio.android.ui.common.topOverlayInsets
 import com.jellio.android.ui.announce.AnnouncementViewModel
 import com.jellio.android.ui.groupwatch.GroupWatchViewModel
 import com.jellio.android.ui.perf.MotionLevel
@@ -187,6 +188,7 @@ fun NewNotificationsPill(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
+                .topOverlayInsets()
                 .padding(top = 24.dp)
                 .shadow(16.dp, shape)
                 .clip(shape)

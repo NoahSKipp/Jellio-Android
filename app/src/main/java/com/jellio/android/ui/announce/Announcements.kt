@@ -29,6 +29,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.jellio.android.data.JellioRepository
 import com.jellio.android.data.catching
+import com.jellio.android.ui.common.topOverlayInsets
 import com.jellio.android.ui.theme.JellioBgElevated
 import com.jellio.android.ui.theme.JellioSecondary
 import com.jellio.android.ui.theme.JellioText
@@ -117,6 +118,7 @@ fun AnnouncementToast(modifier: Modifier = Modifier, viewModel: AnnouncementView
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
+            .topOverlayInsets()
             .padding(top = 28.dp)
             .widthIn(max = 720.dp)
             .shadow(16.dp, RoundedCornerShape(16.dp))

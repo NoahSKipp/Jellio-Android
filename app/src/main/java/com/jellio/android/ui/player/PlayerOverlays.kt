@@ -60,6 +60,7 @@ import com.jellio.android.ui.common.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.jellio.android.ui.theme.JellioBg
+import com.jellio.android.ui.common.topOverlayInsets
 import com.jellio.android.ui.theme.JellioBgElevated
 import com.jellio.android.ui.theme.JellioSecondary
 import com.jellio.android.ui.theme.JellioText
@@ -85,7 +86,7 @@ internal fun PauseOverlay(info: PauseOverlayInfo, modifier: Modifier = Modifier)
                 Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.35f), Color.Black.copy(alpha = 0.92f))),
             ),
         )
-        PauseClock(modifier = Modifier.align(Alignment.TopEnd).padding(top = if (isCompact) 20.dp else 40.dp, end = sidePad))
+        PauseClock(modifier = Modifier.align(Alignment.TopEnd).topOverlayInsets().padding(top = if (isCompact) 20.dp else 40.dp, end = sidePad))
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)

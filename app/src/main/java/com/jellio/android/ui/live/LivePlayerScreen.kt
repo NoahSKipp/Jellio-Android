@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -439,6 +440,7 @@ fun LivePlayerScreen(
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
                         .background(Brush.verticalGradient(listOf(JellioBg.copy(alpha = 0.8f), Color.Transparent)))
+                        .displayCutoutPadding()
                         .padding(horizontal = horizontalPad, vertical = if (isCompact) 16.dp else 24.dp),
                 ) {
                     LiveCircleButton(
