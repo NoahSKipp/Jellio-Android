@@ -104,6 +104,7 @@ import com.jellio.android.data.books.ShelfCategoryDto
 import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.data.offline.OfflineDownloadItem
 import com.jellio.android.ui.common.isCompactScreen
+import com.jellio.android.ui.common.shimmer
 import com.jellio.android.ui.nav.LocalBottomBarPadding
 import com.jellio.android.ui.theme.JellioBg
 import com.jellio.android.ui.theme.JellioBgElevated
@@ -125,17 +126,9 @@ fun BookshelfScreen(
     modifier: Modifier = Modifier,
     viewModel: BookshelfViewModel = hiltViewModel(),
 ) {
+    // Picks the tab before the first frame so the shelf never flashes Books.
+    remember(initialKind) { viewModel.openKind(initialKind) }
     val state by viewModel.uiState.collectAsState()
-    androidx.compose.runtime.LaunchedEffect(initialKind) {
-        val targetTab = when (initialKind) {
-            "manga" -> BookshelfTab.MANGA
-            "audiobook" -> BookshelfTab.AUDIOBOOK
-            else -> BookshelfTab.EBOOK
-        }
-        if (state.activeTab != targetTab) {
-            viewModel.selectTab(targetTab)
-        }
-    }
     var sortMenuOpen by remember { mutableStateOf(false) }
 
     Box(
@@ -316,9 +309,13 @@ fun BookshelfScreen(
                 }
             }
 
-            if (state.isLoading && state.ebookItems.isEmpty() && state.mangaSeries.isEmpty() && state.audiobookItems.isEmpty()) {
-                BookshelfSkeleton(modifier = Modifier.fillMaxSize())
-            } else if (state.error != null) {
+            val tabLoaded = state.activeTab in state.loadedTabs
+            if (!tabLoaded && state.error == null) {
+                BookshelfSkeleton(
+                    continueTitle = if (state.activeTab == BookshelfTab.AUDIOBOOK) "Continue Listening" else "Continue Reading",
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else if (state.error != null && !tabLoaded) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(state.error.orEmpty(), color = JellioDanger, fontSize = 14.sp)
@@ -331,11 +328,24 @@ fun BookshelfScreen(
                     }
                 }
             } else {
+                // Sorting thousands of items is kept out of every recomposition.
+                val filteredEbooks = remember(
+                    state.ebookItems, state.searchQuery, state.sortOption, state.sortDescending,
+                    state.selectedCategoryId, state.shelfByKind, state.shelfInfoById, state.readingProgressById, state.activeTab,
+                ) { viewModel.filteredBooks(state.ebookItems) }
+                val filteredAudiobooks = remember(
+                    state.audiobookItems, state.searchQuery, state.sortOption, state.sortDescending,
+                    state.selectedCategoryId, state.shelfByKind, state.shelfInfoById, state.readingProgressById, state.activeTab,
+                ) { viewModel.filteredBooks(state.audiobookItems) }
+                val filteredManga = remember(
+                    state.mangaSeries, state.searchQuery, state.sortOption, state.sortDescending,
+                    state.selectedCategoryId, state.shelfByKind, state.activeTab,
+                ) { viewModel.filteredMangaSeries() }
                 BookshelfMainGrid(
                     state = state,
-                    filteredEbooks = viewModel.filteredBooks(state.ebookItems),
-                    filteredAudiobooks = viewModel.filteredBooks(state.audiobookItems),
-                    filteredManga = viewModel.filteredMangaSeries(),
+                    filteredEbooks = filteredEbooks,
+                    filteredAudiobooks = filteredAudiobooks,
+                    filteredManga = filteredManga,
                     onOpenReader = onOpenReader,
                     onOpenAudiobook = onOpenAudiobook,
                     onOpenMangaSeries = viewModel::openMangaSeries,
@@ -436,20 +446,65 @@ fun BookshelfScreen(
     }
 }
 
+// Placeholders in the real card shapes, so the shelf does not jump when data lands.
 @Composable
-private fun BookshelfSkeleton(modifier: Modifier = Modifier) {
-    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "bookshelfSkeleton")
-    val alpha by transition.animateFloat(
-        initialValue = 0.05f,
-        targetValue = 0.12f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(900),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
-        ),
-        label = "bookshelfSkeletonAlpha",
-    )
-    val fillColor = Color.White.copy(alpha = alpha)
+private fun ContinueCardSkeleton() {
+    Surface(
+        color = JellioBgElevated,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, JellioBorder),
+        modifier = Modifier.width(260.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(56.dp)
+                    .height(82.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .shimmer(),
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.fillMaxWidth(0.85f).height(13.dp).clip(RoundedCornerShape(4.dp)).shimmer())
+                Box(Modifier.fillMaxWidth(0.55f).height(11.dp).clip(RoundedCornerShape(4.dp)).shimmer())
+                Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).shimmer())
+            }
+        }
+    }
+}
 
+@Composable
+private fun ContinueRowSkeleton(title: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = title, color = JellioText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), userScrollEnabled = false) {
+            items(3) { ContinueCardSkeleton() }
+        }
+    }
+}
+
+@Composable
+private fun ShelfCardSkeleton() {
+    Surface(
+        color = JellioBgElevated,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, JellioBorder),
+    ) {
+        Column {
+            Box(Modifier.fillMaxWidth().aspectRatio(0.68f).shimmer())
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.fillMaxWidth(0.8f).height(13.dp).clip(RoundedCornerShape(4.dp)).shimmer())
+                Box(Modifier.fillMaxWidth(0.5f).height(11.dp).clip(RoundedCornerShape(4.dp)).shimmer())
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookshelfSkeleton(continueTitle: String, modifier: Modifier = Modifier) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 136.dp),
         contentPadding = PaddingValues(16.dp),
@@ -458,46 +513,8 @@ private fun BookshelfSkeleton(modifier: Modifier = Modifier) {
         userScrollEnabled = false,
         modifier = modifier,
     ) {
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(
-                    modifier = Modifier
-                        .width(140.dp)
-                        .height(18.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(fillColor),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    repeat(2) {
-                        Box(
-                            modifier = Modifier
-                                .width(260.dp)
-                                .height(102.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(fillColor),
-                        )
-                    }
-                }
-            }
-        }
-        items(6) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(2f / 3f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(fillColor),
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.75f)
-                        .height(14.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(fillColor),
-                )
-            }
-        }
+        item(span = { GridItemSpan(maxLineSpan) }) { ContinueRowSkeleton(continueTitle) }
+        items(9) { ShelfCardSkeleton() }
     }
 }
 
@@ -620,12 +637,10 @@ private fun BookshelfMainGrid(
     onDownloadItem: (BaseItemDto) -> Unit,
     onAssignCategories: (String) -> Unit,
 ) {
-    val continueList = if (state.activeTab == BookshelfTab.AUDIOBOOK) {
-        state.continueListening
-    } else {
-        state.continueReading.filter { card ->
-            if (state.activeTab == BookshelfTab.MANGA) card.kind == "manga" else card.kind != "manga"
-        }
+    val continueList = when (state.activeTab) {
+        BookshelfTab.AUDIOBOOK -> state.continueListening
+        BookshelfTab.MANGA -> state.continueManga
+        BookshelfTab.EBOOK -> state.continueReading
     }
 
     val isCompact = isCompactScreen()
@@ -785,8 +800,15 @@ private fun ContinueReadingCard(
             ) {
                 var coverFailed by remember(card.coverUrl) { mutableStateOf(false) }
                 if (!card.coverUrl.isNullOrBlank() && !coverFailed) {
+                    val context = LocalContext.current
+                    val coverRequest = remember(card.coverUrl) {
+                        ImageRequest.Builder(context)
+                            .data(card.coverUrl)
+                            .size(168, 246)
+                            .build()
+                    }
                     AsyncImage(
-                        model = card.coverUrl,
+                        model = coverRequest,
                         contentDescription = card.title,
                         contentScale = ContentScale.Crop,
                         onError = { coverFailed = true },

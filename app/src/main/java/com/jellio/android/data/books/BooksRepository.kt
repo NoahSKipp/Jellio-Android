@@ -72,9 +72,11 @@ class BooksRepository @Inject constructor(
             }
         }.getOrDefault(emptyList())
 
-    suspend fun getBookshelfItems(userId: String, parentId: String, kind: String): List<BaseItemDto> {
+    // The raw Book or AudioBook list of one library; ebooks and manga come
+    // from the same query, so callers can share it.
+    suspend fun getBookshelfRaw(userId: String, parentId: String, kind: String): List<BaseItemDto> {
         val includeTypes = if (kind == "audiobook") "AudioBook" else "Book"
-        val raw = jellyfinApi.getItems(
+        return jellyfinApi.getItems(
             userId = userId,
             parentId = parentId,
             includeItemTypes = includeTypes,
@@ -84,14 +86,17 @@ class BooksRepository @Inject constructor(
             sortOrder = "Ascending",
             fields = "PrimaryImageAspectRatio,ProductionYear,DateCreated,Genres,RunTimeTicks,Path,SeriesName,Album,AlbumId,AlbumArtist,Artists,ParentId",
         ).Items
-
-        return when (kind) {
-            "audiobook" -> collapseAudiobookTracks(raw)
-            "ebook" -> raw.filterNot { isComicOrManga(it) }
-            "manga" -> raw.filter { isComicOrManga(it) }
-            else -> raw
-        }
     }
+
+    fun filterBookshelfItems(raw: List<BaseItemDto>, kind: String): List<BaseItemDto> = when (kind) {
+        "audiobook" -> collapseAudiobookTracks(raw)
+        "ebook" -> raw.filterNot { isComicOrManga(it) }
+        "manga" -> raw.filter { isComicOrManga(it) }
+        else -> raw
+    }
+
+    suspend fun getBookshelfItems(userId: String, parentId: String, kind: String): List<BaseItemDto> =
+        filterBookshelfItems(getBookshelfRaw(userId, parentId, kind), kind)
 
     suspend fun getBookShelfInfo(parentId: String): Map<String, BookShelfInfoDto> =
         catching { api.getBookShelfInfo(parentId) }.getOrDefault(emptyMap())
@@ -615,27 +620,32 @@ class BooksRepository @Inject constructor(
 
     // --- URL builders ---
 
-    suspend fun bookCoverUrl(item: BaseItemDto): String? {
+    suspend fun bookCoverUrl(item: BaseItemDto): String? = bookCoverUrls(listOf(item))[normalizeId(item.Id)]
+
+    // Covers for a whole shelf: session, token and downloads are looked up
+    // once instead of once per item. Keyed by normalized item id.
+    suspend fun bookCoverUrls(items: List<BaseItemDto>): Map<String, String> {
+        if (items.isEmpty()) return emptyMap()
         val uid = currentUserId() ?: "default"
-        val offlineCover = offlineDownloads.getCompletedCoverFile(item.Id, uid)
-            ?: item.AlbumId?.let { offlineDownloads.getCompletedCoverFile(it, uid) }
-        if (offlineCover != null) return offlineCover.toURI().toString()
-        val server = sessionManager.serverAddress()?.trimEnd('/') ?: return null
+        val server = sessionManager.serverAddress()?.trimEnd('/')
         val token = sessionManager.accessToken()
-        val primaryTag = item.ImageTags?.get("Primary")
-        if (!primaryTag.isNullOrBlank()) {
-            val base = "$server/Items/${item.Id}/Images/Primary?maxWidth=500&quality=90&tag=$primaryTag"
-            return if (!token.isNullOrEmpty()) "$base&ApiKey=$token&api_key=$token" else base
+        val hasDownloads = offlineDownloads.downloads.value.isNotEmpty()
+        val out = HashMap<String, String>(items.size)
+        for (item in items) {
+            val offlineCover = if (hasDownloads) {
+                offlineDownloads.getCompletedCoverFile(item.Id, uid)
+                    ?: item.AlbumId?.let { offlineDownloads.getCompletedCoverFile(it, uid) }
+            } else {
+                null
+            }
+            val url = when {
+                offlineCover != null -> offlineCover.toURI().toString()
+                server != null -> bookCoverUrlFor(item, server, token)
+                else -> null
+            }
+            if (url != null) out[normalizeId(item.Id)] = url
         }
-        val albumId = item.AlbumId
-        val albumTag = item.AlbumPrimaryImageTag
-        if (!albumId.isNullOrBlank() && !albumTag.isNullOrBlank()) {
-            val base = "$server/Items/$albumId/Images/Primary?maxWidth=500&quality=90&tag=$albumTag"
-            return if (!token.isNullOrEmpty()) "$base&ApiKey=$token&api_key=$token" else base
-        }
-        val targetId = albumId ?: item.Id
-        return "$server/Jellio/books/item/${normalizeId(targetId)}/cover" +
-            if (!token.isNullOrEmpty()) "?ApiKey=$token&api_key=$token" else ""
+        return out
     }
 
     suspend fun bookCoverUrl(itemId: String): String? {

@@ -9,6 +9,9 @@ import com.jellio.android.data.books.BookShelfInfoDto
 import com.jellio.android.data.books.ChaptarrStatus
 import com.jellio.android.data.books.resolveChaptarrStatus
 import com.jellio.android.data.books.BooksRepository
+import com.jellio.android.data.books.CachedContinueCard
+import com.jellio.android.data.books.ShelfSnapshot
+import com.jellio.android.data.books.ShelfSnapshotStore
 import com.jellio.android.data.books.InProgressReadingDto
 import com.jellio.android.data.books.MangaDiscoverDto
 import com.jellio.android.data.books.MangaSearchResponseDto
@@ -26,8 +29,11 @@ import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.data.offline.OfflineDownloadItem
 import com.jellio.android.data.offline.OfflineDownloadManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,7 +41,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import kotlin.coroutines.cancellation.CancellationException
 
 enum class BookshelfTab(val kind: String, val label: String) {
     EBOOK("ebook", "Books"),
@@ -132,6 +140,11 @@ data class BookshelfUiState(
     // Continue reading / listening
     val continueReading: List<ContinueReadingCardModel> = emptyList(),
     val continueListening: List<ContinueReadingCardModel> = emptyList(),
+    val continueManga: List<ContinueReadingCardModel> = emptyList(),
+
+    // Tabs that show data already (cached or fresh) and tabs whose continue row has answered.
+    val loadedTabs: Set<BookshelfTab> = emptySet(),
+    val continueLoadedTabs: Set<BookshelfTab> = emptySet(),
 
     // Manga library (stream + Jellyfin comic items)
     val mangaStatus: MangaStatusDto = MangaStatusDto(),
@@ -181,12 +194,21 @@ data class BookshelfUiState(
 class BookshelfViewModel @Inject constructor(
     private val booksRepository: BooksRepository,
     private val offlineDownloads: OfflineDownloadManager,
+    private val snapshots: ShelfSnapshotStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BookshelfUiState())
     val uiState: StateFlow<BookshelfUiState> = _uiState.asStateFlow()
 
-    private var rawComicItems: List<BaseItemDto> = emptyList()
+    private var started = false
+    private var mangaStream: List<MangaSeriesSummaryDto>? = null
+    private var mangaLocal: List<BaseItemDto>? = null
+    private var ebookContinuePairs: List<Pair<BaseItemDto, InProgressReadingDto>> = emptyList()
+    private var audiobookContinueItems: List<BaseItemDto> = emptyList()
+    private val tabJobs = HashMap<BookshelfTab, Job>()
+    private val tabLoadedAt = HashMap<BookshelfTab, Long>()
+    private var librariesJob: Deferred<List<BaseItemDto>>? = null
+    private val rawItemsCache = HashMap<String, Pair<Long, Deferred<List<BaseItemDto>>>>()
     private var discoverJob: Job? = null
     private var discoverSearchDebounceJob: Job? = null
     private val mangaDiscoverCache = HashMap<String, List<MangaDiscoverDto>>()
@@ -199,7 +221,6 @@ class BookshelfViewModel @Inject constructor(
                 _uiState.update { it.copy(downloadsById = mapped) }
             }
         }
-        loadInitial()
     }
 
     fun selectTab(tab: BookshelfTab) {
@@ -211,8 +232,23 @@ class BookshelfViewModel @Inject constructor(
                 sortOption = if (tab == BookshelfTab.MANGA) ShelfSortOption.TITLE else ShelfSortOption.TITLE,
             )
         }
-        viewModelScope.launch {
-            ensureTabDataLoaded(tab)
+        loadTab(tab, force = false)
+    }
+
+    // First call decides the tab the shelf opens on and starts loading it;
+    // later calls (back from the reader, bottom bar) just switch tabs.
+    fun openKind(kind: String) {
+        val tab = when (kind) {
+            "manga" -> BookshelfTab.MANGA
+            "audiobook" -> BookshelfTab.AUDIOBOOK
+            else -> BookshelfTab.EBOOK
+        }
+        if (!started) {
+            started = true
+            _uiState.update { it.copy(activeTab = tab) }
+            loadInitial()
+        } else if (_uiState.value.activeTab != tab) {
+            selectTab(tab)
         }
     }
 
@@ -262,212 +298,387 @@ class BookshelfViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = false, error = "Not signed in") }
                 return@launch
             }
-            val views = booksRepository.getBookshelfLibraries(uid)
-            val defaultLib = views.firstOrNull()?.Id
-            _uiState.update {
-                it.copy(
-                    userId = uid,
-                    libraries = views,
-                    selectedLibraryId = it.selectedLibraryId ?: defaultLib,
-                )
+            _uiState.update { it.copy(userId = uid) }
+            if (force) {
+                tabLoadedAt.clear()
+                rawItemsCache.clear()
+                librariesJob = null
             }
-            ensureTabDataLoaded(_uiState.value.activeTab, force = force)
+            loadTab(_uiState.value.activeTab, force = force)
         }
     }
 
-    private suspend fun ensureTabDataLoaded(tab: BookshelfTab, force: Boolean = false) {
-        val state = _uiState.value
-        val uid = state.userId.ifBlank { booksRepository.currentUserId().orEmpty() }
+    private fun librariesFor(uid: String): Deferred<List<BaseItemDto>> =
+        librariesJob ?: viewModelScope.async { booksRepository.getBookshelfLibraries(uid) }.also { librariesJob = it }
+
+    // One query per library and item type, shared by Books and Manga (both
+    // read the Book type) and by quick tab switches.
+    private fun rawItemsFor(uid: String, libraryId: String, kind: String): Deferred<List<BaseItemDto>> {
+        val key = "$libraryId|${if (kind == "audiobook") "a" else "b"}"
+        val now = System.currentTimeMillis()
+        rawItemsCache[key]?.let { (at, deferred) ->
+            if (now - at < RAW_ITEMS_TTL_MS && !(deferred.isCompleted && deferred.isCancelled)) return deferred
+        }
+        val deferred = viewModelScope.async { booksRepository.getBookshelfRaw(uid, libraryId, kind) }
+        rawItemsCache[key] = now to deferred
+        deferred.invokeOnCompletion { cause -> if (cause != null) rawItemsCache.remove(key) }
+        return deferred
+    }
+
+    private suspend fun itemsFor(uid: String, libs: List<BaseItemDto>, kind: String): List<BaseItemDto> {
+        val rawKind = if (kind == "audiobook") "audiobook" else "ebook"
+        val raw = coroutineScope {
+            libs.map { lib -> async { rawItemsFor(uid, lib.Id, rawKind).await() } }.awaitAll()
+        }.flatten()
+        return booksRepository.filterBookshelfItems(raw, kind)
+            .distinctBy { BooksRepository.normalizeId(it.Id) }
+    }
+
+    private suspend fun runGuarded(block: suspend () -> Unit): Throwable? = try {
+        block()
+        null
+    } catch (e: CancellationException) {
+        throw e
+    } catch (t: Throwable) {
+        t
+    }
+
+    private fun loadTab(tab: BookshelfTab, force: Boolean) {
+        val existing = tabJobs[tab]
+        if (existing?.isActive == true && !force) return
+        val loadedAt = tabLoadedAt[tab]
+        val fresh = loadedAt != null && System.currentTimeMillis() - loadedAt < TAB_FRESH_MS
+        if (!force && fresh && tab in _uiState.value.loadedTabs) return
+        existing?.cancel()
+        tabJobs[tab] = viewModelScope.launch { runTabLoad(tab) }
+    }
+
+    // Each request publishes its own result as it returns, so the first
+    // thing the person sees is the cached shelf, then whichever of the
+    // continue row, library and metadata answers first.
+    private suspend fun runTabLoad(tab: BookshelfTab) {
+        val uid = _uiState.value.userId.ifBlank { booksRepository.currentUserId().orEmpty() }
         if (uid.isBlank()) return
+        _uiState.update { it.copy(userId = uid, error = null) }
+        if (tab !in _uiState.value.loadedTabs) restoreSnapshot(tab, uid)
+        _uiState.update { it.copy(isLoading = true) }
 
-        _uiState.update { it.copy(isLoading = true, error = null) }
-        try {
-            coroutineScope {
-                val shelfDeferred = async { booksRepository.getShelf(tab.kind) }
-                val allProgressDeferred = async { booksRepository.getAllReadingProgress() }
-
-                val shelf = shelfDeferred.await()
-                val progressMap = allProgressDeferred.await()
-                    .mapKeys { BooksRepository.normalizeId(it.key) }
-
-                when (tab) {
-                    BookshelfTab.EBOOK -> {
-                        val libIds = state.libraries.map { it.Id }
-                        val itemsDeferred = async {
-                            libIds.flatMap { libId ->
-                                booksRepository.getBookshelfItems(uid, libId, "ebook")
-                            }.distinctBy { BooksRepository.normalizeId(it.Id) }
-                        }
-                        val infoDeferred = async {
-                            val merged = HashMap<String, BookShelfInfoDto>()
-                            libIds.forEach { libId ->
-                                merged.putAll(booksRepository.getBookShelfInfo(libId))
-                            }
-                            merged
-                        }
-                        val continueDeferred = async { booksRepository.getContinueReadingItems(uid, limit = 16) }
-
-                        val items = itemsDeferred.await()
-                        val info = infoDeferred.await().mapKeys { BooksRepository.normalizeId(it.key) }
-                        val continuePairs = continueDeferred.await()
-
-                        val coverMap = HashMap<String, String>(state.coverUrlsByKey)
-                        items.forEach { item ->
-                            val key = BooksRepository.normalizeId(item.Id)
-                            if (!coverMap.containsKey(key)) {
-                                booksRepository.bookCoverUrl(item)?.let { coverMap[key] = it }
-                            }
-                        }
-                        val continueCards = continuePairs.map { (item, prog) ->
-                            val norm = BooksRepository.normalizeId(item.Id)
-                            val cover = coverMap[norm] ?: booksRepository.bookCoverUrl(item)
-                            if (cover != null) coverMap[norm] = cover
-                            val author = info[norm]?.Authors
-                                ?: item.People?.firstOrNull()?.Name
-                                ?: item.AlbumArtist
-                                ?: ""
-                            ContinueReadingCardModel(
-                                itemId = item.Id,
-                                title = item.Name.orEmpty(),
-                                subtitle = author,
-                                coverUrl = cover,
-                                progress = prog.Progress.coerceIn(0.0, 1.0),
-                                kind = if (BooksRepository.isComicOrManga(item)) "manga" else "book",
-                            )
-                        }
-
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                ebookItems = items,
-                                shelfInfoById = it.shelfInfoById + info,
-                                readingProgressById = it.readingProgressById + progressMap,
-                                coverUrlsByKey = coverMap,
-                                continueReading = continueCards,
-                                shelfByKind = it.shelfByKind + (tab.kind to shelf),
-                            )
+        val errors = ArrayList<Throwable>()
+        coroutineScope {
+            val librariesDeferred = librariesFor(uid)
+            launch {
+                runGuarded {
+                    val shelf = booksRepository.getShelf(tab.kind)
+                    _uiState.update { it.copy(shelfByKind = it.shelfByKind + (tab.kind to shelf)) }
+                }
+            }
+            launch {
+                runGuarded {
+                    val progress = booksRepository.getAllReadingProgress().mapKeys { BooksRepository.normalizeId(it.key) }
+                    _uiState.update { it.copy(readingProgressById = it.readingProgressById + progress) }
+                    if (tab == BookshelfTab.MANGA) publishManga()
+                }
+            }
+            when (tab) {
+                BookshelfTab.EBOOK -> {
+                    launch {
+                        runGuarded {
+                            ebookContinuePairs = booksRepository.getContinueReadingItems(uid, limit = 16)
+                            publishEbookContinue()
                         }
                     }
-
-                    BookshelfTab.MANGA -> {
-                        val statusDeferred = async { booksRepository.getMangaStatus() }
-                        val streamLibDeferred = async { booksRepository.getMangaStreamLibrary() }
-                        val updatesDeferred = async { booksRepository.getMangaUpdates() }
-                        val localComicsDeferred = async {
-                            state.libraries.flatMap { lib ->
-                                booksRepository.getBookshelfItems(uid, lib.Id, "manga")
-                                    .filter { BooksRepository.isComicOrManga(it) }
-                            }.distinctBy { BooksRepository.normalizeId(it.Id) }
-                        }
-
-                        val status = statusDeferred.await()
-                        val streamList = streamLibDeferred.await().getOrDefault(emptyList())
-                        val updates = updatesDeferred.await().getOrNull()?.Items.orEmpty()
-                        val localComics = localComicsDeferred.await()
-                        rawComicItems = localComics
-
-                        val coverMap = HashMap<String, String>(state.coverUrlsByKey)
-                        val seriesList = buildMangaSeriesList(streamList, localComics, progressMap, coverMap)
-
-                        // Populate continue reading cards from series with resume or progress
-                        val continueCards = seriesList
-                            .filter { it.readCount in 1 until it.chapterCount || it.resumeChapterId != null }
-                            .take(15)
-                            .mapNotNull { series ->
-                                val chId = series.resumeStreamChapterId
-                                val itemId = series.resumeChapterId ?: series.firstChapterId ?: return@mapNotNull null
-                                val pct = if (series.chapterCount > 0) {
-                                    (series.readCount.toDouble() / series.chapterCount.toDouble()).coerceIn(0.0, 1.0)
-                                } else {
-                                    0.0
-                                }
-                                ContinueReadingCardModel(
-                                    itemId = itemId,
-                                    title = series.title,
-                                    subtitle = series.streamSummary?.Resume?.Name ?: "${series.readCount}/${series.chapterCount} ch",
-                                    coverUrl = series.coverUrl,
-                                    progress = pct,
-                                    kind = "manga",
-                                    mangaId = series.mangaId,
-                                    chapterId = chId,
+                    launch {
+                        runGuarded {
+                            val libs = librariesDeferred.await().also { publishLibraries(it) }
+                            val items = itemsFor(uid, libs, "ebook")
+                            val covers = booksRepository.bookCoverUrls(items)
+                            _uiState.update {
+                                it.copy(
+                                    ebookItems = items,
+                                    coverUrlsByKey = it.coverUrlsByKey + covers,
+                                    loadedTabs = it.loadedTabs + tab,
                                 )
                             }
+                            fetchShelfInfo(libs)
+                            publishEbookContinue()
+                        }?.let { errors += it }
+                    }
+                }
 
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                mangaStatus = status,
-                                mangaSeries = seriesList,
-                                mangaUpdates = updates,
-                                readingProgressById = it.readingProgressById + progressMap,
-                                coverUrlsByKey = coverMap,
-                                continueReading = if (continueCards.isNotEmpty()) continueCards else it.continueReading,
-                                shelfByKind = it.shelfByKind + (tab.kind to shelf),
-                            )
+                BookshelfTab.AUDIOBOOK -> {
+                    launch {
+                        runGuarded {
+                            audiobookContinueItems = booksRepository.getContinueListening(uid, limit = 16)
+                            publishAudiobookContinue()
                         }
                     }
-
-                    BookshelfTab.AUDIOBOOK -> {
-                        val libIds = state.libraries.map { it.Id }
-                        val itemsDeferred = async {
-                            libIds.flatMap { libId ->
-                                booksRepository.getBookshelfItems(uid, libId, "audiobook")
-                            }.distinctBy { BooksRepository.normalizeId(it.Id) }
-                        }
-                        val infoDeferred = async {
-                            val merged = HashMap<String, BookShelfInfoDto>()
-                            libIds.forEach { libId ->
-                                merged.putAll(booksRepository.getBookShelfInfo(libId))
+                    launch {
+                        runGuarded {
+                            val libs = librariesDeferred.await().also { publishLibraries(it) }
+                            val items = itemsFor(uid, libs, "audiobook")
+                            val covers = booksRepository.bookCoverUrls(items)
+                            _uiState.update {
+                                it.copy(
+                                    audiobookItems = items,
+                                    coverUrlsByKey = it.coverUrlsByKey + covers,
+                                    loadedTabs = it.loadedTabs + tab,
+                                )
                             }
-                            merged
+                            fetchShelfInfo(libs)
+                            publishAudiobookContinue()
+                        }?.let { errors += it }
+                    }
+                }
+
+                BookshelfTab.MANGA -> {
+                    launch {
+                        runGuarded {
+                            val status = booksRepository.getMangaStatus()
+                            _uiState.update { it.copy(mangaStatus = status) }
                         }
-                        val continueDeferred = async { booksRepository.getContinueListening(uid, limit = 16) }
-
-                        val items = itemsDeferred.await()
-                        val info = infoDeferred.await().mapKeys { BooksRepository.normalizeId(it.key) }
-                        val resumeAudiobooks = continueDeferred.await()
-
-                        val coverMap = HashMap<String, String>(state.coverUrlsByKey)
-                        items.forEach { item ->
-                            val norm = BooksRepository.normalizeId(item.Id)
-                            if (!coverMap.containsKey(norm)) {
-                                booksRepository.bookCoverUrl(item)?.let { coverMap[norm] = it }
+                    }
+                    launch {
+                        runGuarded {
+                            val updates = booksRepository.getMangaUpdates().getOrNull()?.Items.orEmpty()
+                            _uiState.update { it.copy(mangaUpdates = updates) }
+                        }
+                    }
+                    launch {
+                        runGuarded {
+                            booksRepository.getMangaStreamLibrary().getOrNull()?.let { list ->
+                                mangaStream = list
+                                publishManga()
                             }
                         }
-
-                        val listeningCards = resumeAudiobooks.map { item ->
-                            val norm = BooksRepository.normalizeId(item.Id)
-                            val cover = coverMap[norm] ?: booksRepository.bookCoverUrl(item)
-                            if (cover != null) coverMap[norm] = cover
-                            val pct = (item.UserData?.PlayedPercentage ?: 0.0) / 100.0
-                            ContinueReadingCardModel(
-                                itemId = item.Id,
-                                title = item.Name.orEmpty(),
-                                subtitle = item.AlbumArtist ?: item.Artists?.firstOrNull() ?: info[norm]?.Authors.orEmpty(),
-                                coverUrl = cover,
-                                progress = pct.coerceIn(0.0, 1.0),
-                                kind = "audiobook",
-                            )
-                        }
-
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                audiobookItems = items,
-                                shelfInfoById = it.shelfInfoById + info,
-                                readingProgressById = it.readingProgressById + progressMap,
-                                coverUrlsByKey = coverMap,
-                                continueListening = listeningCards,
-                                shelfByKind = it.shelfByKind + (tab.kind to shelf),
-                            )
-                        }
+                    }
+                    launch {
+                        runGuarded {
+                            val libs = librariesDeferred.await().also { publishLibraries(it) }
+                            mangaLocal = itemsFor(uid, libs, "manga")
+                            publishManga()
+                        }?.let { errors += it }
                     }
                 }
             }
-        } catch (t: Throwable) {
-            _uiState.update { it.copy(isLoading = false, error = t.message ?: "Failed to load bookshelf") }
+        }
+
+        tabLoadedAt[tab] = System.currentTimeMillis()
+        val failed = errors.firstOrNull()
+        _uiState.update { state ->
+            state.copy(
+                isLoading = false,
+                // Stale data stays on screen; an error only replaces an empty shelf.
+                error = if (failed != null && tab !in state.loadedTabs) (failed.message ?: "Failed to load bookshelf") else null,
+                loadedTabs = if (failed == null) state.loadedTabs + tab else state.loadedTabs,
+            )
+        }
+        if (failed == null && _uiState.value.libraries.isNotEmpty() && tab in _uiState.value.loadedTabs) saveSnapshot(tab, uid)
+    }
+
+    private fun publishLibraries(libs: List<BaseItemDto>) {
+        // A failed library lookup comes back empty; look again next time.
+        if (libs.isEmpty()) librariesJob = null
+        _uiState.update { it.copy(libraries = libs, selectedLibraryId = it.selectedLibraryId ?: libs.firstOrNull()?.Id) }
+    }
+
+    private suspend fun fetchShelfInfo(libs: List<BaseItemDto>) {
+        val merged = HashMap<String, BookShelfInfoDto>()
+        coroutineScope {
+            libs.map { lib -> async { booksRepository.getBookShelfInfo(lib.Id) } }.awaitAll()
+        }.forEach { merged.putAll(it) }
+        val info = merged.mapKeys { BooksRepository.normalizeId(it.key) }
+        _uiState.update { it.copy(shelfInfoById = it.shelfInfoById + info) }
+    }
+
+    private suspend fun publishEbookContinue() {
+        val pairs = ebookContinuePairs.filterNot { BooksRepository.isComicOrManga(it.first) }
+        val covers = booksRepository.bookCoverUrls(pairs.map { it.first })
+        val info = _uiState.value.shelfInfoById
+        val cards = pairs.map { (item, prog) ->
+            val norm = BooksRepository.normalizeId(item.Id)
+            ContinueReadingCardModel(
+                itemId = item.Id,
+                title = item.Name.orEmpty(),
+                subtitle = info[norm]?.Authors
+                    ?: item.People?.firstOrNull()?.Name
+                    ?: item.AlbumArtist
+                    ?: "",
+                coverUrl = covers[norm],
+                progress = prog.Progress.coerceIn(0.0, 1.0),
+                kind = "book",
+            )
+        }
+        _uiState.update {
+            it.copy(
+                continueReading = cards,
+                coverUrlsByKey = it.coverUrlsByKey + covers,
+                continueLoadedTabs = it.continueLoadedTabs + BookshelfTab.EBOOK,
+            )
         }
     }
+
+    private suspend fun publishAudiobookContinue() {
+        val resumed = audiobookContinueItems
+        val covers = booksRepository.bookCoverUrls(resumed)
+        val info = _uiState.value.shelfInfoById
+        val cards = resumed.map { item ->
+            val norm = BooksRepository.normalizeId(item.Id)
+            val pct = (item.UserData?.PlayedPercentage ?: 0.0) / 100.0
+            ContinueReadingCardModel(
+                itemId = item.Id,
+                title = item.Name.orEmpty(),
+                subtitle = item.AlbumArtist ?: item.Artists?.firstOrNull() ?: info[norm]?.Authors.orEmpty(),
+                coverUrl = covers[norm],
+                progress = pct.coerceIn(0.0, 1.0),
+                kind = "audiobook",
+            )
+        }
+        _uiState.update {
+            it.copy(
+                continueListening = cards,
+                coverUrlsByKey = it.coverUrlsByKey + covers,
+                continueLoadedTabs = it.continueLoadedTabs + BookshelfTab.AUDIOBOOK,
+            )
+        }
+    }
+
+    // Builds the manga shelf from whichever of the source library and the
+    // local comics has arrived; called again as the other one lands.
+    private suspend fun publishManga() {
+        val stream = mangaStream
+        val local = mangaLocal
+        if (stream == null && local == null) return
+        val progress = _uiState.value.readingProgressById
+        val coverMap = HashMap<String, String>(_uiState.value.coverUrlsByKey)
+        val seriesList = withContext(Dispatchers.Default) {
+            buildMangaSeriesList(stream.orEmpty(), local.orEmpty(), progress, coverMap)
+        }
+        val continueCards = seriesList
+            .filter { it.readCount in 1 until it.chapterCount || it.resumeChapterId != null }
+            .take(15)
+            .mapNotNull { series ->
+                val chId = series.resumeStreamChapterId
+                val itemId = series.resumeChapterId ?: series.firstChapterId ?: return@mapNotNull null
+                val pct = if (series.chapterCount > 0) {
+                    (series.readCount.toDouble() / series.chapterCount.toDouble()).coerceIn(0.0, 1.0)
+                } else {
+                    0.0
+                }
+                ContinueReadingCardModel(
+                    itemId = itemId,
+                    title = series.title,
+                    subtitle = series.streamSummary?.Resume?.Name ?: "${series.readCount}/${series.chapterCount} ch",
+                    coverUrl = series.coverUrl,
+                    progress = pct,
+                    kind = "manga",
+                    mangaId = series.mangaId,
+                    chapterId = chId,
+                )
+            }
+        _uiState.update {
+            it.copy(
+                mangaSeries = seriesList,
+                coverUrlsByKey = it.coverUrlsByKey + coverMap,
+                continueManga = continueCards,
+                continueLoadedTabs = it.continueLoadedTabs + BookshelfTab.MANGA,
+                // A half-loaded shelf (only one source in) already counts as loaded.
+                loadedTabs = it.loadedTabs + BookshelfTab.MANGA,
+            )
+        }
+    }
+
+    private suspend fun restoreSnapshot(tab: BookshelfTab, uid: String) {
+        val snap = snapshots.load(uid, tab.kind) ?: return
+        if (tab in _uiState.value.loadedTabs) return
+        when (tab) {
+            BookshelfTab.EBOOK -> {
+                val covers = booksRepository.bookCoverUrls(snap.Items)
+                val cards = snap.Continue.map { c ->
+                    ContinueReadingCardModel(c.ItemId, c.Title, c.Subtitle, covers[BooksRepository.normalizeId(c.ItemId)] ?: booksRepository.bookCoverUrl(c.ItemId), c.Progress, c.Kind, c.MangaId, c.ChapterId)
+                }
+                _uiState.update {
+                    it.copy(
+                        ebookItems = snap.Items,
+                        shelfInfoById = it.shelfInfoById + snap.Info,
+                        readingProgressById = it.readingProgressById + snap.Progress,
+                        coverUrlsByKey = it.coverUrlsByKey + covers,
+                        continueReading = cards,
+                        shelfByKind = snap.Shelf?.let { s -> it.shelfByKind + (tab.kind to s) } ?: it.shelfByKind,
+                        loadedTabs = it.loadedTabs + tab,
+                        continueLoadedTabs = it.continueLoadedTabs + tab,
+                    )
+                }
+            }
+            BookshelfTab.AUDIOBOOK -> {
+                val covers = booksRepository.bookCoverUrls(snap.Items)
+                val cards = snap.Continue.map { c ->
+                    ContinueReadingCardModel(c.ItemId, c.Title, c.Subtitle, covers[BooksRepository.normalizeId(c.ItemId)] ?: booksRepository.bookCoverUrl(c.ItemId), c.Progress, c.Kind, c.MangaId, c.ChapterId)
+                }
+                _uiState.update {
+                    it.copy(
+                        audiobookItems = snap.Items,
+                        shelfInfoById = it.shelfInfoById + snap.Info,
+                        readingProgressById = it.readingProgressById + snap.Progress,
+                        coverUrlsByKey = it.coverUrlsByKey + covers,
+                        continueListening = cards,
+                        shelfByKind = snap.Shelf?.let { s -> it.shelfByKind + (tab.kind to s) } ?: it.shelfByKind,
+                        loadedTabs = it.loadedTabs + tab,
+                        continueLoadedTabs = it.continueLoadedTabs + tab,
+                    )
+                }
+            }
+            BookshelfTab.MANGA -> {
+                mangaStream = snap.Stream
+                mangaLocal = snap.Local
+                _uiState.update {
+                    it.copy(
+                        mangaUpdates = snap.Updates,
+                        readingProgressById = it.readingProgressById + snap.Progress,
+                        shelfByKind = snap.Shelf?.let { s -> it.shelfByKind + (tab.kind to s) } ?: it.shelfByKind,
+                    )
+                }
+                publishManga()
+            }
+        }
+    }
+
+    private suspend fun saveSnapshot(tab: BookshelfTab, uid: String) {
+        val state = _uiState.value
+        val snap = when (tab) {
+            BookshelfTab.EBOOK -> ShelfSnapshot(
+                Items = state.ebookItems,
+                Info = state.shelfInfoById,
+                Continue = state.continueReading.map { it.toCached() },
+                Progress = state.readingProgressById,
+                Shelf = state.shelfByKind[tab.kind],
+            )
+            BookshelfTab.AUDIOBOOK -> ShelfSnapshot(
+                Items = state.audiobookItems,
+                Info = state.shelfInfoById,
+                Continue = state.continueListening.map { it.toCached() },
+                Progress = state.readingProgressById,
+                Shelf = state.shelfByKind[tab.kind],
+            )
+            BookshelfTab.MANGA -> ShelfSnapshot(
+                Stream = mangaStream.orEmpty(),
+                Local = mangaLocal.orEmpty(),
+                Updates = state.mangaUpdates,
+                Progress = state.readingProgressById,
+                Shelf = state.shelfByKind[tab.kind],
+            )
+        }
+        snapshots.save(uid, tab.kind, snap)
+    }
+
+    private fun ContinueReadingCardModel.toCached() = CachedContinueCard(
+        ItemId = itemId,
+        Title = title,
+        Subtitle = subtitle,
+        Progress = progress,
+        Kind = kind,
+        MangaId = mangaId,
+        ChapterId = chapterId,
+    )
 
     private suspend fun buildMangaSeriesList(
         streamList: List<MangaSeriesSummaryDto>,
@@ -1350,9 +1561,7 @@ class BookshelfViewModel @Inject constructor(
                                 ?: "Added \"$title\" (${res.QueuedChapters}/${res.TotalChapters} chapters)",
                         )
                     }
-                    viewModelScope.launch {
-                        ensureTabDataLoaded(BookshelfTab.MANGA, force = true)
-                    }
+                    loadTab(BookshelfTab.MANGA, force = true)
                     if (isOk) {
                         openMangaSeries(targetSeries)
                     }
@@ -1544,6 +1753,9 @@ class BookshelfViewModel @Inject constructor(
     }
 
     companion object {
+        private const val RAW_ITEMS_TTL_MS = 60_000L
+        private const val TAB_FRESH_MS = 60_000L
+
         fun mangaDiscoverCoverKey(id: Int): String = "md:$id"
         fun mangaSearchCoverKey(mangaId: Int): String = "ms:$mangaId"
         fun bookDiscoverCoverKey(workId: String, title: String): String = "bd:$workId|$title"
