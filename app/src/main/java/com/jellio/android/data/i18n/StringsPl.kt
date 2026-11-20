@@ -1048,5 +1048,12 @@ internal object StringsPl {
         m["word_episode_singular"] = "odcinek"
         m["word_episode_plural"] = "odcinków"
         m["toast_download_start_error"] = "Nie udało się rozpocząć pobierania."
+        m["menu_find_skip"] = "Znajdź pomijanie intro/napisów"
+        m["menu_quick_skip"] = "Szybkie szukanie pomijania (serial)"
+        m["menu_deep_skip"] = "Głębokie szukanie pomijania (serial)"
+        m["skip_looking"] = "Szukanie znaczników pomijania dla {title}…"
+        m["skip_found_count"] = "Znaleziono znaczniki pomijania dla {hits} z {total} elementów."
+        m["toast_skip_timestamps_error"] = "Nie udało się wyszukać znaczników czasu pomijania. Spróbuj ponownie."
+        m["skip_this_title"] = "ten tytuł"
     }
 }

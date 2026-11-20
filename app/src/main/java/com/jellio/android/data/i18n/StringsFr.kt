@@ -1048,5 +1048,12 @@ internal object StringsFr {
         m["word_episode_singular"] = "épisode"
         m["word_episode_plural"] = "épisodes"
         m["toast_download_start_error"] = "Impossible de démarrer le téléchargement."
+        m["menu_find_skip"] = "Trouver le saut d'intro/générique"
+        m["menu_quick_skip"] = "Recherche rapide de saut (série)"
+        m["menu_deep_skip"] = "Recherche approfondie de saut (série)"
+        m["skip_looking"] = "Recherche des repères de saut pour {title}…"
+        m["skip_found_count"] = "Repères de saut trouvés pour {hits} sur {total} élément(s)."
+        m["toast_skip_timestamps_error"] = "Impossible de rechercher les marqueurs de saut. Veuillez réessayer."
+        m["skip_this_title"] = "ce titre"
     }
 }

@@ -1048,5 +1048,12 @@ internal object StringsIt {
         m["word_episode_singular"] = "episodio"
         m["word_episode_plural"] = "episodi"
         m["toast_download_start_error"] = "Impossibile avviare il download."
+        m["menu_find_skip"] = "Trova salto intro/titoli di coda"
+        m["menu_quick_skip"] = "Ricerca rapida salti (serie)"
+        m["menu_deep_skip"] = "Ricerca approfondita salti (serie)"
+        m["skip_looking"] = "Ricerca dei marcatori di salto per {title}…"
+        m["skip_found_count"] = "Marcatori di salto trovati per {hits} su {total} elemento/i."
+        m["toast_skip_timestamps_error"] = "Impossibile scansionare i timestamp di salto. Riprova."
+        m["skip_this_title"] = "questo titolo"
     }
 }

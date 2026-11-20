@@ -172,6 +172,14 @@ interface JellyfinApi {
     @GET("Jellio/introcredits/{itemId}")
     suspend fun getJellioIntroCredits(@Path("itemId") itemId: String): IntroSkipperSegmentsDto
 
+    // Admin only; a series scan walks every episode, so it may run for minutes.
+    @Headers("X-Read-Timeout-Seconds: 600")
+    @POST("Jellio/introcredits/scan/{itemId}")
+    suspend fun scanIntroCredits(
+        @Path("itemId") itemId: String,
+        @Query("useAnalyzerFallback") useAnalyzerFallback: Boolean,
+    ): com.jellio.android.data.model.IntroCreditsScanDto
+
     @GET("Jellio/grouplist")
     suspend fun getGrouplist(): com.jellio.android.data.model.GrouplistDto
 

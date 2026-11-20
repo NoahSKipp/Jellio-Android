@@ -1048,5 +1048,12 @@ internal object StringsEs {
         m["word_episode_singular"] = "episodio"
         m["word_episode_plural"] = "episodios"
         m["toast_download_start_error"] = "No se pudo iniciar la descarga."
+        m["menu_find_skip"] = "Buscar saltos de intro/créditos"
+        m["menu_quick_skip"] = "Búsqueda rápida de saltos (serie)"
+        m["menu_deep_skip"] = "Búsqueda profunda de saltos (serie)"
+        m["skip_looking"] = "Buscando marcas de omisión para {title}…"
+        m["skip_found_count"] = "Marcas de omisión encontradas para {hits} de {total} elemento(s)."
+        m["toast_skip_timestamps_error"] = "No se pudieron buscar marcas de tiempo para omitir. Inténtalo de nuevo."
+        m["skip_this_title"] = "este título"
     }
 }

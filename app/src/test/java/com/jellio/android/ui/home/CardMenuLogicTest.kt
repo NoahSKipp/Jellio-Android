@@ -72,4 +72,27 @@ class CardMenuLogicTest {
     fun qualitiesMatchTheDownloadManager() {
         assertEquals(listOf("low", "high", "higher", "original"), DownloadQuality.values().map { it.value })
     }
+
+    @Test
+    fun skipScansAreForAdminsWithTheSwitchOn() {
+        assertEquals(listOf(SkipAction.FIND), skipActionsFor("Movie", isAdmin = true, menuEnabled = true))
+        assertEquals(listOf(SkipAction.QUICK, SkipAction.DEEP), skipActionsFor("Series", isAdmin = true, menuEnabled = true))
+        assertEquals(emptyList<SkipAction>(), skipActionsFor("Series", isAdmin = false, menuEnabled = true))
+        assertEquals(emptyList<SkipAction>(), skipActionsFor("Series", isAdmin = true, menuEnabled = false))
+        assertEquals(emptyList<SkipAction>(), skipActionsFor("Episode", isAdmin = true, menuEnabled = true))
+        assertEquals(emptyList<SkipAction>(), skipActionsFor(null, isAdmin = true, menuEnabled = true))
+    }
+
+    @Test
+    fun onlyTheDeepScanUsesTheAnalyzer() {
+        assertEquals(false, SkipAction.FIND.useAnalyzerFallback)
+        assertEquals(false, SkipAction.QUICK.useAnalyzerFallback)
+        assertEquals(true, SkipAction.DEEP.useAnalyzerFallback)
+    }
+
+    @Test
+    fun foundCountAddsHitsAndNeverDividesByZero() {
+        assertEquals(5 to 12, skipFoundCounts(3, 2, 12))
+        assertEquals(0 to 1, skipFoundCounts(0, 0, 0))
+    }
 }

@@ -1059,5 +1059,12 @@ internal object StringsEn {
         m["word_episode_singular"] = "episode"
         m["word_episode_plural"] = "episodes"
         m["toast_download_start_error"] = "Could not start the download."
+        m["menu_find_skip"] = "Find skip intro/credits"
+        m["menu_quick_skip"] = "Quick skip search (show)"
+        m["menu_deep_skip"] = "Deep skip search (show)"
+        m["skip_looking"] = "Looking for skip timestamps for {title}…"
+        m["skip_found_count"] = "Skip timestamps found for {hits} of {total} item(s)."
+        m["toast_skip_timestamps_error"] = "Could not scan for skip timestamps. Try again."
+        m["skip_this_title"] = "this title"
     }
 }

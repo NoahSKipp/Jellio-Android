@@ -24,6 +24,9 @@ data class CardMenuState(
     val grouplistEnabled: Boolean = false,
     // Normalized item ids, see normalizeGuid.
     val grouplistIds: Set<String> = emptySet(),
+    val isAdmin: Boolean = false,
+    // The admin switch in the plugin settings for the skip timestamp entries.
+    val skipMenuEnabled: Boolean = false,
 )
 
 // Activity-scoped, so every screen's options menu shares what it has read.
@@ -50,8 +53,12 @@ class CardMenuViewModel @Inject constructor(
         viewModelScope.launch {
             val enabled = menu.isGrouplistEnabled()
             val ids = if (enabled) menu.grouplistIds() else emptySet()
+            val admin = menu.isAdmin(session.userId)
+            val skipMenu = admin && menu.isSkipMenuEnabled()
             if (loadedFor == session.userId) {
-                _state.update { it.copy(grouplistEnabled = enabled, grouplistIds = ids) }
+                _state.update {
+                    it.copy(grouplistEnabled = enabled, grouplistIds = ids, isAdmin = admin, skipMenuEnabled = skipMenu)
+                }
             }
         }
     }
@@ -62,6 +69,20 @@ class CardMenuViewModel @Inject constructor(
             catching { menu.setOnGrouplist(item.Id, on) }
                 .onSuccess { ids -> _state.update { it.copy(grouplistIds = ids) } }
                 .onFailure { onError() }
+        }
+    }
+
+    // Looks for intro and credits timestamps; a show's scan can run for minutes,
+    // so this outlives the menu and says how it went in toasts.
+    fun scanSkipTimestamps(item: BaseItemDto, action: SkipAction, toast: (String) -> Unit) {
+        viewModelScope.launch {
+            toast(Strings.format("skip_looking", item.Name ?: Strings.get("skip_this_title")))
+            catching { menu.scanSkipTimestamps(item.Id, action.useAnalyzerFallback) }
+                .onSuccess { result ->
+                    val (hits, total) = skipFoundCounts(result.CommunityHits, result.AnalyzerHits, result.EpisodesScanned)
+                    toast(Strings.format("skip_found_count", hits, total))
+                }
+                .onFailure { toast(Strings.get("toast_skip_timestamps_error")) }
         }
     }
 

@@ -76,3 +76,23 @@ internal enum class DownloadQuality(val value: String, val labelKey: String) {
     HIGHER("higher", "downloads_quality_higher"),
     ORIGINAL("original", "downloads_quality_original"),
 }
+
+internal enum class SkipAction(val useAnalyzerFallback: Boolean) {
+    FIND(false),
+    QUICK(false),
+    DEEP(true),
+}
+
+// A film gets one scan; a show gets the quick and the deep one.
+internal fun skipActionsFor(type: String?, isAdmin: Boolean, menuEnabled: Boolean): List<SkipAction> {
+    if (!isAdmin || !menuEnabled) return emptyList()
+    return when (type) {
+        "Movie" -> listOf(SkipAction.FIND)
+        "Series" -> listOf(SkipAction.QUICK, SkipAction.DEEP)
+        else -> emptyList()
+    }
+}
+
+// "Found for X of Y": an empty scan counts as one item, like the web.
+internal fun skipFoundCounts(communityHits: Int, analyzerHits: Int, scanned: Int): Pair<Int, Int> =
+    (communityHits + analyzerHits) to (if (scanned > 0) scanned else 1)

@@ -1048,5 +1048,12 @@ internal object StringsDe {
         m["word_episode_singular"] = "Folge"
         m["word_episode_plural"] = "Folgen"
         m["toast_download_start_error"] = "Download konnte nicht gestartet werden."
+        m["menu_find_skip"] = "Intro/Credits-Überspringen suchen"
+        m["menu_quick_skip"] = "Schnellsuche nach Skip-Marken (Serie)"
+        m["menu_deep_skip"] = "Tiefensuche nach Skip-Marken (Serie)"
+        m["skip_looking"] = "Suche nach Überspring-Markierungen für {title}…"
+        m["skip_found_count"] = "Überspring-Markierungen für {hits} von {total} Element(en) gefunden."
+        m["toast_skip_timestamps_error"] = "Überspring-Zeitstempel konnten nicht gesucht werden. Bitte erneut versuchen."
+        m["skip_this_title"] = "diesen Titel"
     }
 }

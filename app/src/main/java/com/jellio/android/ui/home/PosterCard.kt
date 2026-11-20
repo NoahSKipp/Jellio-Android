@@ -855,6 +855,9 @@ fun CardOptionsMenu(
                 extras?.onDownload?.let {
                     add(MenuAction(com.jellio.android.data.i18n.Strings.get(if (downloadKindFor(item.Type) == DownloadKind.EPISODES) "menu_download_episodes" else "menu_download"), it))
                 }
+                extras?.onFindSkip?.let { add(MenuAction(com.jellio.android.data.i18n.Strings.get("menu_find_skip"), it)) }
+                extras?.onQuickSkip?.let { add(MenuAction(com.jellio.android.data.i18n.Strings.get("menu_quick_skip"), it)) }
+                extras?.onDeepSkip?.let { add(MenuAction(com.jellio.android.data.i18n.Strings.get("menu_deep_skip"), it)) }
                 onAddToFriendWatchlist?.let { add(MenuAction(com.jellio.android.data.i18n.Strings.get("friends_add_to_friend_watchlist"), it)) }
             }
         }

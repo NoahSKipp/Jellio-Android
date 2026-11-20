@@ -640,6 +640,7 @@ data class ClientConfigDto(
     val SeasonalEffectsEnabled: Boolean = false,
     val SeasonalEffects: Map<String, SeasonalEffectConfigDto> = emptyMap(),
     val VideoTranscodePolicy: String = "Allow",
+    val SkipIntroCreditsAdminMenuEnabled: Boolean = false,
 )
 
 @JsonClass(generateAdapter = true)
@@ -653,6 +654,14 @@ data class ProfileDto(
     val FriendsCanAddToWatchlist: Boolean = true,
     val FriendRequestsFrom: String = "everyone",
     val GrouplistEnabled: Boolean = false,
+)
+
+// POST /Jellio/introcredits/scan/{itemId} (IntroCreditsController.ScanResponse).
+@JsonClass(generateAdapter = true)
+data class IntroCreditsScanDto(
+    val EpisodesScanned: Int = 0,
+    val CommunityHits: Int = 0,
+    val AnalyzerHits: Int = 0,
 )
 
 // GET/POST/DELETE /Jellio/grouplist: the reader's own list, as item GUIDs.

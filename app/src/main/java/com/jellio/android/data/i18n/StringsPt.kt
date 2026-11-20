@@ -1048,5 +1048,12 @@ internal object StringsPt {
         m["word_episode_singular"] = "episódio"
         m["word_episode_plural"] = "episódios"
         m["toast_download_start_error"] = "Não foi possível iniciar o download."
+        m["menu_find_skip"] = "Buscar pulo de intro/créditos"
+        m["menu_quick_skip"] = "Busca rápida de pulos (série)"
+        m["menu_deep_skip"] = "Busca detalhada de pulos (série)"
+        m["skip_looking"] = "Procurando marcas de pulo para {title}…"
+        m["skip_found_count"] = "Marcas de pulo encontradas para {hits} de {total} item(ns)."
+        m["toast_skip_timestamps_error"] = "Não foi possível verificar marcações de pulo. Tente novamente."
+        m["skip_this_title"] = "este título"
     }
 }

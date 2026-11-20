@@ -26,6 +26,9 @@ data class ItemMenuExtras(
     val isOnGrouplist: Boolean = false,
     val onToggleGrouplist: (() -> Unit)? = null,
     val onDownload: (() -> Unit)? = null,
+    val onFindSkip: (() -> Unit)? = null,
+    val onQuickSkip: (() -> Unit)? = null,
+    val onDeepSkip: (() -> Unit)? = null,
 )
 
 @Stable
@@ -40,6 +43,7 @@ class CardMenuExtras internal constructor(
     fun forItem(item: BaseItemDto): ItemMenuExtras {
         LaunchedEffect(session.userId) { viewModel.load(session) }
         val state by viewModel.state.collectAsState()
+        val skip = skipActionsFor(item.Type, state.isAdmin, state.skipMenuEnabled)
         return ItemMenuExtras(
             onShareLink = { copyShareLink(item) },
             isOnGrouplist = normalizeGuid(item.Id) in state.grouplistIds,
@@ -49,7 +53,23 @@ class CardMenuExtras internal constructor(
                 null
             },
             onDownload = if (downloadKindFor(item.Type) != null) { { askDownload(item) } } else null,
+            onFindSkip = skipAction(item, skip, SkipAction.FIND),
+            onQuickSkip = skipAction(item, skip, SkipAction.QUICK),
+            onDeepSkip = skipAction(item, skip, SkipAction.DEEP),
         )
+    }
+
+    private fun skipAction(item: BaseItemDto, offered: List<SkipAction>, action: SkipAction): (() -> Unit)? =
+        if (action in offered) {
+            { scanSkipTimestamps(item, action) }
+        } else {
+            null
+        }
+
+    internal fun scanSkipTimestamps(item: BaseItemDto, action: SkipAction) {
+        viewModel.scanSkipTimestamps(item, action) { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
     }
 
     internal fun download(item: BaseItemDto, scope: EpisodeScope?, quality: DownloadQuality) {
