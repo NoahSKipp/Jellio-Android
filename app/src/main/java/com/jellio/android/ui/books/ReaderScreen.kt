@@ -23,16 +23,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -117,6 +114,11 @@ import com.jellio.android.ui.theme.JellioBgElevated
 import com.jellio.android.ui.theme.JellioBorder
 import com.jellio.android.ui.theme.JellioDanger
 import com.jellio.android.ui.theme.JellioSecondary
+import com.jellio.android.ui.common.readerBottomInset
+import com.jellio.android.ui.common.readerBottomInsets
+import com.jellio.android.ui.common.readerHorizontalInsets
+import com.jellio.android.ui.common.readerTopInset
+import com.jellio.android.ui.common.readerTopInsets
 import com.jellio.android.ui.theme.JellioText
 import com.jellio.android.ui.theme.JellioTextSecondary
 import com.jellio.android.ui.theme.JellioTextTertiary
@@ -177,76 +179,79 @@ fun ReaderScreen(
                 },
             ),
     ) {
-        when (state.mode) {
-            ReaderContentMode.LOADING -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = JellioSecondary)
+        // The page or text keeps clear of side cutouts and a side navigation bar.
+        Box(modifier = Modifier.fillMaxSize().readerHorizontalInsets()) {
+            when (state.mode) {
+                ReaderContentMode.LOADING -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = JellioSecondary)
+                    }
                 }
-            }
 
-            ReaderContentMode.ERROR -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(24.dp),
-                    ) {
-                        Text(state.error ?: "Unable to open book", color = JellioDanger, fontSize = 15.sp)
-                        Button(
-                            onClick = {
-                                viewModel.flushSessionAndClose()
-                                onBack()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = JellioSecondary, contentColor = JellioBg),
+                ReaderContentMode.ERROR -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(24.dp),
                         ) {
-                            Text("Go Back")
+                            Text(state.error ?: "Unable to open book", color = JellioDanger, fontSize = 15.sp)
+                            Button(
+                                onClick = {
+                                    viewModel.flushSessionAndClose()
+                                    onBack()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = JellioSecondary, contentColor = JellioBg),
+                            ) {
+                                Text("Go Back")
+                            }
                         }
                     }
                 }
-            }
 
-            ReaderContentMode.EPUB -> {
-                EpubReaderBody(
-                    state = state,
-                    onToggleHud = { hudVisible = !hudVisible },
-                    onSelectChapter = viewModel::selectEpubChapter,
-                    onLoadChapter = { viewModel.loadEpubChapterIfNeeded(it) },
-                    onUpdatePosition = viewModel::updateEpubReadingPosition,
-                    onStudyParagraph = { text, locator ->
-                        viewModel.openStudyPopover(text = text, sentenceContext = text, locator = locator)
-                    },
-                )
-            }
+                ReaderContentMode.EPUB -> {
+                    EpubReaderBody(
+                        state = state,
+                        onToggleHud = { hudVisible = !hudVisible },
+                        onSelectChapter = viewModel::selectEpubChapter,
+                        onLoadChapter = { viewModel.loadEpubChapterIfNeeded(it) },
+                        onUpdatePosition = viewModel::updateEpubReadingPosition,
+                        onStudyParagraph = { text, locator ->
+                            viewModel.openStudyPopover(text = text, sentenceContext = text, locator = locator)
+                        },
+                    )
+                }
 
-            ReaderContentMode.PDF -> {
-                PdfReaderBody(
-                    state = state,
-                    renderPage = viewModel::renderPdfPage,
-                    onPageChanged = viewModel::updatePdfPage,
-                    onToggleHud = { hudVisible = !hudVisible },
-                )
-            }
+                ReaderContentMode.PDF -> {
+                    PdfReaderBody(
+                        state = state,
+                        renderPage = viewModel::renderPdfPage,
+                        onPageChanged = viewModel::updatePdfPage,
+                        onToggleHud = { hudVisible = !hudVisible },
+                    )
+                }
 
-            ReaderContentMode.MANGA -> {
-                MangaReaderBody(
-                    state = state,
-                    renderCbzPage = viewModel::renderCbzPage,
-                    onPageChanged = viewModel::updateMangaPage,
-                    onToggleHud = { hudVisible = !hudVisible },
-                    onOpenAdjacentChapter = { ch ->
-                        val nextMangaId = ch.MangaId.takeIf { it > 0 }
-                        val nextChapterId = ch.ChapterId.takeIf { it > 0 }
-                        onOpenChapter(ch.Id, nextMangaId, nextChapterId)
-                    },
-                )
-                if (state.mangaBrightness < 0.99f) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = (1f - state.mangaBrightness).coerceIn(0f, 0.7f))),
+                ReaderContentMode.MANGA -> {
+                    MangaReaderBody(
+                        state = state,
+                        renderCbzPage = viewModel::renderCbzPage,
+                        onPageChanged = viewModel::updateMangaPage,
+                        onToggleHud = { hudVisible = !hudVisible },
+                        onOpenAdjacentChapter = { ch ->
+                            val nextMangaId = ch.MangaId.takeIf { it > 0 }
+                            val nextChapterId = ch.ChapterId.takeIf { it > 0 }
+                            onOpenChapter(ch.Id, nextMangaId, nextChapterId)
+                        },
                     )
                 }
             }
+        }
+        if (state.mode == ReaderContentMode.MANGA && state.mangaBrightness < 0.99f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = (1f - state.mangaBrightness).coerceIn(0f, 0.7f))),
+            )
         }
 
         // Top & Bottom HUD overlays
@@ -285,6 +290,7 @@ fun ReaderScreen(
                 border = BorderStroke(1.dp, JellioBorder),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .readerBottomInsets()
                     .padding(bottom = 84.dp, start = 24.dp, end = 24.dp),
             ) {
                 Row(
@@ -459,8 +465,7 @@ private fun ReaderTopBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
-                .displayCutoutPadding()
+                .readerTopInsets()
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -523,7 +528,7 @@ private fun ReaderBottomBar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
+                .readerBottomInsets()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             when (state.mode) {
@@ -604,6 +609,8 @@ private fun EpubReaderBody(
     onUpdatePosition: (Int, Int) -> Unit,
     onStudyParagraph: (text: String, locator: String) -> Unit,
 ) {
+    val topInset = readerTopInset()
+    val bottomInset = readerBottomInset()
     val bgColor = Color(state.epubTheme.bgHex)
     val textColor = Color(state.epubTheme.textHex)
     val fontFamily = when (state.epubFontFamily) {
@@ -628,7 +635,7 @@ private fun EpubReaderBody(
         }
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(top = 64.dp, bottom = 72.dp, start = state.epubMarginDp.dp, end = state.epubMarginDp.dp),
+            contentPadding = PaddingValues(top = 64.dp + topInset, bottom = 72.dp + bottomInset, start = state.epubMarginDp.dp, end = state.epubMarginDp.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier
                 .fillMaxSize()
@@ -722,7 +729,7 @@ private fun EpubReaderBody(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(top = 64.dp, bottom = 78.dp, start = state.epubMarginDp.dp, end = state.epubMarginDp.dp)
+                        .padding(top = 64.dp + topInset, bottom = 78.dp + bottomInset, start = state.epubMarginDp.dp, end = state.epubMarginDp.dp)
                         .clickable(onClick = onToggleHud),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -769,6 +776,8 @@ private fun PdfReaderBody(
     onPageChanged: (Int) -> Unit,
     onToggleHud: () -> Unit,
 ) {
+    val topInset = readerTopInset()
+    val bottomInset = readerBottomInset()
     val count = state.pdfPageCount.coerceAtLeast(1)
     val tintColorFilter = when (state.pdfThemeTint) {
         PdfThemeTint.NORMAL -> null
@@ -806,7 +815,7 @@ private fun PdfReaderBody(
         }
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(top = 56.dp, bottom = 72.dp, start = 8.dp, end = 8.dp),
+            contentPadding = PaddingValues(top = 56.dp + topInset, bottom = 72.dp + bottomInset, start = 8.dp, end = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxSize(),
         ) {

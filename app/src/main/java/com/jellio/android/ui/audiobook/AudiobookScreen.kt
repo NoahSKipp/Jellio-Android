@@ -17,10 +17,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -94,6 +92,7 @@ import coil3.compose.AsyncImage
 import com.jellio.android.data.books.AnnotationDto
 import com.jellio.android.data.books.AudiobookChapterDto
 import com.jellio.android.data.offline.OfflineDownloadItem
+import com.jellio.android.ui.common.readerAllInsets
 import com.jellio.android.ui.common.ScreenSpinner
 import com.jellio.android.ui.common.formatPlaybackTime
 import com.jellio.android.ui.theme.JellioBg
@@ -186,8 +185,7 @@ fun AudiobookScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
+                .readerAllInsets()
                 .padding(horizontal = 20.dp),
         ) {
             // Top Bar
