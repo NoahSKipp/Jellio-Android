@@ -106,6 +106,17 @@ fun isBigRelease(version: String): Boolean {
 
 val CHANGELOG_RELEASES = listOf(
     ChangelogRelease(
+        version = "0.3.0",
+        title = "What's New in Jellio",
+        subtitle = "Version 0.3.0",
+        features = listOf(
+            ChangelogFeature(Icons.Filled.Speed, "Faster Books, Manga & Audiobooks", "Shelves show a skeleton at once and fill in as results arrive, reopen instantly from the last shelf, and start on your Continue row. Manga chapters open without downloading first and prefetch the next pages."),
+            ChangelogFeature(Icons.Filled.Tune, "Long-Press Menus Everywhere", "Cards now offer Share link, Download, Grouplist and admin skip scans like the web, and library and continue cards in the reader get Remove from continue reading, Mark as read and Remove from library. Removals from Continue reading follow you across devices."),
+            ChangelogFeature(Icons.Filled.AutoAwesome, "Genre Picker & Chaptarr Fix", "Books and Audiobooks Discover get the Manga genre picker, and the Chaptarr request button no longer says it is not configured before the server answers."),
+            ChangelogFeature(Icons.Filled.GraphicEq, "Back and Camera Cutout Fixes", "Back from Settings and the other tabs returns to Home first, and the reader bars, notifications and player overlays stay clear of the camera and status bar."),
+        ),
+    ),
+    ChangelogRelease(
         version = "0.2.0",
         title = "What's New in Jellio",
         subtitle = "Version 0.2.0",
