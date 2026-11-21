@@ -11,6 +11,7 @@ import com.jellio.android.data.books.resolveChaptarrStatus
 import com.jellio.android.data.books.BooksRepository
 import com.jellio.android.data.books.CachedContinueCard
 import com.jellio.android.data.books.ShelfSnapshot
+import com.jellio.android.data.books.sameReadingTitle
 import com.jellio.android.data.books.ShelfSnapshotStore
 import com.jellio.android.data.books.isLocallyDismissedManga
 import com.jellio.android.data.books.isMangaContinueDismissed
@@ -228,6 +229,10 @@ class BookshelfViewModel @Inject constructor(
     private var librariesJob: Deferred<List<BaseItemDto>>? = null
     private val rawItemsCache = HashMap<String, Pair<Long, Deferred<List<BaseItemDto>>>>()
     private var discoverJob: Job? = null
+
+    // A reading list entry or notification asked for this series (key, title)
+    // before the Manga shelf had it.
+    private var pendingSeries: Pair<String, String>? = null
     private var discoverSearchDebounceJob: Job? = null
     private val mangaDiscoverCache = HashMap<String, List<MangaDiscoverDto>>()
     private val bookDiscoverCache = HashMap<String, List<BookDiscoverResultDto>>()
@@ -493,6 +498,7 @@ class BookshelfViewModel @Inject constructor(
                 continueLoadedTabs = state.continueLoadedTabs + tab,
             )
         }
+        if (tab == BookshelfTab.MANGA && !resolvePendingSeries()) reportMissingSeries()
         if (failed == null && _uiState.value.libraries.isNotEmpty() && tab in _uiState.value.loadedTabs) saveSnapshot(tab, uid)
     }
 
@@ -611,6 +617,7 @@ class BookshelfViewModel @Inject constructor(
                 loadedTabs = it.loadedTabs + BookshelfTab.MANGA,
             )
         }
+        resolvePendingSeries()
     }
 
     private suspend fun restoreSnapshot(tab: BookshelfTab, uid: String) {
@@ -1059,6 +1066,42 @@ class BookshelfViewModel @Inject constructor(
                     ),
                 )
             }
+        }
+    }
+
+    // Opens the series sheet for a shelf key, loading the Manga shelf first when needed.
+    fun openMangaSeriesByKey(key: String, title: String) {
+        pendingSeries = key.removePrefix("s:") to title
+        if (resolvePendingSeries()) return
+        val loaded = BookshelfTab.MANGA in _uiState.value.loadedTabs
+        loadTab(BookshelfTab.MANGA, force = false)
+        // A fresh shelf that does not have it will not be loaded again.
+        if (loaded && tabJobs[BookshelfTab.MANGA]?.isActive != true) reportMissingSeries()
+    }
+
+    private fun resolvePendingSeries(): Boolean {
+        val (key, _) = pendingSeries ?: return false
+        val series = _uiState.value.mangaSeries.firstOrNull { it.key.removePrefix("s:") == key } ?: return false
+        pendingSeries = null
+        openMangaSeries(series)
+        return true
+    }
+
+    private fun reportMissingSeries() {
+        val (key, title) = pendingSeries ?: return
+        pendingSeries = null
+        tell(Strings.format("reading_not_in_library", title.ifBlank { key }))
+    }
+
+    // A book or audiobook of the library with this title, for a reading list
+    // entry that was added before the book arrived.
+    suspend fun findInLibrary(title: String, kind: String): BaseItemDto? {
+        val uid = _uiState.value.userId.ifBlank { booksRepository.currentUserId().orEmpty() }
+        if (uid.isBlank() || title.isBlank()) return null
+        val audiobook = kind == "audiobook"
+        return booksRepository.searchLibraryBooks(uid, title).firstOrNull { item ->
+            item.Type.equals(if (audiobook) "AudioBook" else "Book", ignoreCase = true) &&
+                (sameReadingTitle(item.Name, title) || (audiobook && sameReadingTitle(item.Album, title)))
         }
     }
 

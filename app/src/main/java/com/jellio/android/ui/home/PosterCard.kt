@@ -992,7 +992,7 @@ internal fun CardOptionsMenuRow(label: String, onClick: () -> Unit, modifier: Mo
 // Friends who put the title on the watchlist: a small bookmark, then their
 // pictures stacked like the watchers'.
 @Composable
-private fun AddedByBadge(
+internal fun AddedByBadge(
     people: List<com.jellio.android.data.model.CommunityWatcherDto>,
     userImageUrl: ((String, String?) -> String)?,
     modifier: Modifier = Modifier,

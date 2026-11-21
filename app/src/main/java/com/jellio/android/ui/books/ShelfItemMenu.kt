@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jellio.android.data.books.readingToggleLabelKey
 import com.jellio.android.data.i18n.Strings
 import com.jellio.android.ui.home.CardDialog
 import com.jellio.android.ui.home.CardOptionsMenuRow
@@ -45,6 +46,7 @@ internal fun ShelfItemMenu(
     onRemoveContinue: (() -> Unit)?,
     onRemoveLibrary: (() -> Unit)?,
     onDismiss: () -> Unit,
+    reading: ReadingMenuActions? = null,
 ) {
     val actions = buildList {
         if (finished != null && onMarkRead != null) {
@@ -57,6 +59,10 @@ internal fun ShelfItemMenu(
             )
         }
         onOpenSeries?.let { add(ShelfMenuAction(Strings.get("menu_go_to_series"), onClick = it)) }
+        reading?.let { menu ->
+            add(ShelfMenuAction(Strings.get(readingToggleLabelKey(menu.onList)), onClick = menu.onToggle))
+            menu.onFriend?.let { add(ShelfMenuAction(Strings.get("reading_menu_add_to_friend"), onClick = it)) }
+        }
         onCategories?.let { add(ShelfMenuAction(Strings.get("reader_menu_categories"), onClick = it)) }
         onRemoveContinue?.let {
             val label = if (target.tab == BookshelfTab.AUDIOBOOK) "reader_menu_remove_continue_listening" else "reader_menu_remove_continue_reading"

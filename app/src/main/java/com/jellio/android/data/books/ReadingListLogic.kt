@@ -111,10 +111,10 @@ fun ReadingTarget.toAddBody(): ReadingAddBody =
     ReadingAddBody(Key = key, Kind = kind, ItemId = itemId, Title = title, Author = author, CoverUrl = coverUrl, MangaId = mangaId)
 
 // The "Reading" section holds books and manga, "Listening" audiobooks.
-class ReadingSections(val reading: List<ReadingEntryDto>, val listening: List<ReadingEntryDto>)
+class ReadingSections<T>(val reading: List<T>, val listening: List<T>)
 
-fun splitReadingEntries(entries: List<ReadingEntryDto>): ReadingSections {
-    val (listening, reading) = entries.partition { it.Kind == READING_KIND_AUDIOBOOK }
+fun <T> splitReadingEntries(entries: List<T>, kindOf: (T) -> String): ReadingSections<T> {
+    val (listening, reading) = entries.partition { kindOf(it) == READING_KIND_AUDIOBOOK }
     return ReadingSections(reading, listening)
 }
 

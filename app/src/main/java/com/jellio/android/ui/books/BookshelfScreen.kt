@@ -1,5 +1,6 @@
 package com.jellio.android.ui.books
 
+import android.widget.Toast
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -59,6 +60,7 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
@@ -88,6 +90,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -104,12 +107,25 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.jellio.android.data.books.BooksRepository
+import com.jellio.android.data.books.READING_KIND_AUDIOBOOK
+import com.jellio.android.data.books.READING_KIND_MANGA
+import com.jellio.android.data.books.ReadingOpen
+import com.jellio.android.data.books.ReadingSections
+import com.jellio.android.data.books.ReadingTarget
+import com.jellio.android.data.books.readingOpenFor
+import com.jellio.android.data.books.readingTargetForItem
+import com.jellio.android.data.books.readingTargetForSeries
+import com.jellio.android.data.books.readingTargetForWork
+import com.jellio.android.data.books.readingToggleLabelKey
+import com.jellio.android.data.books.splitReadingEntries
 import com.jellio.android.data.i18n.Strings
 import com.jellio.android.data.books.SeriesPrefsDto
 import com.jellio.android.data.books.ShelfCategoryDto
 import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.data.offline.OfflineDownloadItem
 import com.jellio.android.ui.common.isCompactScreen
+import com.jellio.android.ui.friends.FriendReadingPickerDialog
+import com.jellio.android.ui.friends.FriendsViewModel
 import com.jellio.android.ui.common.shimmer
 import com.jellio.android.ui.nav.LocalBottomBarPadding
 import com.jellio.android.ui.theme.JellioBg
@@ -120,6 +136,7 @@ import com.jellio.android.ui.theme.JellioSecondary
 import com.jellio.android.ui.theme.JellioText
 import com.jellio.android.ui.theme.JellioTextSecondary
 import com.jellio.android.ui.theme.JellioTextTertiary
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -131,10 +148,64 @@ fun BookshelfScreen(
     initialKind: String = "ebook",
     modifier: Modifier = Modifier,
     viewModel: BookshelfViewModel = hiltViewModel(),
+    readingViewModel: ReadingListViewModel = hiltViewModel(),
+    friendsViewModel: FriendsViewModel = hiltViewModel(),
 ) {
     // Picks the tab before the first frame so the shelf never flashes Books.
     remember(initialKind) { viewModel.openKind(initialKind) }
     val state by viewModel.uiState.collectAsState()
+    val readingSupported by readingViewModel.supported.collectAsState()
+    val readingKeys by readingViewModel.keys.collectAsState()
+    val readingCards by readingViewModel.cards.collectAsState()
+    val openSeriesRequest by readingViewModel.openSeries.collectAsState()
+    val friendsState by friendsViewModel.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var readingMenuTarget by remember { mutableStateOf<ReadingCardModel?>(null) }
+    var readingShareTarget by remember { mutableStateOf<ReadingTarget?>(null) }
+    val friendsReachable = friendsState.available && friendsState.friends.isNotEmpty()
+    val readingSections = remember(readingCards, readingSupported) {
+        if (readingSupported == true) splitReadingEntries(readingCards) { it.kind } else ReadingSections<ReadingCardModel>(emptyList(), emptyList())
+    }
+
+    // The toggles and the Reading and Listening rows are read whenever a tab opens.
+    LaunchedEffect(state.activeTab) { readingViewModel.loadCards() }
+    LaunchedEffect(openSeriesRequest) {
+        val request = openSeriesRequest ?: return@LaunchedEffect
+        viewModel.openMangaSeriesByKey(request.key, request.title)
+        readingViewModel.seriesOpened()
+    }
+    val readingActionsFor: (ReadingTarget?) -> ReadingMenuActions? = { target ->
+        if (target == null || readingSupported != true) {
+            null
+        } else {
+            ReadingMenuActions(
+                onList = target.key in readingKeys,
+                onToggle = { readingViewModel.toggle(target) },
+                onFriend = if (friendsReachable) { { readingShareTarget = target } } else { null },
+            )
+        }
+    }
+    val openReadingCard: (ReadingCardModel) -> Unit = { card ->
+        when (val open = readingOpenFor(card.key, card.kind, card.itemId, card.title)) {
+            is ReadingOpen.Item ->
+                if (open.kind == READING_KIND_AUDIOBOOK) {
+                    onOpenAudiobook(open.itemId)
+                } else {
+                    onOpenReader(open.itemId, if (open.kind == READING_KIND_MANGA) "manga" else "book", null, null)
+                }
+            is ReadingOpen.Series -> viewModel.openMangaSeriesByKey(open.seriesKey, card.title)
+            is ReadingOpen.Work -> scope.launch {
+                val found = viewModel.findInLibrary(open.title, open.kind)
+                when {
+                    found == null ->
+                        Toast.makeText(context, Strings.format("reading_not_in_library", open.title), Toast.LENGTH_SHORT).show()
+                    found.Type.equals("AudioBook", ignoreCase = true) -> onOpenAudiobook(found.Id)
+                    else -> onOpenReader(found.Id, if (BooksRepository.isComicOrManga(found)) "manga" else "book", null, null)
+                }
+            }
+        }
+    }
     var sortMenuOpen by remember { mutableStateOf(false) }
     var menuTarget by remember { mutableStateOf<ShelfMenuTarget?>(null) }
     var removeTarget by remember { mutableStateOf<ShelfMenuTarget?>(null) }
@@ -362,6 +433,10 @@ fun BookshelfScreen(
                         onDownloadItem = viewModel::downloadBookOrAudiobook,
                         onAssignCategories = { key -> viewModel.openAssignCategoriesFor(key) },
                         onLongPress = { menuTarget = it },
+                        readingSections = readingSections,
+                        userImageUrl = { id, tag -> friendsViewModel.avatarUrl(id, tag).orEmpty() },
+                        onOpenReading = openReadingCard,
+                        onReadingLongPress = { readingMenuTarget = it },
                     )
                 }
             }
@@ -403,7 +478,55 @@ fun BookshelfScreen(
                 },
                 onRemoveLibrary = { removeTarget = target },
                 onDismiss = { menuTarget = null },
+                reading = readingActionsFor(
+                    if (isManga) {
+                        readingTargetForSeries(
+                            seriesKey = target.seriesKey ?: series?.key,
+                            title = series?.title ?: target.title,
+                            author = series?.author,
+                            mangaId = series?.mangaId,
+                            itemId = series?.localChapters?.firstOrNull()?.Id,
+                        )
+                    } else {
+                        readingTargetForItem(
+                            itemId = itemId,
+                            type = if (target.tab == BookshelfTab.AUDIOBOOK) "AudioBook" else "Book",
+                            title = target.title,
+                            author = null,
+                            manga = false,
+                        )
+                    },
+                ),
             )
+        }
+        readingMenuTarget?.let { card ->
+            ShelfItemMenu(
+                target = ShelfMenuTarget(
+                    tab = when (card.kind) {
+                        READING_KIND_MANGA -> BookshelfTab.MANGA
+                        READING_KIND_AUDIOBOOK -> BookshelfTab.AUDIOBOOK
+                        else -> BookshelfTab.EBOOK
+                    },
+                    title = card.title,
+                    itemId = card.itemId,
+                    fromContinue = false,
+                ),
+                finished = null,
+                onMarkRead = null,
+                onOpenSeries = null,
+                onCategories = null,
+                onRemoveContinue = null,
+                onRemoveLibrary = null,
+                onDismiss = { readingMenuTarget = null },
+                reading = ReadingMenuActions(
+                    onList = true,
+                    onToggle = { readingViewModel.remove(card.key) },
+                    onFriend = if (friendsReachable) { { readingShareTarget = card.toTarget() } } else { null },
+                ),
+            )
+        }
+        readingShareTarget?.let { target ->
+            FriendReadingPickerDialog(target = target, viewModel = friendsViewModel, onDismiss = { readingShareTarget = null })
         }
         removeTarget?.let { target ->
             ConfirmRemoveFromLibraryDialog(
@@ -435,6 +558,7 @@ fun BookshelfScreen(
                 onUpdatePrefs = { excl, dup, fDl, fUn, fBm, sort, desc ->
                     viewModel.updateSeriesPreferences(excl, dup, fDl, fUn, fBm, sort, desc)
                 },
+                reading = detail.seriesItem?.let { readingActionsFor(it.readingTarget()) },
             )
         }
 
@@ -477,6 +601,7 @@ fun BookshelfScreen(
                 onRequestBookDiscover = viewModel::requestBookDiscoverResult,
                 onRequestMangaSearch = viewModel::requestMangaFromSearch,
                 onRequestMangaDiscover = viewModel::requestMangaFromDiscover,
+                readingFor = readingActionsFor,
             )
         }
 
@@ -698,6 +823,10 @@ private fun BookshelfMainGrid(
     onDownloadItem: (BaseItemDto) -> Unit,
     onAssignCategories: (String) -> Unit,
     onLongPress: (ShelfMenuTarget) -> Unit,
+    readingSections: ReadingSections<ReadingCardModel>,
+    userImageUrl: ((String, String?) -> String)?,
+    onOpenReading: (ReadingCardModel) -> Unit,
+    onReadingLongPress: (ReadingCardModel) -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
     val longPress: (ShelfMenuTarget) -> Unit = { target ->
@@ -785,6 +914,38 @@ private fun BookshelfMainGrid(
                             )
                         }
                     }
+                }
+            }
+        }
+
+        // The reading list sits below Continue, so the shelf still opens on Continue.
+        if (!searching) {
+            if (readingSections.reading.isNotEmpty()) {
+                item(key = "reading_list_reading", span = { GridItemSpan(maxLineSpan) }, contentType = "reading_section") {
+                    ReadingListSection(
+                        title = Strings.get("reading_section_reading"),
+                        cards = readingSections.reading,
+                        userImageUrl = userImageUrl,
+                        onClick = onOpenReading,
+                        onLongClick = { card ->
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onReadingLongPress(card)
+                        },
+                    )
+                }
+            }
+            if (readingSections.listening.isNotEmpty()) {
+                item(key = "reading_list_listening", span = { GridItemSpan(maxLineSpan) }, contentType = "reading_section") {
+                    ReadingListSection(
+                        title = Strings.get("reading_section_listening"),
+                        cards = readingSections.listening,
+                        userImageUrl = userImageUrl,
+                        onClick = onOpenReading,
+                        onLongClick = { card ->
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onReadingLongPress(card)
+                        },
+                    )
                 }
             }
         }
@@ -1168,6 +1329,7 @@ private fun MangaSeriesDetailSheet(
         chapterSort: String?,
         chapterDescending: Boolean?,
     ) -> Unit,
+    reading: ReadingMenuActions? = null,
 ) {
     val series = detail.seriesItem ?: return
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1249,6 +1411,36 @@ private fun MangaSeriesDetailSheet(
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(if (detail.inLibrary) "In Library" else "Add to Library", fontSize = 12.sp)
+                        }
+                    }
+                    if (reading != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedButton(
+                                onClick = reading.onToggle,
+                                border = BorderStroke(1.dp, if (reading.onList) JellioSecondary else JellioBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = if (reading.onList) JellioSecondary else JellioTextSecondary,
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            ) {
+                                Icon(
+                                    if (reading.onList) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(Strings.get(readingToggleLabelKey(reading.onList)), fontSize = 12.sp)
+                            }
+                            reading.onFriend?.let { onFriend ->
+                                IconButton(onClick = onFriend, modifier = Modifier.size(32.dp)) {
+                                    Icon(
+                                        Icons.Filled.PersonAdd,
+                                        contentDescription = Strings.get("reading_menu_add_to_friend"),
+                                        tint = JellioTextSecondary,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1796,6 +1988,7 @@ private fun DiscoverAndRequestSheet(
     onRequestBookDiscover: (com.jellio.android.data.books.BookDiscoverResultDto, String) -> Unit,
     onRequestMangaSearch: (Int, String) -> Unit,
     onRequestMangaDiscover: (com.jellio.android.data.books.MangaDiscoverDto) -> Unit,
+    readingFor: (ReadingTarget?) -> ReadingMenuActions? = { null },
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val discoverTab = state.discoverMediaTab
@@ -2085,6 +2278,15 @@ private fun DiscoverAndRequestSheet(
                                     actionLabel = if (res.InLibrary) "Open" else "Read",
                                     actionEnabled = true,
                                     onAction = { onRequestMangaSearch(res.MangaId, res.Title) },
+                                    reading = readingFor(
+                                        readingTargetForSeries(
+                                            seriesKey = BooksRepository.mangaSeriesKey(res.Title),
+                                            title = res.Title,
+                                            author = res.Author,
+                                            mangaId = res.MangaId,
+                                            coverUrl = res.ThumbnailUrl,
+                                        ),
+                                    ),
                                 )
                             }
                         }
@@ -2113,6 +2315,14 @@ private fun DiscoverAndRequestSheet(
                                 actionLabel = if (inLibrary) "Open" else "Read",
                                 actionEnabled = true,
                                 onAction = { onRequestMangaDiscover(item) },
+                                reading = readingFor(
+                                    readingTargetForSeries(
+                                        seriesKey = BooksRepository.mangaSeriesKey(item.Title),
+                                        title = item.Title,
+                                        author = item.Author,
+                                        coverUrl = item.CoverUrl,
+                                    ),
+                                ),
                             )
                         }
                     }
@@ -2136,6 +2346,9 @@ private fun DiscoverAndRequestSheet(
                                 actionLabel = if (already) "Available" else "Request",
                                 actionEnabled = !already,
                                 onAction = { onRequestBookSearch(res, bookType) },
+                                reading = readingFor(
+                                    readingTargetForWork(res.WorkId, res.Title, res.Author, res.CoverUrl, audiobook = bookType == "audiobook"),
+                                ),
                             )
                         }
                     } else if (state.bookDiscoverResults.isEmpty()) {
@@ -2154,6 +2367,9 @@ private fun DiscoverAndRequestSheet(
                                 actionLabel = "Request",
                                 actionEnabled = true,
                                 onAction = { onRequestBookDiscover(res, bookType) },
+                                reading = readingFor(
+                                    readingTargetForWork(res.WorkId, res.Title, res.Author, res.CoverUrl, audiobook = bookType == "audiobook"),
+                                ),
                             )
                         }
                     }
@@ -2339,6 +2555,7 @@ private fun DiscoverRowCard(
     actionLabel: String,
     actionEnabled: Boolean,
     onAction: () -> Unit,
+    reading: ReadingMenuActions? = null,
 ) {
     val context = LocalContext.current
     var coverStage by remember(primaryCoverUrl, fallbackCoverUrl) { mutableStateOf(0) }
@@ -2402,6 +2619,28 @@ private fun DiscoverRowCard(
                 Text(title, color = JellioText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (subtitle.isNotBlank()) {
                     Text(subtitle, color = JellioTextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (reading != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = reading.onToggle, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                if (reading.onList) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                                contentDescription = Strings.get(readingToggleLabelKey(reading.onList)),
+                                tint = if (reading.onList) JellioSecondary else JellioTextSecondary,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        reading.onFriend?.let { onFriend ->
+                            IconButton(onClick = onFriend, modifier = Modifier.size(32.dp)) {
+                                Icon(
+                                    Icons.Filled.PersonAdd,
+                                    contentDescription = Strings.get("reading_menu_add_to_friend"),
+                                    tint = JellioTextSecondary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
                 }
             }
             Button(
@@ -2590,3 +2829,15 @@ internal fun jellioChipColors() = FilterChipDefaults.filterChipColors(
     selectedContainerColor = JellioSecondary,
     selectedLabelColor = JellioBg,
 )
+
+// A manga series as the reading list stores it: the shelf key, the Suwayomi id
+// when known and a local chapter for the cover. Its cover URL here is the
+// server's own, which the list does not take.
+private fun MangaSeriesDisplayItem.readingTarget(): ReadingTarget? =
+    readingTargetForSeries(
+        seriesKey = key,
+        title = title,
+        author = author,
+        mangaId = mangaId,
+        itemId = localChapters.firstOrNull()?.Id,
+    )

@@ -100,6 +100,20 @@ class BooksRepository @Inject constructor(
     suspend fun getBookshelfItems(userId: String, parentId: String, kind: String): List<BaseItemDto> =
         filterBookshelfItems(getBookshelfRaw(userId, parentId, kind), kind)
 
+    // Books and audiobooks in the user's libraries matching a title, for
+    // opening a reading list entry that is not a library item.
+    suspend fun searchLibraryBooks(userId: String, title: String): List<BaseItemDto> =
+        catching {
+            jellyfinApi.getItems(
+                userId = userId,
+                includeItemTypes = "Book,AudioBook",
+                recursive = true,
+                limit = 20,
+                searchTerm = title,
+                fields = "Path,SeriesName,Album,Genres,ParentId",
+            ).Items
+        }.getOrDefault(emptyList())
+
     suspend fun getBookShelfInfo(parentId: String): Map<String, BookShelfInfoDto> =
         catching { api.getBookShelfInfo(parentId) }.getOrDefault(emptyMap())
 

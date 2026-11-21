@@ -90,10 +90,10 @@ class ReadingListLogicTest {
     fun sectionsSplitBooksAndMangaFromAudiobooks() {
         val sections = splitReadingEntries(
             listOf(entry("a", "ebook"), entry("b", "audiobook"), entry("c", "manga"), entry("d", "audiobook")),
-        )
+        ) { it.Kind }
         assertEquals(listOf("a", "c"), sections.reading.map { it.Key })
         assertEquals(listOf("b", "d"), sections.listening.map { it.Key })
-        val empty = splitReadingEntries(emptyList())
+        val empty = splitReadingEntries(emptyList<ReadingEntryDto>()) { it.Kind }
         assertTrue(empty.reading.isEmpty() && empty.listening.isEmpty())
     }
 

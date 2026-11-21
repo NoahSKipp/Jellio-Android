@@ -49,6 +49,8 @@ import com.jellio.android.ui.audiobook.AudiobookMiniPlayer
 import com.jellio.android.ui.audiobook.AudiobookScreen
 import com.jellio.android.ui.auth.LoginScreen
 import com.jellio.android.ui.books.BookshelfScreen
+import com.jellio.android.ui.books.ReadingListToasts
+import com.jellio.android.ui.books.ReadingListViewModel
 import com.jellio.android.ui.books.ReaderScreen
 import com.jellio.android.ui.books.VocabScreen
 import com.jellio.android.ui.detail.DetailScreen
@@ -202,7 +204,10 @@ private fun JellioApp(
     onPlayerActiveChanged: (Boolean) -> Unit = {},
     seasonalEffectsViewModel: SeasonalEffectsViewModel = hiltViewModel(),
     friendsViewModel: FriendsViewModel = hiltViewModel(),
+    readingListViewModel: ReadingListViewModel = hiltViewModel(),
 ) {
+    // The one place the reading list's toasts are shown.
+    ReadingListToasts(readingListViewModel)
     var routeStack by remember { mutableStateOf(listOf<JellioRoute>(JellioRoute.Home())) }
     // Home keeps its scroll positions and focused card while a title's page is open.
     val screenStates = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
