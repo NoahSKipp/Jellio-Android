@@ -64,4 +64,5 @@ internal fun fillFriendsEn(m: HashMap<String, String>) {
     m["friends_watching_now"] = "Watching {0} now"
     m["friends_since"] = "Friends since {0}"
     m["friends_requests_count"] = "Requests ({0})"
+    m["friends_notice_added_reading_one"] = "{0} added {1} to your reading list"
 }

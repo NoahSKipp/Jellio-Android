@@ -64,4 +64,5 @@ internal fun fillFriendsDe(m: HashMap<String, String>) {
     m["friends_watching_now"] = "Schaut gerade {0}"
     m["friends_since"] = "Befreundet seit {0}"
     m["friends_requests_count"] = "Anfragen ({0})"
+    m["friends_notice_added_reading_one"] = "{0} hat {1} auf deine Leseliste gesetzt"
 }

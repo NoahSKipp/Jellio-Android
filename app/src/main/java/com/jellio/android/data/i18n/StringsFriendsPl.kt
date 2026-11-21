@@ -64,4 +64,5 @@ internal fun fillFriendsPl(m: HashMap<String, String>) {
     m["friends_watching_now"] = "Ogląda teraz: {0}"
     m["friends_since"] = "Znajomi od {0}"
     m["friends_requests_count"] = "Zaproszenia ({0})"
+    m["friends_notice_added_reading_one"] = "{0} dodał(a) {1} do Twojej listy do czytania"
 }
