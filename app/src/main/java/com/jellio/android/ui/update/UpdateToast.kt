@@ -40,7 +40,9 @@ import com.jellio.android.ui.theme.JellioTextSecondary
 fun UpdateToast(
     version: String,
     downloading: Boolean,
+    readyToInstall: Boolean,
     onDownload: () -> Unit,
+    onInstall: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     error: String? = null,
@@ -94,12 +96,12 @@ fun UpdateToast(
                     Text(text = com.jellio.android.ui.i18n.string("action_cancel"), modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
                 }
                 Surface(
-                    onClick = { if (!downloading) onDownload() },
+                    onClick = { if (readyToInstall) onInstall() else if (!downloading) onDownload() },
                     shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
                     colors = com.jellio.android.ui.common.primaryButtonColors(),
                     modifier = Modifier.focusRequester(downloadFocusRequester),
                 ) {
-                    Text(text = com.jellio.android.data.i18n.Strings.get(if (downloading) "update_downloading" else "update_download"), modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+                    Text(text = com.jellio.android.data.i18n.Strings.get(if (readyToInstall) "update_install" else if (downloading) "update_downloading" else "update_download"), modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
                 }
             }
         }

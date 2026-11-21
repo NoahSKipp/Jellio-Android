@@ -25,4 +25,6 @@ internal fun fillNotifyPt(m: HashMap<String, String>) {
     m["notif_open_system"] = "Definições de notificações do sistema"
     m["notif_open_system_desc"] = "Escolhe sons e comportamento para cada tipo"
     m["notif_allow"] = "Permitir notificações"
+    m["update_install"] = "Instalar"
+    m["update_install_ready"] = "Atualização pronta para instalar"
 }

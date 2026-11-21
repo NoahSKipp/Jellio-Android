@@ -1,6 +1,10 @@
 package com.jellio.android.ui.update
 
+import android.app.ActivityManager
 import android.app.DownloadManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
@@ -8,6 +12,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.Settings
+import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.ViewModel
@@ -41,6 +47,8 @@ data class UpdateUiState(
     val checksumUrl: String? = null,
     val apkName: String? = null,
     val downloading: Boolean = false,
+    // The update is downloaded and checked; the installer has yet to be finished.
+    val readyToInstall: Boolean = false,
     // A string key, set when the last download was refused.
     val error: String? = null,
 )
@@ -64,6 +72,8 @@ private sealed interface LatestRelease {
 private const val PREPARING_RECHECK_MS = 10L * 60 * 1000
 private const val DOWNLOAD_POLL_MS = 1_000L
 private const val MAX_CHECKSUM_BYTES = 4_096L
+private const val UPDATE_CHANNEL_ID = "jellio_update"
+private const val UPDATE_NOTIFICATION_ID = 7301
 
 @HiltViewModel
 class AppUpdateViewModel @Inject constructor(
@@ -222,8 +232,9 @@ class AppUpdateViewModel @Inject constructor(
             if (failure != null) {
                 _uiState.value = _uiState.value.copy(downloading = false, error = failure)
             } else {
-                _uiState.value = UpdateUiState()
+                _uiState.value = _uiState.value.copy(downloading = false, readyToInstall = true, error = null)
                 _manualCheckResult.value = null
+                withContext(Dispatchers.Main) { install() }
             }
         }
     }
@@ -283,13 +294,68 @@ class AppUpdateViewModel @Inject constructor(
             }
             null -> Unit
         }
+        verifiedApk = apkFile
+        return null
+    }
+
+    // The checked copy, kept until it is installed.
+    private var verifiedApk: File? = null
+
+    private fun installIntent(apkFile: File): Intent {
         val apkUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apkFile)
-        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+        return Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
             setDataAndType(apkUri, "application/vnd.android.package-archive")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        withContext(Dispatchers.Main) { context.startActivity(installIntent) }
-        return null
+    }
+
+    private fun appInForeground(): Boolean {
+        val info = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(info)
+        return info.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
+    }
+
+    // Opens the system installer for the checked update. Without the
+    // "install unknown apps" permission it opens that setting instead, and
+    // the Install button finishes the job once it is allowed. While the app
+    // is in the background a notification carries the install instead, since
+    // Android does not let a background app open screens.
+    fun install() {
+        val apk = verifiedApk?.takeIf { it.exists() }
+        if (apk == null) {
+            _uiState.value = _uiState.value.copy(readyToInstall = false, error = "update_error_download")
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+            val settings = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { context.startActivity(settings) }
+            return
+        }
+        val intent = installIntent(apk)
+        if (appInForeground()) {
+            runCatching { context.startActivity(intent) }
+        } else {
+            postInstallReadyNotification(intent)
+        }
+    }
+
+    private fun postInstallReadyNotification(installIntent: Intent) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                NotificationChannel(UPDATE_CHANNEL_ID, com.jellio.android.data.i18n.Strings.get("update_available_title"), NotificationManager.IMPORTANCE_DEFAULT),
+            )
+        }
+        val pending = PendingIntent.getActivity(context, 0, installIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notification = NotificationCompat.Builder(context, UPDATE_CHANNEL_ID)
+            .setSmallIcon(com.jellio.android.R.drawable.ic_stat_jellio)
+            .setContentTitle(com.jellio.android.data.i18n.Strings.get("update_install_ready"))
+            .setContentText(com.jellio.android.data.i18n.Strings.get("update_install"))
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .build()
+        runCatching { manager.notify(UPDATE_NOTIFICATION_ID, notification) }
     }
 
     private fun fetchChecksum(url: String, apkName: String): String? = try {

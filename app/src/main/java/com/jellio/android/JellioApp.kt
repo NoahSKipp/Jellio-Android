@@ -132,7 +132,9 @@ internal fun JellioRoot(
             UpdateToast(
                 version = version,
                 downloading = updateState.downloading,
+                readyToInstall = updateState.readyToInstall,
                 onDownload = { appUpdateViewModel.download() },
+                onInstall = { appUpdateViewModel.install() },
                 onDismiss = { appUpdateViewModel.dismiss() },
                 modifier = Modifier.fillMaxSize(),
                 error = updateState.error,
