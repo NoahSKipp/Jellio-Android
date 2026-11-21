@@ -106,6 +106,15 @@ fun isBigRelease(version: String): Boolean {
 
 val CHANGELOG_RELEASES = listOf(
     ChangelogRelease(
+        version = "0.3.1",
+        title = "What's New in Jellio",
+        subtitle = "Version 0.3.1",
+        features = listOf(
+            ChangelogFeature(Icons.Filled.Notifications, "Phone Notifications", "Jellio now notifies you about new episodes and releases for your watchlist and shows you are watching, Group Watch invites, friend activity, announcements and book and manga updates. Each category can be switched off in Settings under Notifications."),
+            ChangelogFeature(Icons.Filled.Tune, "Manga Removals Stay Removed", "Removing a manga series from Continue reading now stays removed on this device even when the server is older."),
+        ),
+    ),
+    ChangelogRelease(
         version = "0.3.0",
         title = "What's New in Jellio",
         subtitle = "Version 0.3.0",
