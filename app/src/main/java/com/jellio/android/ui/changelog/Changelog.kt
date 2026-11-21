@@ -106,6 +106,14 @@ fun isBigRelease(version: String): Boolean {
 
 val CHANGELOG_RELEASES = listOf(
     ChangelogRelease(
+        version = "0.3.2",
+        title = "What's New in Jellio",
+        subtitle = "Version 0.3.2",
+        features = listOf(
+            ChangelogFeature(Icons.Filled.Sync, "Updates Install Themselves", "After an update is downloaded and checked, the installer now opens right away. If Jellio is in the background you get a notification to finish the install, and an Install button stays in the update prompt."),
+        ),
+    ),
+    ChangelogRelease(
         version = "0.3.1",
         title = "What's New in Jellio",
         subtitle = "Version 0.3.1",
