@@ -106,6 +106,14 @@ fun isBigRelease(version: String): Boolean {
 
 val CHANGELOG_RELEASES = listOf(
     ChangelogRelease(
+        version = "0.3.3",
+        title = "What's New in Jellio",
+        subtitle = "Version 0.3.3",
+        features = listOf(
+            ChangelogFeature(Icons.Filled.Person, "Actor Pages Made for Phones", "A compact header with a readable name, a biography you can expand, and the filmography as a poster grid instead of one long list. The Back button now clears the status bar."),
+        ),
+    ),
+    ChangelogRelease(
         version = "0.3.2",
         title = "What's New in Jellio",
         subtitle = "Version 0.3.2",
