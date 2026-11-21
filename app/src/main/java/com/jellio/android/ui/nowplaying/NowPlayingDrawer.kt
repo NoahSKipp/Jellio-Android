@@ -157,6 +157,8 @@ fun NowPlayingDrawer(
     initialTab: QuickHubTab = QuickHubTab.NOW_PLAYING,
     onOpenLiveTv: () -> Unit = {},
     onOpenWatchlist: () -> Unit = {},
+    onOpenReading: () -> Unit = {},
+    onOpenSeries: (key: String, title: String) -> Unit = { _, _ -> },
     onOpenProfile: ((String) -> Unit)? = null,
     pollNowPlaying: suspend () -> Unit = {},
     notificationsViewModel: NotificationsViewModel = hiltViewModel(),
@@ -721,6 +723,14 @@ fun NowPlayingDrawer(
                                                     onOpenWatchlist = {
                                                         onDismiss()
                                                         onOpenWatchlist()
+                                                    },
+                                                    onOpenSeries = { key, title ->
+                                                        onDismiss()
+                                                        onOpenSeries(key, title)
+                                                    },
+                                                    onOpenReading = {
+                                                        onDismiss()
+                                                        onOpenReading()
                                                     },
                                                     onDismiss = {
                                                         notificationRows.moveAfterRemoval(notificationKeys, n.Id, clearAllFocus)

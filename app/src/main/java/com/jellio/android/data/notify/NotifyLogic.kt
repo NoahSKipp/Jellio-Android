@@ -33,6 +33,9 @@ data class Incoming(
     val createdMs: Long? = null,
     val read: Boolean = false,
     val inviteGroupId: String? = null,
+    // watchlist_added about a book, audiobook or manga (see ReadingNotice.kt).
+    val readingKey: String? = null,
+    val type: String? = null,
 )
 
 const val KIND_INVITE = "invite"
@@ -149,8 +152,9 @@ fun textFor(n: Incoming, tr: Tr, whenText: (String?) -> String = { it.orEmpty() 
         "friend_accepted" -> NoticeText(tr.get("friends_notice_sub"), tr.get("friends_notice_accepted", sender))
         "watchlist_added" -> {
             val count = watchlistCount(n.detail)
-            val text = if (count > 1) tr.get("friends_notice_added_many", sender, count) else tr.get("friends_notice_added_one", sender, name)
-            NoticeText(tr.get("friends_notice_sub_watchlist"), text)
+            val textKey = watchlistNoticeTextKey(count, n.readingKey)
+            val text = if (count > 1) tr.get(textKey, sender, count) else tr.get(textKey, sender, name)
+            NoticeText(tr.get(watchlistNoticeSubKey(count, n.readingKey, n.type)), text)
         }
         "announcement" -> NoticeText(tr.get("notify_from_server"), name.ifBlank { tr.get("notify_from_server") })
         "manga" -> NoticeText(tr.get("notif_cat_books"), name + ": " + (n.detail?.takeIf { it.isNotBlank() } ?: tr.get("notif_new_chapter")))
@@ -172,6 +176,8 @@ const val TARGET_WATCHLIST = "notify:watchlist"
 const val TARGET_FRIENDS = "notify:friends"
 const val TARGET_GROUP_WATCH = "notify:groupwatch"
 const val TARGET_LIST = "notify:list"
+const val TARGET_READING = "notify:reading"
+const val TARGET_SERIES_PREFIX = "notify:series:"
 const val TARGET_PROFILE_PREFIX = "notify:profile:"
 
 fun targetFor(n: Incoming): String {
@@ -180,11 +186,27 @@ fun targetFor(n: Incoming): String {
         KIND_INVITE, "party_scheduled", "party_starting" -> TARGET_GROUP_WATCH
         "friend_request" -> TARGET_FRIENDS
         "friend_accepted" -> n.fromUserId?.takeIf { it.isNotBlank() }?.let { TARGET_PROFILE_PREFIX + it } ?: TARGET_FRIENDS
-        "watchlist_added" -> if (watchlistCount(n.detail) > 1 || item == null) TARGET_WATCHLIST else "detail:$item"
+        "watchlist_added" -> watchlistTarget(n, item)
         "announcement" -> TARGET_LIST
         "manga" -> TARGET_LIST
         else -> if (item != null) "detail:$item" else TARGET_LIST
     }
+}
+
+// A single reading item opens where it lives: its page for a library item,
+// the manga series sheet, or the Reader tab's reading list for a book that is
+// not in the library. Several titles open the watchlist.
+private fun watchlistTarget(n: Incoming, item: String?): String {
+    if (watchlistCount(n.detail) > 1) return TARGET_WATCHLIST
+    if (isReadingNotice(n.readingKey)) {
+        val series = readingNoticeSeriesKey(n.readingKey)
+        return when {
+            series != null -> TARGET_SERIES_PREFIX + series
+            n.readingKey.orEmpty().startsWith("i:") && item != null -> "detail:$item"
+            else -> TARGET_READING
+        }
+    }
+    return if (item == null) TARGET_WATCHLIST else "detail:$item"
 }
 
 fun summaryTarget(category: NotifyCategory): String = when (category) {

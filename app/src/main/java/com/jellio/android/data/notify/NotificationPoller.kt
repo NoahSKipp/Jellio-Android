@@ -62,6 +62,8 @@ class NotificationPoller @Inject constructor(
                     fromUserName = n.FromUserName,
                     createdMs = JellyfinDates.parseEpochMs(n.CreatedUtc),
                     read = n.Read,
+                    readingKey = n.ReadingKey,
+                    type = n.Type,
                 ),
             )
         }

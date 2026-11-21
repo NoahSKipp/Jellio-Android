@@ -427,6 +427,11 @@ private fun JellioApp(
                 }
             }
             itemId == com.jellio.android.data.notify.TARGET_WATCHLIST -> switchTab(JellioRoute.Home())
+            itemId == com.jellio.android.data.notify.TARGET_READING -> switchTab(JellioRoute.Bookshelf())
+            itemId.startsWith(com.jellio.android.data.notify.TARGET_SERIES_PREFIX) -> {
+                readingListViewModel.requestOpenSeries(itemId.removePrefix(com.jellio.android.data.notify.TARGET_SERIES_PREFIX), "")
+                switchTab(JellioRoute.Bookshelf("manga"))
+            }
             itemId == com.jellio.android.data.notify.TARGET_FRIENDS ->
                 openQuickHub(if (friendsState.available) QuickHubTab.FRIENDS else QuickHubTab.NOTIFICATIONS)
             itemId.startsWith(com.jellio.android.data.notify.TARGET_PROFILE_PREFIX) -> {
@@ -990,6 +995,15 @@ private fun JellioApp(
                     onOpenWatchlist = {
                         showNowPlayingDrawer = false
                         switchTab(JellioRoute.Home())
+                    },
+                    onOpenReading = {
+                        showNowPlayingDrawer = false
+                        switchTab(JellioRoute.Bookshelf())
+                    },
+                    onOpenSeries = { key, title ->
+                        showNowPlayingDrawer = false
+                        readingListViewModel.requestOpenSeries(key, title)
+                        switchTab(JellioRoute.Bookshelf("manga"))
                     },
                     onOpenProfile = { id ->
                         showNowPlayingDrawer = false

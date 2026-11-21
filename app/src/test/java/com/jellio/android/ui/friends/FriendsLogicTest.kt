@@ -63,6 +63,19 @@ class FriendsLogicTest {
     }
 
     @Test
+    fun readingNoticeTargets() {
+        assertEquals(NoticeTarget.Item, watchlistNoticeTarget(1, true, "i:abc"))
+        assertEquals(NoticeTarget.Reading, watchlistNoticeTarget(1, false, "i:abc"))
+        assertEquals(NoticeTarget.Series, watchlistNoticeTarget(1, true, "s:one piece"))
+        assertEquals(NoticeTarget.Series, watchlistNoticeTarget(1, false, "s:one piece"))
+        assertEquals(NoticeTarget.Reading, watchlistNoticeTarget(1, false, "w:hc:1"))
+        assertEquals(NoticeTarget.Watchlist, watchlistNoticeTarget(2, true, "i:abc"))
+        // No ReadingKey: the watchlist behaviour as before.
+        assertEquals(NoticeTarget.Item, watchlistNoticeTarget(1, true, null))
+        assertEquals(NoticeTarget.None, watchlistNoticeTarget(1, false, ""))
+    }
+
+    @Test
     fun kindsAndTypes() {
         assertTrue(isFriendKind("friend_request"))
         assertTrue(isFriendKind("watchlist_added"))

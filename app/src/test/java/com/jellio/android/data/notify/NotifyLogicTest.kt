@@ -149,6 +149,55 @@ class NotifyLogicTest {
         assertEquals("friends_notice_added_many(tv_someone|4)", textFor(anon, tr).text)
     }
 
+    private fun reading(key: String?, type: String?, detail: String? = "1", itemId: String? = null) = Incoming(
+        "n:r", "r", NotifyCategory.FRIENDS, "watchlist_added",
+        name = "Dune", detail = detail, fromUserName = "Ann", itemId = itemId, readingKey = key, type = type,
+    )
+
+    @Test fun readingNoticeSaysReadingListAndShowsTheType() {
+        val book = textFor(reading("i:abc", "Book"), tr)
+        assertEquals("friends_notice_added_reading_one(Ann|Dune)", book.text)
+        assertEquals("reading_kind_ebook", book.title)
+        assertEquals("reading_kind_audiobook", textFor(reading("w:hc:1", "AudioBook"), tr).title)
+        assertEquals("reading_kind_manga", textFor(reading("s:one piece", "Manga"), tr).title)
+        // Several titles keep the watchlist wording, and so does an old notice without ReadingKey.
+        val many = textFor(reading("i:abc", "Book", detail = "3"), tr)
+        assertEquals("friends_notice_added_many(Ann|3)", many.text)
+        assertEquals("friends_notice_sub_watchlist", many.title)
+        val old = textFor(reading(null, null), tr)
+        assertEquals("friends_notice_added_one(Ann|Dune)", old.text)
+        assertEquals("friends_notice_sub_watchlist", old.title)
+        assertEquals("friends_notice_added_one(Ann|Dune)", textFor(reading(" ", "Book"), tr).text)
+    }
+
+    @Test fun readingNoticeTapOpensWhereTheItemLives() {
+        val id = "0a1b2c3d4e5f60718293a4b5c6d7e8f9"
+        assertEquals("detail:$id", targetFor(reading("i:$id", "Book", itemId = id)))
+        // An i: key without a usable item id falls back to the reading list.
+        assertEquals(TARGET_READING, targetFor(reading("i:$id", "Book", itemId = "00000000-0000-0000-0000-000000000000")))
+        assertEquals(TARGET_SERIES_PREFIX + "one piece", targetFor(reading("s:one piece", "Manga")))
+        // A series entry may carry a cover chapter file; the series still wins.
+        assertEquals(TARGET_SERIES_PREFIX + "one piece", targetFor(reading("s:one piece", "Manga", itemId = id)))
+        assertEquals(TARGET_READING, targetFor(reading("w:hc:12345", "Book")))
+        assertEquals(TARGET_WATCHLIST, targetFor(reading("i:$id", "Book", detail = "2", itemId = id)))
+        assertEquals(TARGET_WATCHLIST, targetFor(reading("s:x", "Manga", detail = "5")))
+        // Old notices still open the item or the watchlist.
+        assertEquals("detail:$id", targetFor(reading(null, null, itemId = id)))
+        assertEquals(TARGET_WATCHLIST, targetFor(reading(null, null)))
+    }
+
+    @Test fun readingNoticeHelpers() {
+        assertTrue(isReadingNotice("w:hc:1"))
+        assertFalse(isReadingNotice(null))
+        assertFalse(isReadingNotice("  "))
+        assertEquals("one piece", readingNoticeSeriesKey("s:one piece"))
+        assertNull(readingNoticeSeriesKey("s:"))
+        assertNull(readingNoticeSeriesKey("i:abc"))
+        assertNull(readingNoticeSeriesKey(null))
+        assertEquals("reading_kind_ebook", readingNoticeTypeKey("Book"))
+        assertEquals("reading_kind_ebook", readingNoticeTypeKey(null))
+    }
+
     @Test fun inviteMangaAndAnnouncementTexts() {
         val invite = Incoming(inviteKey(7), null, NotifyCategory.GROUP_WATCH, KIND_INVITE, name = "Movie night", fromUserName = "Ann")
         assertEquals("party_invite_toast(Ann|Movie night)", textFor(invite, tr).text)

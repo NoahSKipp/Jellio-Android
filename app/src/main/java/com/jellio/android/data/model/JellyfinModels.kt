@@ -343,6 +343,10 @@ data class JellioNotificationDto(
     val FromUserId: String? = null,
     val FromUserName: String? = null,
     val FromImageTag: String? = null,
+    // watchlist_added about a book, audiobook or manga: Type is Book, AudioBook
+    // or Manga and ReadingKey the reading list key (i:, s: or w:).
+    val Type: String? = null,
+    val ReadingKey: String? = null,
 )
 
 @JsonClass(generateAdapter = true)

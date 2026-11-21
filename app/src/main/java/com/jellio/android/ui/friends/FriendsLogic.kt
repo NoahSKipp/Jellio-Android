@@ -1,6 +1,8 @@
 package com.jellio.android.ui.friends
 
 import com.jellio.android.data.FriendFailure
+import com.jellio.android.data.notify.isReadingNotice
+import com.jellio.android.data.notify.readingNoticeSeriesKey
 
 enum class FriendRelation { Self, None, Outgoing, Incoming, Friends, Private, Closed, Unknown }
 
@@ -78,10 +80,18 @@ fun isFriendKind(kind: String?): Boolean =
 // "Detail" carries the number of titles in a watchlist_added notice.
 fun watchlistAddedCount(detail: String?): Int = detail?.trim()?.toIntOrNull()?.coerceAtLeast(1) ?: 1
 
-enum class NoticeTarget { None, Item, Watchlist }
+enum class NoticeTarget { None, Item, Watchlist, Series, Reading }
 
-fun watchlistNoticeTarget(count: Int, hasItem: Boolean): NoticeTarget = when {
+// Where a watchlist_added notice leads: several titles to the watchlist; one
+// reading item to its page (library item), the manga series sheet or the
+// Reader tab's reading list; one title to its page.
+fun watchlistNoticeTarget(count: Int, hasItem: Boolean, readingKey: String? = null): NoticeTarget = when {
     count > 1 -> NoticeTarget.Watchlist
+    isReadingNotice(readingKey) -> when {
+        readingNoticeSeriesKey(readingKey) != null -> NoticeTarget.Series
+        readingKey.orEmpty().startsWith("i:") && hasItem -> NoticeTarget.Item
+        else -> NoticeTarget.Reading
+    }
     hasItem -> NoticeTarget.Item
     else -> NoticeTarget.None
 }

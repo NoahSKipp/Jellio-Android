@@ -82,10 +82,11 @@ internal fun messageFor(n: JellioNotificationDto): String = when (n.Kind) {
     "friend_accepted" -> com.jellio.android.data.i18n.Strings.format("friends_notice_accepted", friendSender(n))
     "watchlist_added" -> {
         val count = com.jellio.android.ui.friends.watchlistAddedCount(n.Detail)
+        val key = com.jellio.android.data.notify.watchlistNoticeTextKey(count, n.ReadingKey)
         if (count > 1) {
-            com.jellio.android.data.i18n.Strings.format("friends_notice_added_many", friendSender(n), count)
+            com.jellio.android.data.i18n.Strings.format(key, friendSender(n), count)
         } else {
-            com.jellio.android.data.i18n.Strings.format("friends_notice_added_one", friendSender(n), n.Name.orEmpty())
+            com.jellio.android.data.i18n.Strings.format(key, friendSender(n), n.Name.orEmpty())
         }
     }
     else -> com.jellio.android.data.i18n.Strings.format("notify_available_to_watch", n.Name ?: com.jellio.android.data.i18n.Strings.get("notify_new_item"))
@@ -109,7 +110,9 @@ internal fun subtitleFor(n: JellioNotificationDto): String = when (n.Kind) {
     "party_scheduled", "party_starting" -> com.jellio.android.data.i18n.Strings.get("party_notice_sub")
     "episode" -> com.jellio.android.data.i18n.Strings.get("calendar_new_episode")
     "friend_request", "friend_accepted" -> com.jellio.android.data.i18n.Strings.get("friends_notice_sub")
-    "watchlist_added" -> com.jellio.android.data.i18n.Strings.get("friends_notice_sub_watchlist")
+    "watchlist_added" -> com.jellio.android.data.i18n.Strings.get(
+        com.jellio.android.data.notify.watchlistNoticeSubKey(com.jellio.android.ui.friends.watchlistAddedCount(n.Detail), n.ReadingKey, n.Type),
+    )
     else -> com.jellio.android.data.i18n.Strings.get("notify_now_streaming")
 }
 
