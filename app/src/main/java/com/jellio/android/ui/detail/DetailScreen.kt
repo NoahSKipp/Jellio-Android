@@ -112,6 +112,11 @@ import com.jellio.android.ui.home.CardDialog
 import com.jellio.android.ui.home.CardOptionsMenuRow
 import com.jellio.android.ui.home.sizedImageRequest
 import com.jellio.android.ui.nav.LocalBottomBarPadding
+import com.jellio.android.data.books.BooksRepository
+import com.jellio.android.data.books.readingTargetForItem
+import com.jellio.android.data.books.readingToggleLabelKey
+import com.jellio.android.ui.books.ReadingListViewModel
+import com.jellio.android.ui.friends.FriendReadingPickerDialog
 import com.jellio.android.ui.friends.FriendWatchlistPickerDialog
 import com.jellio.android.ui.friends.FriendsViewModel
 import com.jellio.android.ui.friends.canShareType
@@ -159,9 +164,19 @@ fun DetailScreen(
     modifier: Modifier = Modifier,
     viewModel: DetailViewModel = hiltViewModel(),
     friendsViewModel: FriendsViewModel = hiltViewModel(),
+    readingListViewModel: ReadingListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val friendsState by friendsViewModel.state.collectAsState()
+    val readingSupported by readingListViewModel.supported.collectAsState()
+    val readingKeys by readingListViewModel.keys.collectAsState()
+    // Books and audiobooks use the reading list where other titles use the watchlist.
+    val isReadingItem = uiState.item?.Type.let { it == "Book" || it == "AudioBook" }
+    val readingTarget = remember(uiState.item?.Id, uiState.item?.Type) {
+        uiState.item?.let { readingTargetForItem(it.Id, it.Type, it.Name, it.AlbumArtist, BooksRepository.isComicOrManga(it)) }
+    }
+    LaunchedEffect(uiState.item?.Id, isReadingItem) { if (isReadingItem) readingListViewModel.refreshKeys() }
+    val onReadingList = readingTarget != null && readingTarget.key in readingKeys
     val cardMenuExtras = com.jellio.android.ui.home.rememberCardMenuExtras(session)
     var friendPickerOpen by remember { mutableStateOf(false) }
     val availableEditions by viewModel.availableEditions.collectAsState()
@@ -293,12 +308,26 @@ fun DetailScreen(
                                         null
                                     },
                                     isDownloaded = isItemDownloaded?.invoke(item.Id) == true,
-                                    onToggleWatchlist = { viewModel.toggleWatchlist(session) },
-                                    onAddToFriend = if (canShareType(item.Type) && friendsState.available && friendsState.friends.isNotEmpty()) {
+                                    onToggleWatchlist = {
+                                        if (!isReadingItem) {
+                                            viewModel.toggleWatchlist(session)
+                                        } else if (readingTarget != null) {
+                                            readingListViewModel.toggle(readingTarget)
+                                        }
+                                    },
+                                    onAddToFriend = if (
+                                        friendsState.available && friendsState.friends.isNotEmpty() &&
+                                        (if (isReadingItem) readingTarget != null && readingSupported == true else canShareType(item.Type))
+                                    ) {
                                         { friendPickerOpen = true }
                                     } else {
                                         null
                                     },
+                                    showWatchlist = !isReadingItem || (readingTarget != null && readingSupported == true),
+                                    watchlistActive = if (isReadingItem) onReadingList else uiState.isWatchlisted,
+                                    watchlistLabel = if (isReadingItem) com.jellio.android.ui.i18n.string("reading_list") else null,
+                                    watchlistDescription = if (isReadingItem) com.jellio.android.ui.i18n.string(readingToggleLabelKey(onReadingList)) else null,
+                                    friendLabel = if (isReadingItem) com.jellio.android.ui.i18n.string("reading_menu_add_to_friend") else null,
                                     onToggleWatched = { viewModel.toggleWatched(session) },
                                     onLike = { viewModel.setLike(session, true) },
                                     onDislike = { viewModel.setLike(session, false) },
@@ -405,7 +434,20 @@ fun DetailScreen(
         }
 
         val pickerItem = uiState.item
-        if (friendPickerOpen && pickerItem != null) {
+        if (friendPickerOpen && pickerItem != null && isReadingItem) {
+            if (readingTarget != null) {
+                FriendReadingPickerDialog(
+                    target = readingTarget,
+                    viewModel = friendsViewModel,
+                    onDismiss = {
+                        friendPickerOpen = false
+                        if (!isCompact) {
+                            runCatching { playButtonFocusRequester.requestFocus() }
+                        }
+                    },
+                )
+            }
+        } else if (friendPickerOpen && pickerItem != null) {
             FriendWatchlistPickerDialog(
                 item = pickerItem,
                 viewModel = friendsViewModel,
@@ -544,6 +586,11 @@ private fun DetailHero(
     availableEditions: List<String> = emptyList(),
     selectedEdition: String? = null,
     onSelectEdition: (String) -> Unit = {},
+    showWatchlist: Boolean = true,
+    watchlistActive: Boolean = state.isWatchlisted,
+    watchlistLabel: String? = null,
+    watchlistDescription: String? = null,
+    friendLabel: String? = null,
 ) {
     val season = state.selectedSeason?.takeIf { item.Type == "Series" }
     // Backdrops, Thumb, then the poster blurred; a failed load moves on to the
@@ -835,15 +882,17 @@ private fun DetailHero(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        CompactActionPill(
-                            icon = if (state.isWatchlisted) Icons.Filled.BookmarkAdded else Icons.Filled.BookmarkAdd,
-                            label = com.jellio.android.ui.i18n.string("nav_watchlist"),
-                            active = state.isWatchlisted,
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onToggleWatchlist()
-                            },
-                        )
+                        if (showWatchlist) {
+                            CompactActionPill(
+                                icon = if (watchlistActive) Icons.Filled.BookmarkAdded else Icons.Filled.BookmarkAdd,
+                                label = watchlistLabel ?: com.jellio.android.ui.i18n.string("nav_watchlist"),
+                                active = watchlistActive,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onToggleWatchlist()
+                                },
+                            )
+                        }
                         if (onDownload != null) {
                             CompactActionPill(
                                 icon = if (isDownloaded) Icons.Filled.Check else Icons.Filled.Download,
@@ -913,7 +962,7 @@ private fun DetailHero(
                             if (onAddToFriend != null) {
                                 CompactActionPill(
                                     icon = Icons.Filled.PersonAdd,
-                                    label = com.jellio.android.ui.i18n.string("friends_add_to_friend_watchlist"),
+                                    label = friendLabel ?: com.jellio.android.ui.i18n.string("friends_add_to_friend_watchlist"),
                                     active = false,
                                     onClick = {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -966,17 +1015,19 @@ private fun DetailHero(
                         )
                     }
                     if (actionsExpanded) {
-                        IconActionButton(
-                            icon = if (state.isWatchlisted) Icons.Filled.BookmarkAdded else Icons.Filled.BookmarkAdd,
-                            active = state.isWatchlisted,
-                            contentDescription = com.jellio.android.ui.i18n.string("nav_watchlist"),
-                            onClick = onToggleWatchlist,
-                        )
+                        if (showWatchlist) {
+                            IconActionButton(
+                                icon = if (watchlistActive) Icons.Filled.BookmarkAdded else Icons.Filled.BookmarkAdd,
+                                active = watchlistActive,
+                                contentDescription = watchlistDescription ?: com.jellio.android.ui.i18n.string("nav_watchlist"),
+                                onClick = onToggleWatchlist,
+                            )
+                        }
                         if (onAddToFriend != null) {
                             IconActionButton(
                                 icon = Icons.Filled.PersonAdd,
                                 active = false,
-                                contentDescription = com.jellio.android.ui.i18n.string("friends_add_to_friend_watchlist"),
+                                contentDescription = friendLabel ?: com.jellio.android.ui.i18n.string("friends_add_to_friend_watchlist"),
                                 onClick = onAddToFriend,
                             )
                         }
