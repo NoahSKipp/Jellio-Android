@@ -32,6 +32,19 @@ class FriendsLogicTest {
     }
 
     @Test
+    fun readingResultsSayReadingList() {
+        assertEquals("reading_result_added", addResultKey("added", reading = true))
+        assertEquals("reading_result_already_on_list", addResultKey("already_on_list", reading = true))
+        assertEquals("reading_result_not_visible", addResultKey("not_visible", reading = true))
+        assertEquals("reading_result_unsupported", addResultKey("unsupported", reading = true))
+        // The rest reads the same for both kinds of list.
+        for (result in listOf("muted", "disabled", "limit", "not_friends", "something_new", null)) {
+            assertEquals(addResultKey(result), addResultKey(result, reading = true))
+        }
+        assertEquals("friends_result_unsupported", addResultKey("unsupported"))
+    }
+
+    @Test
     fun failuresMapToKeys() {
         assertEquals("friends_err_cooldown", failureKey(FriendFailure.Cooldown))
         assertEquals("friends_err_gone", failureKey(FriendFailure.Gone))

@@ -33,6 +33,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import com.jellio.android.ui.common.Surface
 import androidx.tv.material3.Text
+import com.jellio.android.data.books.ReadingTarget
 import com.jellio.android.data.i18n.Strings
 import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.ui.common.SidePanel
@@ -50,6 +51,42 @@ fun FriendWatchlistPicker(
     viewModel: FriendsViewModel,
     onDismiss: () -> Unit,
 ) {
+    FriendListPicker(
+        title = Strings.get("friends_picker_title"),
+        name = item.Name.orEmpty(),
+        reading = false,
+        onSend = { userIds -> viewModel.share(item.Id, userIds) },
+        viewModel = viewModel,
+        onDismiss = onDismiss,
+    )
+}
+
+// The same picker for a book, audiobook or manga: the friends' reading lists.
+@Composable
+fun FriendReadingPicker(
+    target: ReadingTarget,
+    viewModel: FriendsViewModel,
+    onDismiss: () -> Unit,
+) {
+    FriendListPicker(
+        title = Strings.get("reading_picker_title"),
+        name = target.title.orEmpty(),
+        reading = true,
+        onSend = { userIds -> viewModel.shareReading(target, userIds) },
+        viewModel = viewModel,
+        onDismiss = onDismiss,
+    )
+}
+
+@Composable
+private fun FriendListPicker(
+    title: String,
+    name: String,
+    reading: Boolean,
+    onSend: (List<String>) -> Unit,
+    viewModel: FriendsViewModel,
+    onDismiss: () -> Unit,
+) {
     val state by viewModel.state.collectAsState()
     var selected by remember { mutableStateOf(emptySet<String>()) }
     val firstFocus = remember { FocusRequester() }
@@ -64,9 +101,9 @@ fun FriendWatchlistPicker(
     }
     DisposableEffect(Unit) { onDispose { viewModel.clearShare() } }
 
-    SidePanel(title = Strings.get("friends_picker_title"), width = 520.dp, onDismiss = onDismiss) {
+    SidePanel(title = title, width = 520.dp, onDismiss = onDismiss) {
         Text(
-            text = item.Name.orEmpty(),
+            text = name,
             color = JellioTextSecondary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -111,7 +148,7 @@ fun FriendWatchlistPicker(
                                 Text(text = friend.UserName, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 if (result != null) {
                                     Text(
-                                        text = Strings.get(addResultKey(result)),
+                                        text = Strings.get(addResultKey(result, reading)),
                                         color = if (isAddSuccess(result)) JellioSecondary else JellioDanger,
                                         style = MaterialTheme.typography.bodySmall,
                                     )
@@ -132,7 +169,7 @@ fun FriendWatchlistPicker(
                     FriendPill(
                         label = Strings.get(if (state.sharing) "friends_sending" else "friends_send"),
                         enabled = selected.isNotEmpty() && !state.sharing,
-                        onClick = { viewModel.share(item.Id, selected.toList()) },
+                        onClick = { onSend(selected.toList()) },
                     )
                 } else {
                     FriendPill(label = Strings.get("friends_done"), onClick = onDismiss)
@@ -162,5 +199,19 @@ fun FriendWatchlistPickerDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true),
     ) {
         FriendWatchlistPicker(item = item, viewModel = viewModel, onDismiss = onDismiss)
+    }
+}
+
+@Composable
+fun FriendReadingPickerDialog(
+    target: ReadingTarget,
+    viewModel: FriendsViewModel,
+    onDismiss: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true),
+    ) {
+        FriendReadingPicker(target = target, viewModel = viewModel, onDismiss = onDismiss)
     }
 }

@@ -26,8 +26,21 @@ fun buttonStateOf(relation: FriendRelation, canRequest: Boolean): FriendButtonSt
     FriendRelation.Self, FriendRelation.Private, FriendRelation.Closed, FriendRelation.Unknown -> FriendButtonState.Hidden
 }
 
-// One line per friend after "Add to a friend's watchlist".
-fun addResultKey(result: String?): String = when (result) {
+// One line per friend after "Add to a friend's watchlist". A reading item
+// says "reading list" where the watchlist says "watchlist".
+fun addResultKey(result: String?, reading: Boolean = false): String {
+    if (reading) {
+        when (result) {
+            "added" -> return "reading_result_added"
+            "already_on_list" -> return "reading_result_already_on_list"
+            "not_visible" -> return "reading_result_not_visible"
+            "unsupported" -> return "reading_result_unsupported"
+        }
+    }
+    return watchlistResultKey(result)
+}
+
+private fun watchlistResultKey(result: String?): String = when (result) {
     "added" -> "friends_result_added"
     "already_on_list" -> "friends_result_already_on_list"
     "already_watched" -> "friends_result_already_watched"

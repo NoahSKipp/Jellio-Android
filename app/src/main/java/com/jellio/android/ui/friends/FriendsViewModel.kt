@@ -6,6 +6,7 @@ import com.jellio.android.data.FriendRequestException
 import com.jellio.android.data.FriendFailure
 import com.jellio.android.data.FriendsRepository
 import com.jellio.android.data.JellioRepository
+import com.jellio.android.data.books.ReadingTarget
 import com.jellio.android.data.catching
 import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.data.model.FriendEntryDto
@@ -14,6 +15,7 @@ import com.jellio.android.data.model.FriendRequestDto
 import com.jellio.android.data.model.FriendStatusDto
 import com.jellio.android.data.model.FriendsSettingsDto
 import com.jellio.android.data.model.UserItemDataDto
+import com.jellio.android.data.model.WatchlistFriendResultDto
 import com.jellio.android.data.session.Session
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -178,11 +180,16 @@ class FriendsViewModel @Inject constructor(
 
     fun clearShare() = _state.update { it.copy(shareResults = null, sharing = false) }
 
-    fun share(itemId: String, userIds: List<String>) {
+    fun share(itemId: String, userIds: List<String>) = send(userIds) { friends.addToWatchlists(itemId, userIds) }
+
+    // A book, audiobook or manga goes to the friends' reading lists.
+    fun shareReading(target: ReadingTarget, userIds: List<String>) = send(userIds) { friends.addReadingToFriends(target, userIds) }
+
+    private fun send(userIds: List<String>, call: suspend () -> Result<List<WatchlistFriendResultDto>>) {
         if (userIds.isEmpty() || _state.value.sharing) return
         _state.update { it.copy(sharing = true, messageKey = null) }
         viewModelScope.launch {
-            friends.addToWatchlists(itemId, userIds)
+            call()
                 .onSuccess { results ->
                     val byUser = results.associate { it.UserId.replace("-", "").lowercase() to it.Result }
                     val mapped = userIds.associateWith { id -> byUser[id.replace("-", "").lowercase()] ?: "" }
