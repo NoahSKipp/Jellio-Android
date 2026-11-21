@@ -21,6 +21,7 @@ internal object StringsEs {
         fillAniSyncEs(m)
         fillReaderEs(m)
         fillCardMenu(m)
+        fillNotifyEs(m)
         m
     }
 

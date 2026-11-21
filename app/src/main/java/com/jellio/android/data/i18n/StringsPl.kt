@@ -21,6 +21,7 @@ internal object StringsPl {
         fillAniSyncPl(m)
         fillReaderPl(m)
         fillCardMenu(m)
+        fillNotifyPl(m)
         m
     }
 

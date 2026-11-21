@@ -21,6 +21,7 @@ internal object StringsDe {
         fillAniSyncDe(m)
         fillReaderDe(m)
         fillCardMenu(m)
+        fillNotifyDe(m)
         m
     }
 

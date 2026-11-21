@@ -1,0 +1,28 @@
+package com.jellio.android.data.i18n
+
+// Phone notifications: the settings and the alerts themselves.
+internal fun fillNotifyEn(m: HashMap<String, String>) {
+    m["settings_cat_notifications"] = "Notifications"
+    m["notif_master"] = "Phone notifications"
+    m["notif_master_desc"] = "Show alerts from Jellio even when the app is closed"
+    m["notif_cat_releases"] = "New episodes and releases"
+    m["notif_cat_releases_desc"] = "Titles on your watchlist and shows you are watching"
+    m["notif_cat_groupwatch"] = "Group Watch"
+    m["notif_cat_groupwatch_desc"] = "Invites and watch parties"
+    m["notif_cat_friends"] = "Friends"
+    m["notif_cat_friends_desc"] = "Requests and titles friends add to your watchlist"
+    m["notif_cat_announcements"] = "Announcements"
+    m["notif_cat_announcements_desc"] = "Messages from your server"
+    m["notif_cat_books"] = "Books and manga"
+    m["notif_cat_books_desc"] = "New chapters and book updates"
+    m["notif_summary_releases"] = "{0} new episodes and releases"
+    m["notif_summary_groupwatch"] = "{0} Group Watch updates"
+    m["notif_summary_friends"] = "{0} friend updates"
+    m["notif_summary_announcements"] = "{0} announcements"
+    m["notif_summary_books"] = "{0} book and manga updates"
+    m["notif_new_chapter"] = "a new chapter"
+    m["notif_permission_hint"] = "Notifications are blocked for Jellio. Allow them in the system settings to receive alerts."
+    m["notif_open_system"] = "System notification settings"
+    m["notif_open_system_desc"] = "Choose sounds and behaviour for each type"
+    m["notif_allow"] = "Allow notifications"
+}

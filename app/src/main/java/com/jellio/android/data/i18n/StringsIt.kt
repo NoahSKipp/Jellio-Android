@@ -21,6 +21,7 @@ internal object StringsIt {
         fillAniSyncIt(m)
         fillReaderIt(m)
         fillCardMenu(m)
+        fillNotifyIt(m)
         m
     }
 

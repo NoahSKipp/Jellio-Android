@@ -1,0 +1,28 @@
+package com.jellio.android.data.i18n
+
+// Phone notifications: the settings and the alerts themselves.
+internal fun fillNotifyPt(m: HashMap<String, String>) {
+    m["settings_cat_notifications"] = "Notificações"
+    m["notif_master"] = "Notificações do telemóvel"
+    m["notif_master_desc"] = "Mostrar alertas do Jellio mesmo com a app fechada"
+    m["notif_cat_releases"] = "Novos episódios e estreias"
+    m["notif_cat_releases_desc"] = "Títulos da tua lista e séries que estás a ver"
+    m["notif_cat_groupwatch"] = "Ver em grupo"
+    m["notif_cat_groupwatch_desc"] = "Convites e sessões de grupo"
+    m["notif_cat_friends"] = "Amigos"
+    m["notif_cat_friends_desc"] = "Pedidos e títulos que os amigos adicionam à tua lista"
+    m["notif_cat_announcements"] = "Anúncios"
+    m["notif_cat_announcements_desc"] = "Mensagens do teu servidor"
+    m["notif_cat_books"] = "Livros e manga"
+    m["notif_cat_books_desc"] = "Novos capítulos e atualizações de livros"
+    m["notif_summary_releases"] = "{0} novos episódios e estreias"
+    m["notif_summary_groupwatch"] = "{0} novidades de Ver em grupo"
+    m["notif_summary_friends"] = "{0} novidades de amigos"
+    m["notif_summary_announcements"] = "{0} anúncios"
+    m["notif_summary_books"] = "{0} novidades de livros e manga"
+    m["notif_new_chapter"] = "um novo capítulo"
+    m["notif_permission_hint"] = "As notificações estão bloqueadas para o Jellio. Permite-as nas definições do sistema para receber alertas."
+    m["notif_open_system"] = "Definições de notificações do sistema"
+    m["notif_open_system_desc"] = "Escolhe sons e comportamento para cada tipo"
+    m["notif_allow"] = "Permitir notificações"
+}
