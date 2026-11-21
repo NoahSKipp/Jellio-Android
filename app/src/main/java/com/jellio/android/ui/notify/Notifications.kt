@@ -35,7 +35,10 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class NotificationsViewModel @Inject constructor(private val api: JellyfinApi) : ViewModel() {
+class NotificationsViewModel @Inject constructor(
+    private val api: JellyfinApi,
+    private val notifyController: com.jellio.android.data.notify.NotifyController,
+) : ViewModel() {
     private val _items = MutableStateFlow<List<JellioNotificationDto>?>(null)
     val items: StateFlow<List<JellioNotificationDto>?> = _items.asStateFlow()
 
@@ -46,6 +49,8 @@ class NotificationsViewModel @Inject constructor(private val api: JellyfinApi) :
                 .getOrDefault(emptyList())
                 .filter { it.Kind != "manga" && !it.Id.orEmpty().startsWith("changelog:") }
             catching { api.markJellioNotificationsRead() }
+            // Read here, so the matching phone notifications go too.
+            notifyController.onNotificationListOpened()
         }
     }
 

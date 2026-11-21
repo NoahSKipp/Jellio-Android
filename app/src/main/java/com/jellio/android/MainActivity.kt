@@ -368,6 +368,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        val notifyTarget = intent?.getStringExtra(com.jellio.android.data.notify.JellioNotifier.EXTRA_NOTIFICATION_TARGET)
+        if (!notifyTarget.isNullOrBlank()) {
+            intent?.removeExtra(com.jellio.android.data.notify.JellioNotifier.EXTRA_NOTIFICATION_TARGET)
+            deepLinkItemId.value = notifyTarget
+            return
+        }
         if (intent?.getBooleanExtra(EXTRA_OPEN_AUDIOBOOK, false) == true) {
             intent.removeExtra(EXTRA_OPEN_AUDIOBOOK)
             deepLinkItemId.value = "audiobook:active"

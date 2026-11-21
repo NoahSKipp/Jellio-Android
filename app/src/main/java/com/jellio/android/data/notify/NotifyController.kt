@@ -58,6 +58,14 @@ class NotifyController @Inject constructor(
         prefs.setCategory(category, enabled)
     }
 
+    // One system prompt on Android 13 and later, while notifications are on and still blocked.
+    fun shouldPromptForPermission(): Boolean =
+        prefs.settings.value.master && !prefs.permissionPrompted && !notifier.canPost()
+
+    fun markPermissionPrompted() {
+        prefs.permissionPrompted = true
+    }
+
     fun onNotificationListOpened() {
         notifier.cancelForListOpen()
     }

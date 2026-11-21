@@ -87,6 +87,7 @@ class GroupWatchViewModel @Inject constructor(
     val syncPlay: SyncPlayManager,
     val party: com.jellio.android.data.syncplay.PartyManager,
     private val api: JellyfinApi,
+    private val notifyController: com.jellio.android.data.notify.NotifyController,
 ) : ViewModel() {
     private val _notices = MutableStateFlow<List<GroupNotice>>(emptyList())
     val notices: StateFlow<List<GroupNotice>> = _notices.asStateFlow()
@@ -305,6 +306,7 @@ class GroupWatchViewModel @Inject constructor(
 
     suspend fun acceptInvite(invite: com.jellio.android.data.model.GroupWatchInviteDto) {
         _invites.update { list -> list.filterNot { it.Id == invite.Id } }
+        notifyController.onInviteHandled(startedForUserId, invite.Id)
         joinOrExplain(invite.GroupId)
     }
 
@@ -314,6 +316,7 @@ class GroupWatchViewModel @Inject constructor(
 
     fun dismissInvite(invite: com.jellio.android.data.model.GroupWatchInviteDto) {
         _invites.update { list -> list.filterNot { it.Id == invite.Id } }
+        notifyController.onInviteHandled(startedForUserId, invite.Id)
     }
 
     fun join(groupId: String) {

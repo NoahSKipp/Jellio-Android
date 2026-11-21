@@ -112,7 +112,10 @@ internal fun JellioRoot(
     Box(modifier = Modifier.fillMaxSize()) {
         when (val state = appViewModel.authState.collectAsState().value) {
             AuthState.Loading -> Box(Modifier.fillMaxSize()) {}
-            AuthState.LoggedOut -> LoginScreen(modifier = Modifier.fillMaxSize())
+            AuthState.LoggedOut -> {
+                LaunchedEffect(Unit) { appViewModel.notifyController.onSignedOut() }
+                LoginScreen(modifier = Modifier.fillMaxSize())
+            }
             is AuthState.LoggedIn -> AppBootGate(
                 session = state.session,
                 appViewModel = appViewModel,
@@ -262,6 +265,12 @@ private fun JellioApp(
     LaunchedEffect(appLifecycle) {
         appLifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) { seasonalEffectsViewModel.runWhileStarted() }
     }
+    // Phone notifications: keep the periodic check scheduled and look once
+    // each time the app comes to the foreground.
+    LaunchedEffect(appLifecycle, session.userId) {
+        appViewModel.notifyController.onSignedIn()
+        appLifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) { appViewModel.notifyController.onForeground() }
+    }
     val seasonalTheme by seasonalEffectsViewModel.activeTheme.collectAsState()
     val sidebarFocusRequester = remember { FocusRequester() }
     var sidebarHasRealFocus by remember { mutableStateOf(false) }
@@ -375,8 +384,17 @@ private fun JellioApp(
 
     val notifPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
-        onResult = {},
+        onResult = { granted -> if (granted) appViewModel.notifyController.checkNow() },
     )
+    // One prompt for phone notifications, once the first-run setup is out of the way.
+    LaunchedEffect(session.userId, showOnboarding) {
+        if (showOnboarding || com.jellio.android.ui.onboarding.OnboardingPrefs.shouldShowOnboarding(context, session.userId)) return@LaunchedEffect
+        delay(1_500)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU && appViewModel.notifyController.shouldPromptForPermission()) {
+            appViewModel.notifyController.markPermissionPrompted()
+            runCatching { notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+        }
+    }
     val needsMediaNotificationPermission = activeAudiobookId != null ||
         route is JellioRoute.Player ||
         route is JellioRoute.LivePlayer
@@ -401,6 +419,18 @@ private fun JellioApp(
                     push(JellioRoute.AudiobookPlayer(activeId))
                 }
             }
+            itemId == com.jellio.android.data.notify.TARGET_WATCHLIST -> switchTab(JellioRoute.Home())
+            itemId == com.jellio.android.data.notify.TARGET_FRIENDS ->
+                openQuickHub(if (friendsState.available) QuickHubTab.FRIENDS else QuickHubTab.NOTIFICATIONS)
+            itemId.startsWith(com.jellio.android.data.notify.TARGET_PROFILE_PREFIX) -> {
+                if (friendsState.available) {
+                    push(JellioRoute.Profile(itemId.removePrefix(com.jellio.android.data.notify.TARGET_PROFILE_PREFIX)))
+                } else {
+                    openQuickHub(QuickHubTab.NOTIFICATIONS)
+                }
+            }
+            itemId == com.jellio.android.data.notify.TARGET_GROUP_WATCH -> openQuickHub(QuickHubTab.GROUP_WATCH)
+            itemId.startsWith(com.jellio.android.data.notify.TARGET_PREFIX) -> openQuickHub(QuickHubTab.NOTIFICATIONS)
             itemId.startsWith("detail:") -> onNavigateToDetail(itemId.removePrefix("detail:"))
             else -> onPlayId(itemId, false)
         }

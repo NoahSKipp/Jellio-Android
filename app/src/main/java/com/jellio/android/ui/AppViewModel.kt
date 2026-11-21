@@ -37,6 +37,7 @@ class AppViewModel @Inject constructor(
     val booksRepository: com.jellio.android.data.books.BooksRepository,
     private val sessionGuard: com.jellio.android.data.session.SessionGuard,
     private val syncPlayManager: com.jellio.android.data.syncplay.SyncPlayManager,
+    val notifyController: com.jellio.android.data.notify.NotifyController,
 ) : ViewModel() {
     val authState: StateFlow<AuthState> = repository.sessionFlow
         .map { session -> if (session != null) AuthState.LoggedIn(session) else AuthState.LoggedOut }
