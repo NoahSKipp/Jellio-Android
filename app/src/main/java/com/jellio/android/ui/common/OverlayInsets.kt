@@ -24,3 +24,10 @@ fun Modifier.topOverlayInsets(): Modifier = windowInsetsPadding(
 fun Modifier.sideOverlayInsets(): Modifier = windowInsetsPadding(
     WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.End),
 )
+
+// A control placed at the top of scrolling content: only moves it below the
+// status bar and camera cutout, leaving the side insets to the caller.
+@Composable
+fun Modifier.topBarInsets(): Modifier = windowInsetsPadding(
+    WindowInsets.statusBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Top),
+)

@@ -1,29 +1,35 @@
 package com.jellio.android.ui.person
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -33,8 +39,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -49,15 +58,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -74,10 +87,13 @@ import com.jellio.android.data.model.RichPersonDetails
 import com.jellio.android.data.session.Session
 import com.jellio.android.ui.common.ErrorState
 import com.jellio.android.ui.common.NoOpBringIntoViewSpec
+import com.jellio.android.ui.common.readerHorizontalInsets
 import com.jellio.android.ui.common.rememberTvHorizontalBringIntoViewSpec
+import com.jellio.android.ui.common.topBarInsets
 import com.jellio.android.ui.home.RatingChip
 import com.jellio.android.ui.home.TmdbBadge
 import com.jellio.android.ui.i18n.Strings
+import com.jellio.android.ui.nav.LocalBottomBarPadding
 import com.jellio.android.ui.theme.JellioBg
 import com.jellio.android.ui.theme.JellioBgElevated
 import com.jellio.android.ui.theme.JellioText
@@ -116,6 +132,18 @@ private fun renderMarkdownBiography(raw: String): AnnotatedString {
     return builder.toAnnotatedString()
 }
 
+
+private const val NameWideSp = 34f
+private val FullSpan: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
+
+// Lets a full-bleed item (the hero) escape the grid's horizontal content padding.
+private fun Modifier.bleedHorizontal(amount: Dp): Modifier = layout { measurable, constraints ->
+    val bleed = amount.roundToPx()
+    val width = constraints.maxWidth + bleed * 2
+    val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+    layout(constraints.maxWidth, placeable.height) { placeable.place(-bleed, 0) }
+}
+
 @Composable
 fun PersonScreen(
     session: Session,
@@ -127,8 +155,9 @@ fun PersonScreen(
     viewModel: PersonViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
     val heroFocusRequester = remember { FocusRequester() }
+    val bottomBarPadding = LocalBottomBarPadding.current
 
     BackHandler(onBack = onBack)
 
@@ -138,7 +167,7 @@ fun PersonScreen(
 
     LaunchedEffect(uiState.details) {
         if (uiState.details != null) {
-            listState.scrollToItem(0)
+            gridState.scrollToItem(0)
             runCatching { heroFocusRequester.requestFocus() }
         }
     }
@@ -160,26 +189,52 @@ fun PersonScreen(
             }
             uiState.details != null -> {
                 val details = uiState.details!!
-                val horizontalPadding = 48.dp
-                val spacing = 16.dp
-                val availableWidth = maxWidth - (horizontalPadding * 2)
-                val columns = maxOf(1, ((availableWidth + spacing) / (160.dp + spacing)).toInt())
-                val chunkedCredits = remember(uiState.filmography, columns) { uiState.filmography.chunked(columns) }
+                val widthDp = maxWidth.value.toInt()
+                val compact = isCompactWidth(widthDp)
+                val horizontalPadding = if (compact) 16.dp else 48.dp
+                val gap = if (compact) 10.dp else 16.dp
+                val columns = creditGridColumns(widthDp, horizontalPadding.value.toInt(), gap.value.toInt())
+                val credits = uiState.filmography
+                var shown by remember(credits) { mutableIntStateOf(initialCreditCount(credits.size)) }
+                val hasKnownFor = details.knownFor.isNotEmpty()
+                val hasCredits = details.allCredits.isNotEmpty()
+                // Header, Known For, then the Filmography title and filter row.
+                val leadingItems = 1 + (if (hasKnownFor) 1 else 0) + (if (hasCredits) 2 else 0)
 
-                LazyColumn(
-                    state = listState,
+                LaunchedEffect(gridState, credits, leadingItems) {
+                    snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+                        .collect { last ->
+                            if (shouldLoadMoreCredits(last, leadingItems, shown, credits.size)) {
+                                shown = nextCreditCount(shown, credits.size)
+                            }
+                        }
+                }
+
+                val cardWidth = if (compact) 116.dp else 140.dp
+
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Fixed(columns),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                    verticalArrangement = Arrangement.spacedBy(gap + 2.dp),
+                    contentPadding = PaddingValues(
+                        start = horizontalPadding,
+                        end = horizontalPadding,
+                        bottom = 48.dp + bottomBarPadding,
+                    ),
                     modifier = Modifier
                         .fillMaxSize()
+                        .readerHorizontalInsets()
                         .focusRestorer(),
-                    contentPadding = PaddingValues(bottom = 64.dp),
                 ) {
-                    // 1. Hero Header Section
-                    item {
-                        Box {
+                    item(key = "person_header", span = FullSpan, contentType = "header") {
+                        Box(modifier = Modifier.bleedHorizontal(horizontalPadding)) {
                             CompositionLocalProvider(LocalBringIntoViewSpec provides NoOpBringIntoViewSpec) {
                                 PersonHeroHeader(
                                     details = details,
                                     fallbackImageUrl = imageUrl(details.id, null, "Primary", 400),
+                                    compact = compact,
+                                    horizontalPadding = horizontalPadding,
                                     onBack = onBack,
                                     backFocusRequester = heroFocusRequester,
                                 )
@@ -187,30 +242,22 @@ fun PersonScreen(
                         }
                     }
 
-                    // 2. Known For Section (Top 10 works)
-                    if (details.knownFor.isNotEmpty()) {
-                        item {
-                            Column(modifier = Modifier.padding(top = 28.dp)) {
-                                Text(
-                                    text = Strings.get("person_known_for"),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = JellioText,
-                                    modifier = Modifier.padding(start = 48.dp, bottom = 14.dp),
-                                )
-                                CompositionLocalProvider(
-                                    androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides rememberTvHorizontalBringIntoViewSpec(),
-                                ) {
+                    if (hasKnownFor) {
+                        item(key = "person_known_for", span = FullSpan, contentType = "known_for") {
+                            Column(modifier = Modifier.padding(top = 20.dp)) {
+                                SectionTitle(Strings.get("person_known_for"))
+                                CompositionLocalProvider(LocalBringIntoViewSpec provides rememberTvHorizontalBringIntoViewSpec()) {
                                     LazyRow(
-                                        contentPadding = PaddingValues(horizontal = 48.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                        modifier = Modifier.bleedHorizontal(horizontalPadding),
+                                        contentPadding = PaddingValues(horizontal = horizontalPadding),
+                                        horizontalArrangement = Arrangement.spacedBy(gap),
                                     ) {
                                         items(details.knownFor, key = { "known_" + it.id + "_" + it.department }) { credit ->
                                             PersonCreditCard(
                                                 credit = credit,
                                                 imageUrl = imageUrl,
                                                 onClick = { onItemClick(credit.id) },
-                                                modifier = Modifier.width(160.dp),
+                                                modifier = Modifier.width(cardWidth),
                                             )
                                         }
                                     }
@@ -219,54 +266,41 @@ fun PersonScreen(
                         }
                     }
 
-                    // 3. Filmography Heading & Department Filter Tabs
-                    if (details.allCredits.isNotEmpty()) {
-                        item {
-                            Column(modifier = Modifier.padding(top = 32.dp, bottom = 12.dp)) {
-                                Text(
-                                    text = Strings.get("tv_filmography"),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = JellioText,
-                                    modifier = Modifier.padding(start = 48.dp, bottom = 14.dp),
-                                )
-                                CompositionLocalProvider(
-                                    androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides rememberTvHorizontalBringIntoViewSpec(),
+                    if (hasCredits) {
+                        item(key = "person_filmography_title", span = FullSpan, contentType = "section_title") {
+                            SectionTitle(Strings.get("tv_filmography"), modifier = Modifier.padding(top = 12.dp))
+                        }
+                        item(key = "person_filmography_filters", span = FullSpan, contentType = "filters") {
+                            CompositionLocalProvider(LocalBringIntoViewSpec provides rememberTvHorizontalBringIntoViewSpec()) {
+                                LazyRow(
+                                    modifier = Modifier.bleedHorizontal(horizontalPadding),
+                                    contentPadding = PaddingValues(horizontal = horizontalPadding),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    LazyRow(
-                                        contentPadding = PaddingValues(horizontal = 48.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        items(details.departmentTabs, key = { it.key }) { tab ->
-                                            DepartmentTabPill(
-                                                tab = tab,
-                                                selected = uiState.selectedDepartment.equals(tab.key, ignoreCase = true),
-                                                onSelect = { viewModel.selectDepartment(tab.key) },
-                                            )
-                                        }
+                                    items(details.departmentTabs, key = { it.key }) { tab ->
+                                        DepartmentTabPill(
+                                            tab = tab,
+                                            selected = uiState.selectedDepartment.equals(tab.key, ignoreCase = true),
+                                            onSelect = { viewModel.selectDepartment(tab.key) },
+                                        )
                                     }
                                 }
                             }
                         }
 
-                        // 4. Filtered Filmography Cards in Rows
-                        items(chunkedCredits.size, key = { "row_" + uiState.selectedDepartment + "_$it" }) { rowIndex ->
-                            val rowCredits = chunkedCredits[rowIndex]
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 48.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            ) {
-                                for (credit in rowCredits) {
-                                    PersonCreditCard(
-                                        credit = credit,
-                                        imageUrl = imageUrl,
-                                        onClick = { onItemClick(credit.id) },
-                                        modifier = Modifier.width(160.dp),
-                                    )
-                                }
-                            }
+                        val department = uiState.selectedDepartment
+                        items(
+                            count = minOf(shown, credits.size),
+                            key = { index -> "credit_${department}_$index" },
+                            contentType = { "credit" },
+                        ) { index ->
+                            val credit = credits[index]
+                            PersonCreditCard(
+                                credit = credit,
+                                imageUrl = imageUrl,
+                                onClick = { onItemClick(credit.id) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         }
                     }
                 }
@@ -276,16 +310,34 @@ fun PersonScreen(
 }
 
 @Composable
+private fun SectionTitle(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = JellioText,
+        modifier = modifier
+            .padding(bottom = 10.dp)
+            .semantics { heading() },
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
 private fun PersonHeroHeader(
     details: RichPersonDetails,
     fallbackImageUrl: String,
+    compact: Boolean,
+    horizontalPadding: Dp,
     onBack: () -> Unit,
     backFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
-    var isBioExpanded by remember { mutableStateOf(false) }
-
-    Box(modifier = modifier.fillMaxWidth().heightIn(min = 380.dp.scaled())) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (compact) Modifier else Modifier.heightIn(min = 380.dp.scaled())),
+    ) {
         // The backdrop is someone else's title art, so it only sets the mood:
         // blurred and dimmed behind the text, a little clearer on the far right.
         if (!details.backdropUrl.isNullOrBlank()) {
@@ -328,163 +380,222 @@ private fun PersonHeroHeader(
                 ),
         )
 
-        // Top Back Button
-        Surface(
-            onClick = onBack,
-            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
-            colors = ClickableSurfaceDefaults.colors(
-                containerColor = Color.White.copy(alpha = 0.08f),
-                contentColor = JellioText,
-                focusedContainerColor = Color.White.copy(alpha = 0.22f),
-                focusedContentColor = Color.White,
-            ),
-            border = ClickableSurfaceDefaults.border(
-                focusedBorder = Border(BorderStroke(2.dp, Color.White)),
-            ),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
-            modifier = Modifier
-                .padding(start = 48.dp, top = 20.dp)
-                .focusRequester(backFocusRequester),
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = Strings.get("nav_back"),
-                    modifier = Modifier.size(15.dp),
-                )
-                Text(
-                    text = Strings.get("nav_back"),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
-
-        // Hero Content Row
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 48.dp, end = 48.dp, top = 64.dp, bottom = 20.dp),
-            verticalAlignment = Alignment.Bottom,
+                .topBarInsets()
+                .padding(horizontal = horizontalPadding)
+                .padding(top = if (compact) 8.dp else 20.dp, bottom = 20.dp),
         ) {
-            // High-resolution Portrait Photo
+            BackPill(onBack = onBack, focusRequester = backFocusRequester)
+
             val photoModel = details.profileUrl ?: fallbackImageUrl
-            Box(
-                modifier = Modifier
-                    .width(170.dp)
-                    .aspectRatio(2f / 3f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(JellioBgElevated)
-                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)), RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (photoModel.isNotBlank()) {
-                    AsyncImage(
-                        model = photoModel,
-                        contentDescription = details.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.Person,
-                        contentDescription = null,
-                        tint = JellioTextSecondary.copy(alpha = 0.4f),
-                        modifier = Modifier.size(64.dp),
-                    )
-                }
-            }
+            val photoWidth = if (compact) 120.dp else 170.dp
 
-            // Person Details & Metadata
-            Column(
-                modifier = Modifier
-                    .padding(start = 28.dp)
-                    .widthIn(max = 760.dp),
-            ) {
-                // Name
-                Text(
-                    text = details.name,
-                    style = MaterialTheme.typography.headlineLarge.copy(shadow = HeroTextShadow),
-                    fontWeight = FontWeight.Bold,
-                    color = JellioText,
-                )
-
-                // Stats / Chips Row
+            if (compact) {
                 Row(
-                    modifier = Modifier.padding(top = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 12.dp),
+                    verticalAlignment = Alignment.Bottom,
                 ) {
-                    // Department Badge
-                    MetadataBadge(text = details.knownForDepartment ?: "Acting", accent = true)
-
-                    // Born and Age Badge
-                    if (!details.birthday.isNullOrBlank()) {
-                        val ageText = if (details.age != null) " (${Strings.format("person_age", details.age)})" else ""
-                        MetadataBadge(text = "${Strings.get("person_born")} ${details.birthday}$ageText")
-                    }
-
-                    // Place of Birth Badge
-                    if (!details.placeOfBirth.isNullOrBlank()) {
-                        MetadataBadge(text = details.placeOfBirth)
-                    }
-
-                    // Total Credits Badge
-                    MetadataBadge(text = Strings.format("person_credits_count", details.totalCreditsCount))
-
-                    // IMDb Badge
-                    if (!details.imdbId.isNullOrBlank()) {
-                        ImdbBadge()
-                    }
-
-                    // TMDB Badge
-                    TmdbBadge(width = 28.dp, height = 12.dp)
-                }
-
-                // Biography Text & Read More Toggle
-                if (!details.biography.isNullOrBlank()) {
-                    val bioText = details.biography
-                    val annotatedBio = remember(bioText) { renderMarkdownBiography(bioText) }
-                    val isLong = bioText.length > 200
-
-                    Text(
-                        text = annotatedBio,
-                        color = JellioText.copy(alpha = 0.86f),
-                        style = MaterialTheme.typography.bodyMedium.copy(shadow = HeroTextShadow),
-                        maxLines = if (isBioExpanded) 20 else 3,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 10.dp),
+                    PersonPhoto(photoModel = photoModel, name = details.name, width = photoWidth)
+                    PersonName(
+                        name = details.name,
+                        baseSp = NameBaseSp,
+                        modifier = Modifier.weight(1f).padding(start = 16.dp),
                     )
-
-                    if (isLong) {
-                        Surface(
-                            onClick = { isBioExpanded = !isBioExpanded },
-                            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
-                            colors = ClickableSurfaceDefaults.colors(
-                                containerColor = Color.White.copy(alpha = 0.08f),
-                                contentColor = JellioTextSecondary,
-                                focusedContainerColor = Color.White.copy(alpha = 0.22f),
-                                focusedContentColor = Color.White,
-                            ),
-                            border = ClickableSurfaceDefaults.border(
-                                focusedBorder = Border(BorderStroke(2.dp, Color.White)),
-                            ),
-                            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
-                            modifier = Modifier.padding(top = 8.dp),
-                        ) {
-                            Text(
-                                text = Strings.get(if (isBioExpanded) "person_read_less" else "person_read_more"),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                            )
+                }
+                PersonChips(details = details, modifier = Modifier.padding(top = 14.dp))
+                if (!details.biography.isNullOrBlank()) {
+                    PersonBiography(text = details.biography, modifier = Modifier.padding(top = 12.dp))
+                }
+            } else {
+                Row(
+                    modifier = Modifier.padding(top = 20.dp),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    PersonPhoto(photoModel = photoModel, name = details.name, width = photoWidth)
+                    Column(
+                        modifier = Modifier
+                            .padding(start = 28.dp)
+                            .widthIn(max = 760.dp),
+                    ) {
+                        PersonName(name = details.name, baseSp = NameWideSp, modifier = Modifier.fillMaxWidth())
+                        PersonChips(details = details, modifier = Modifier.padding(top = 10.dp))
+                        if (!details.biography.isNullOrBlank()) {
+                            PersonBiography(text = details.biography, modifier = Modifier.padding(top = 10.dp))
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackPill(onBack: () -> Unit, focusRequester: FocusRequester) {
+    Surface(
+        onClick = onBack,
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.08f),
+            contentColor = JellioText,
+            focusedContainerColor = Color.White.copy(alpha = 0.22f),
+            focusedContentColor = Color.White,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(BorderStroke(2.dp, Color.White)),
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+        modifier = Modifier.focusRequester(focusRequester),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = Strings.get("nav_back"),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PersonPhoto(photoModel: String, name: String, width: Dp) {
+    Box(
+        modifier = Modifier
+            .width(width)
+            .aspectRatio(2f / 3f)
+            .clip(RoundedCornerShape(14.dp))
+            .background(JellioBgElevated)
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)), RoundedCornerShape(14.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (photoModel.isNotBlank()) {
+            AsyncImage(
+                model = photoModel,
+                contentDescription = name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null,
+                tint = JellioTextSecondary.copy(alpha = 0.4f),
+                modifier = Modifier.size(48.dp),
+            )
+        }
+    }
+}
+
+// Wraps between words only. A word that does not fit makes the text shrink
+// step by step instead of being split.
+@Composable
+private fun PersonName(name: String, baseSp: Float, modifier: Modifier = Modifier) {
+    BoxWithConstraints(modifier = modifier) {
+        val widthDp = maxWidth.value
+        var sizeSp by remember(name, widthDp, baseSp) {
+            mutableFloatStateOf(initialNameSize(name, widthDp, baseSp))
+        }
+        Text(
+            text = name,
+            color = JellioText,
+            fontWeight = FontWeight.Bold,
+            fontSize = sizeSp.sp,
+            lineHeight = (sizeSp * 1.18f).sp,
+            maxLines = NameMaxLines,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.headlineSmall.copy(shadow = HeroTextShadow),
+            onTextLayout = { result ->
+                val lineEnds = (0 until result.lineCount).map { result.getLineEnd(it) }
+                if (result.hasVisualOverflow || breaksMidWord(name, lineEnds)) {
+                    shrunkNameSize(sizeSp)?.let { sizeSp = it }
+                }
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PersonChips(details: RichPersonDetails, modifier: Modifier = Modifier) {
+    FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        MetadataBadge(text = details.knownForDepartment ?: "Acting", accent = true)
+
+        if (!details.birthday.isNullOrBlank()) {
+            val ageText = if (details.age != null) " (${Strings.format("person_age", details.age)})" else ""
+            MetadataBadge(text = "${Strings.get("person_born")} ${details.birthday}$ageText")
+        }
+
+        if (!details.placeOfBirth.isNullOrBlank()) {
+            MetadataBadge(text = details.placeOfBirth)
+        }
+
+        MetadataBadge(text = Strings.format("person_credits_count", details.totalCreditsCount))
+
+        if (!details.imdbId.isNullOrBlank()) {
+            ImdbBadge()
+        }
+
+        TmdbBadge(width = 28.dp, height = 12.dp)
+    }
+}
+
+// Collapsed to a few lines; the toggle only exists when the text is longer.
+@Composable
+private fun PersonBiography(text: String, modifier: Modifier = Modifier) {
+    val annotated = remember(text) { renderMarkdownBiography(text) }
+    var expanded by rememberSaveable(text) { mutableStateOf(false) }
+    var overflows by remember(text) { mutableStateOf(false) }
+
+    Column(modifier = modifier.fillMaxWidth().animateContentSize()) {
+        Text(
+            text = annotated,
+            color = JellioText.copy(alpha = 0.86f),
+            style = MaterialTheme.typography.bodyMedium.copy(shadow = HeroTextShadow),
+            maxLines = if (expanded) Int.MAX_VALUE else BioCollapsedLines,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { overflows = bioOverflowMemo(expanded, overflows, it.hasVisualOverflow) },
+            // Tapping the text is a touch shortcut; the button below is the accessible control.
+            modifier = Modifier.fillMaxWidth().pointerInput(overflows) {
+                detectTapGestures { if (overflows) expanded = !expanded }
+            },
+        )
+
+        if (overflows) {
+            Surface(
+                onClick = { expanded = !expanded },
+                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(999.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color.White.copy(alpha = 0.08f),
+                    contentColor = JellioTextSecondary,
+                    focusedContainerColor = Color.White.copy(alpha = 0.22f),
+                    focusedContentColor = Color.White,
+                ),
+                border = ClickableSurfaceDefaults.border(
+                    focusedBorder = Border(BorderStroke(2.dp, Color.White)),
+                ),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
+                modifier = Modifier.padding(top = 8.dp),
+            ) {
+                Text(
+                    text = Strings.get(if (expanded) "person_read_less" else "person_read_more"),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                )
             }
         }
     }
@@ -505,7 +616,7 @@ private fun MetadataBadge(text: String, accent: Boolean = false, modifier: Modif
             color = if (accent) Color.White else JellioText.copy(alpha = 0.85f),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (accent) FontWeight.Bold else FontWeight.Medium,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
     }
@@ -548,11 +659,13 @@ private fun DepartmentTabPill(
             border = if (selected) Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))) else Border.None,
             focusedBorder = Border(BorderStroke(2.dp, Color.White)),
         ),
-        modifier = modifier.onFocusChanged {
-            if (it.isFocused) {
-                onSelect()
-            }
-        },
+        modifier = modifier
+            .semantics { this.selected = selected }
+            .onFocusChanged {
+                if (it.isFocused) {
+                    onSelect()
+                }
+            },
     ) {
         Text(
             text = "${tab.label} (${tab.count})",
@@ -560,10 +673,12 @@ private fun DepartmentTabPill(
                 fontSize = 12.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             ),
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
         )
     }
 }
+
+private val CreditTitleLineHeight = 15.sp
 
 @Composable
 private fun PersonCreditCard(
@@ -573,11 +688,13 @@ private fun PersonCreditCard(
     modifier: Modifier = Modifier,
 ) {
     val imageModel = credit.posterUrl
-        ?: if (credit.inLibrary) imageUrl(credit.id, credit.baseItem.PrimaryImageTag, "Primary", 400) else null
+        ?: if (credit.inLibrary) imageUrl(credit.id, credit.baseItem.PrimaryImageTag, "Primary", 300) else null
+    // Two title lines are always reserved so cards in a row stay the same height.
+    val titleMinHeight = with(LocalDensity.current) { (CreditTitleLineHeight * 2).toDp() }
 
     Surface(
         onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = JellioBgElevated,
             contentColor = JellioText,
@@ -587,14 +704,13 @@ private fun PersonCreditCard(
         border = ClickableSurfaceDefaults.border(
             focusedBorder = Border(
                 border = BorderStroke(2.dp, Color.White),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
             ),
         ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
         modifier = modifier,
     ) {
         Column {
-            // Poster Artwork with Badges
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -604,46 +720,49 @@ private fun PersonCreditCard(
                 if (!imageModel.isNullOrBlank()) {
                     AsyncImage(
                         model = imageModel,
-                        contentDescription = credit.title,
+                        contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
 
-                // TMDB Rating Badge
                 if (credit.rating != null && credit.rating > 0.0) {
                     RatingChip(
                         rating = credit.rating,
+                        fontSize = 10.sp,
+                        badgeWidth = 20.dp,
+                        badgeHeight = 9.dp,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(6.dp),
+                            .padding(4.dp),
                     )
                 }
             }
 
-            // Title and Role Details
-            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
                 Text(
                     text = credit.title,
                     color = JellioText,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.sp,
+                    lineHeight = CreditTitleLineHeight,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.heightIn(min = titleMinHeight),
                 )
 
                 val yearStr = credit.year?.toString()
                 val roleStr = credit.role?.takeIf { it.isNotBlank() }
-                val subtitle = when {
-                    credit.department == "Acting" && roleStr != null && yearStr != null -> "$yearStr (as $roleStr)"
-                    roleStr != null && yearStr != null -> "$yearStr ($roleStr)"
+                val caption = when {
+                    roleStr != null && yearStr != null -> "$yearStr · $roleStr"
                     yearStr != null -> yearStr
                     roleStr != null -> roleStr
                     else -> credit.mediaType
                 }
 
                 Text(
-                    text = subtitle,
+                    text = caption,
                     color = JellioTextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
