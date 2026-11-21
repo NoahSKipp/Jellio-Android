@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
@@ -141,6 +143,7 @@ private enum class SettingsCategory(val labelKey: String, val icon: ImageVector)
     READER("settings_cat_reader", androidx.compose.material.icons.Icons.Filled.AutoStories),
     RECOMMENDATIONS("settings_cat_recommendations", Icons.Filled.AutoAwesome),
     ANISYNC("settings_cat_anisync", Icons.Filled.Sync),
+    NOTIFICATIONS("settings_cat_notifications", Icons.Filled.Notifications),
     DISPLAY("settings_cat_display", Icons.Filled.Palette),
     ABOUT("settings_cat_about", Icons.Filled.Info);
 
@@ -404,6 +407,9 @@ fun SettingsScreen(
                     }
                     SettingsCategory.ANISYNC -> {
                         AniSyncCategoryContent(viewModel = viewModel)
+                    }
+                    SettingsCategory.NOTIFICATIONS -> {
+                        NotificationsCategoryContent()
                     }
                     SettingsCategory.DISPLAY -> {
                         val displayContext = androidx.compose.ui.platform.LocalContext.current
@@ -1104,6 +1110,9 @@ fun SettingsScreen(
                 }
                 SettingsCategory.ANISYNC -> {
                     AniSyncCategoryContent(viewModel = viewModel)
+                }
+                SettingsCategory.NOTIFICATIONS -> {
+                    NotificationsCategoryContent()
                 }
                 SettingsCategory.DISPLAY -> {
                 val displayContext = androidx.compose.ui.platform.LocalContext.current
@@ -1968,6 +1977,79 @@ private fun SettingsToggleRow(label: String, description: String, checked: Boole
     SettingsRowSurface(onClick = onToggle) {
         SettingsRowText(label = label, description = description)
         SettingsSwitch(checked = checked)
+    }
+}
+
+@Composable
+private fun NotificationsCategoryContent(viewModel: NotificationSettingsViewModel = hiltViewModel()) {
+    val context = LocalContext.current
+    val settings by viewModel.settings.collectAsState()
+    var allowed by remember { mutableStateOf(viewModel.notificationsAllowed()) }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) allowed = viewModel.notificationsAllowed()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+        onResult = {
+            allowed = viewModel.notificationsAllowed()
+            if (allowed) viewModel.checkNow()
+        },
+    )
+    fun askPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU && !allowed) {
+            viewModel.markPermissionPrompted()
+            runCatching { permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+        }
+    }
+    SettingsSection(title = string("settings_cat_notifications"), icon = Icons.Filled.Notifications) {
+        SettingsToggleRow(
+            label = string("notif_master"),
+            description = string("notif_master_desc"),
+            checked = settings.master,
+            onToggle = {
+                if (settings.master) {
+                    viewModel.setMaster(false)
+                } else {
+                    viewModel.setMaster(true)
+                    askPermission()
+                }
+            },
+        )
+        if (settings.master && !allowed) {
+            Text(
+                text = string("notif_permission_hint"),
+                style = MaterialTheme.typography.bodySmall,
+                color = JellioDanger,
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
+            )
+            SettingsActionRow(
+                label = string("notif_allow"),
+                icon = Icons.Filled.Notifications,
+                onClick = { openSystemNotificationSettings(context) },
+            )
+        }
+        com.jellio.android.data.notify.NotifyCategory.entries.forEach { category ->
+            SettingsDivider()
+            val on = settings.categories[category] != false
+            SettingsToggleRow(
+                label = string(category.labelKey),
+                description = string(category.labelKey + "_desc"),
+                checked = on,
+                onToggle = { viewModel.setCategory(category, !on) },
+            )
+        }
+        SettingsDivider()
+        SettingsActionRow(
+            label = string("notif_open_system"),
+            description = string("notif_open_system_desc"),
+            icon = Icons.Filled.Settings,
+            onClick = { openSystemNotificationSettings(context) },
+        )
     }
 }
 
