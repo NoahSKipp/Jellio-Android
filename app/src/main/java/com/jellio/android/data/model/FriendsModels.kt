@@ -63,7 +63,17 @@ data class FriendMuteBody(val Muted: Boolean)
 data class FriendMuteResultDto(val Muted: Boolean = false)
 
 @JsonClass(generateAdapter = true)
-data class WatchlistFriendsBody(val ItemId: String, val UserIds: List<String>)
+data class WatchlistFriendsBody(
+    val ItemId: String? = null,
+    val UserIds: List<String>,
+    // A reading add (book, audiobook or manga) sends these instead of a movie or series id.
+    val Key: String? = null,
+    val Kind: String? = null,
+    val Title: String? = null,
+    val Author: String? = null,
+    val CoverUrl: String? = null,
+    val MangaId: Int? = null,
+)
 
 @JsonClass(generateAdapter = true)
 data class WatchlistFriendResultDto(val UserId: String = "", val Result: String = "")

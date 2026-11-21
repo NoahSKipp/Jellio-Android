@@ -1,5 +1,6 @@
 package com.jellio.android.data
 
+import com.jellio.android.data.books.ReadingTarget
 import com.jellio.android.data.model.AddedByResponseDto
 import com.jellio.android.data.model.BaseItemDto
 import com.jellio.android.data.model.CommunityWatcherDto
@@ -78,6 +79,22 @@ class FriendsRepository @Inject constructor(
 
     suspend fun addToWatchlists(itemId: String, userIds: List<String>): Result<List<WatchlistFriendResultDto>> =
         call { api.addToFriendWatchlists(WatchlistFriendsBody(itemId, userIds)).Results }
+
+    suspend fun addReadingToFriends(target: ReadingTarget, userIds: List<String>): Result<List<WatchlistFriendResultDto>> =
+        call {
+            api.addToFriendWatchlists(
+                WatchlistFriendsBody(
+                    ItemId = target.itemId,
+                    UserIds = userIds,
+                    Key = target.key,
+                    Kind = target.kind,
+                    Title = target.title,
+                    Author = target.author,
+                    CoverUrl = target.coverUrl,
+                    MangaId = target.mangaId,
+                ),
+            ).Results
+        }
 
     suspend fun settings(): Result<FriendsSettingsDto> = call {
         val profile = api.getProfileSettings()
