@@ -106,6 +106,14 @@ fun isBigRelease(version: String): Boolean {
 
 val CHANGELOG_RELEASES = listOf(
     ChangelogRelease(
+        version = "0.3.5",
+        title = "What's New in Jellio",
+        subtitle = "Version 0.3.5",
+        features = listOf(
+            ChangelogFeature(Icons.Filled.Tune, "Clearer Book Removal", "Removing a book from the library now tells you when only the library entry could be removed because the server could not delete its files."),
+        ),
+    ),
+    ChangelogRelease(
         version = "0.3.4",
         title = "What's New in Jellio",
         subtitle = "Version 0.3.4",
