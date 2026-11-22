@@ -1180,7 +1180,7 @@ class JellioRepository @Inject constructor(
 
     suspend fun resolveSeriesPlayTarget(seriesId: String, userId: String): SeriesPlayTarget? {
         val continueWatchingEp = catching {
-            getContinueWatching(userId).firstOrNull { it.SeriesId == seriesId && it.UserData?.Played != true }
+            getContinueWatching(userId).firstOrNull { it.SeriesId == seriesId && !isFinished(it) }
         }.getOrNull()
         val seriesNextUp = catching {
             getSeriesNextUp(seriesId, userId)
