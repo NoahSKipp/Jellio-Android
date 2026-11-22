@@ -358,6 +358,8 @@ data class BookRemoveRequest(
 @JsonClass(generateAdapter = true)
 data class BookRemoveResultDto(
     val Mode: String? = null,
+    val Deleted: Int = 0,
+    val LibraryOnly: Int = 0,
 )
 
 @JsonClass(generateAdapter = true)

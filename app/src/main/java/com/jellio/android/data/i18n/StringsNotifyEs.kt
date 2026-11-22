@@ -27,4 +27,5 @@ internal fun fillNotifyEs(m: HashMap<String, String>) {
     m["notif_allow"] = "Permitir notificaciones"
     m["update_install"] = "Instalar"
     m["update_install_ready"] = "Actualización lista para instalar"
+    m["reader_removed_files_kept"] = "{0} se quitó de la biblioteca, pero no se pudieron borrar sus archivos. Revisa los permisos del servidor en la carpeta de libros."
 }

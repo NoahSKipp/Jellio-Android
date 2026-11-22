@@ -27,4 +27,5 @@ internal fun fillNotifyPt(m: HashMap<String, String>) {
     m["notif_allow"] = "Permitir notificações"
     m["update_install"] = "Instalar"
     m["update_install_ready"] = "Atualização pronta para instalar"
+    m["reader_removed_files_kept"] = "{0} foi removido da biblioteca, mas os arquivos não puderam ser apagados. Verifique as permissões do servidor na pasta dos livros."
 }

@@ -27,4 +27,5 @@ internal fun fillNotifyIt(m: HashMap<String, String>) {
     m["notif_allow"] = "Consenti le notifiche"
     m["update_install"] = "Installa"
     m["update_install_ready"] = "Aggiornamento pronto da installare"
+    m["reader_removed_files_kept"] = "{0} è stato rimosso dalla libreria, ma non è stato possibile eliminare i file. Controlla i permessi del server sulla cartella dei libri."
 }

@@ -27,4 +27,5 @@ internal fun fillNotifyPl(m: HashMap<String, String>) {
     m["notif_allow"] = "Zezwól na powiadomienia"
     m["update_install"] = "Zainstaluj"
     m["update_install_ready"] = "Aktualizacja gotowa do instalacji"
+    m["reader_removed_files_kept"] = "{0} usunięto z biblioteki, ale nie udało się usunąć jego plików. Sprawdź uprawnienia serwera do folderu z książkami."
 }

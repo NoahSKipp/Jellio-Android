@@ -27,4 +27,5 @@ internal fun fillNotifyDe(m: HashMap<String, String>) {
     m["notif_allow"] = "Benachrichtigungen erlauben"
     m["update_install"] = "Installieren"
     m["update_install_ready"] = "Update bereit zur Installation"
+    m["reader_removed_files_kept"] = "{0} wurde aus der Bibliothek entfernt, aber die Dateien konnten nicht gelöscht werden. Prüfe die Berechtigungen des Servers für den Buchordner."
 }

@@ -27,4 +27,5 @@ internal fun fillNotifyFr(m: HashMap<String, String>) {
     m["notif_allow"] = "Autoriser les notifications"
     m["update_install"] = "Installer"
     m["update_install_ready"] = "Mise à jour prête à installer"
+    m["reader_removed_files_kept"] = "{0} a été retiré de la bibliothèque, mais ses fichiers n'ont pas pu être supprimés. Vérifie les droits du serveur sur le dossier des livres."
 }

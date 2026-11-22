@@ -27,4 +27,5 @@ internal fun fillNotifyEn(m: HashMap<String, String>) {
     m["notif_allow"] = "Allow notifications"
     m["update_install"] = "Install"
     m["update_install_ready"] = "Update ready to install"
+    m["reader_removed_files_kept"] = "Removed {0} from the library, but its files could not be deleted. Check the server's permissions on the book folder."
 }

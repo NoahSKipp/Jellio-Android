@@ -915,6 +915,8 @@ class BookshelfViewModel @Inject constructor(
                                     continueListening = state.continueListening.filterNot { BooksRepository.normalizeId(it.itemId) == norm },
                                     statusMessage = if (result.Mode == "personal") {
                                         Strings.get("reader_removed_personal")
+                                    } else if (result.LibraryOnly > 0) {
+                                        Strings.format("reader_removed_files_kept", target.title)
                                     } else {
                                         Strings.format("reader_removed_server", target.title)
                                     },
