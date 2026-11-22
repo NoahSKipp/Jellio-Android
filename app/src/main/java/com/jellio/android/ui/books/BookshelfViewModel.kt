@@ -13,6 +13,7 @@ import com.jellio.android.data.books.CachedContinueCard
 import com.jellio.android.data.books.ShelfSnapshot
 import com.jellio.android.data.books.sameReadingTitle
 import com.jellio.android.data.books.ShelfSnapshotStore
+import com.jellio.android.data.books.hiddenBookIds
 import com.jellio.android.data.books.isLocallyDismissedManga
 import com.jellio.android.data.books.isMangaContinueDismissed
 import com.jellio.android.data.books.mangaDismissalMarker
@@ -1896,9 +1897,12 @@ class BookshelfViewModel @Inject constructor(
                 BooksRepository.normalizeId(it.removePrefix("i:").removePrefix("s:"))
             }?.toSet()
         }
+        val hidden = hiddenBookIds(shelf?.LibraryRemoved.orEmpty())
         val q = state.searchQuery.trim().lowercase()
         val filtered = items.filter { item ->
             val norm = BooksRepository.normalizeId(item.Id)
+            // Taken off this reader's shelf (others still have the book).
+            if (norm in hidden) return@filter false
             if (catIds != null && norm !in catIds) return@filter false
             if (q.isNotEmpty()) {
                 val info = state.shelfInfoById[norm]
