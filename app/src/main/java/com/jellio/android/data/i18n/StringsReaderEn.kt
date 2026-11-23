@@ -30,6 +30,8 @@ internal fun fillReaderEn(m: HashMap<String, String>) {
     m["reading_toast_error"] = "Could not update your reading list. Try again."
     m["reading_toast_full"] = "Your reading list is full"
     m["reading_not_in_library"] = "{0} isn't in your library yet"
+    m["reading_series_opening"] = "Opening {0}..."
+    m["reading_series_not_found"] = "Couldn't find {0} in your sources"
     m["reading_menu_add_to_friend"] = "Add to a friend's reading list"
     m["reading_picker_title"] = "Add to a friend's reading list"
     m["reading_result_added"] = "Added to their reading list"

@@ -30,6 +30,8 @@ internal fun fillReaderDe(m: HashMap<String, String>) {
     m["reading_toast_error"] = "Deine Leseliste konnte nicht aktualisiert werden. Versuche es erneut."
     m["reading_toast_full"] = "Deine Leseliste ist voll"
     m["reading_not_in_library"] = "{0} ist noch nicht in deiner Bibliothek"
+    m["reading_series_opening"] = "{0} wird geöffnet..."
+    m["reading_series_not_found"] = "{0} wurde in deinen Quellen nicht gefunden"
     m["reading_menu_add_to_friend"] = "Auf die Leseliste eines Freundes setzen"
     m["reading_picker_title"] = "Auf die Leseliste eines Freundes setzen"
     m["reading_result_added"] = "Auf die Leseliste gesetzt"

@@ -200,8 +200,14 @@ fun BookshelfScreen(
             is ReadingOpen.Work -> scope.launch {
                 val found = viewModel.findInLibrary(open.title, open.kind)
                 when {
-                    found == null ->
-                        Toast.makeText(context, Strings.format("reading_not_in_library", open.title), Toast.LENGTH_SHORT).show()
+                    found == null -> viewModel.openDiscoverFor(
+                        open.title,
+                        when (open.kind) {
+                            READING_KIND_AUDIOBOOK -> BookshelfTab.AUDIOBOOK
+                            READING_KIND_MANGA -> BookshelfTab.MANGA
+                            else -> BookshelfTab.EBOOK
+                        },
+                    )
                     found.Type.equals("AudioBook", ignoreCase = true) -> onOpenAudiobook(found.Id)
                     else -> onOpenReader(found.Id, if (BooksRepository.isComicOrManga(found)) "manga" else "book", null, null)
                 }

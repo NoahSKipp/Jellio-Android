@@ -28,6 +28,7 @@ import com.jellio.android.data.books.chaptersToDownload
 import com.jellio.android.data.books.legacyFilter
 import com.jellio.android.data.books.pageFromLocator
 import com.jellio.android.data.books.passesTriState
+import com.jellio.android.data.books.pickSourceMatch
 import com.jellio.android.data.books.triStateOf
 import com.jellio.android.data.books.MangaSearchResponseDto
 import com.jellio.android.data.books.MangaSeriesSummaryDto
@@ -268,6 +269,7 @@ class BookshelfViewModel @Inject constructor(
     private var librariesJob: Deferred<List<BaseItemDto>>? = null
     private val rawItemsCache = HashMap<String, Pair<Long, Deferred<List<BaseItemDto>>>>()
     private var discoverJob: Job? = null
+    private var sourceOpenJob: Job? = null
 
     // A reading list entry or notification asked for this series (key, title)
     // before the Manga shelf had it.
@@ -538,7 +540,7 @@ class BookshelfViewModel @Inject constructor(
                 continueLoadedTabs = state.continueLoadedTabs + tab,
             )
         }
-        if (tab == BookshelfTab.MANGA && !resolvePendingSeries()) reportMissingSeries()
+        if (tab == BookshelfTab.MANGA && !resolvePendingSeries()) openPendingSeriesFromSources()
         if (failed == null && _uiState.value.libraries.isNotEmpty() && tab in _uiState.value.loadedTabs) saveSnapshot(tab, uid)
     }
 
@@ -1048,11 +1050,12 @@ class BookshelfViewModel @Inject constructor(
 
     // --- Manga Series Detail & Chapter Controls ---
 
-    fun openMangaSeries(series: MangaSeriesDisplayItem) {
+    // [onShelf] is false for a series opened from its source that the reader has not added.
+    fun openMangaSeries(series: MangaSeriesDisplayItem, onShelf: Boolean = true) {
         val shelf = _uiState.value.shelfByKind[BookshelfTab.MANGA.kind] ?: ShelfDto()
         val seriesPrefKey = if (series.key.startsWith("s:")) series.key else "s:${series.key}"
         val prefs = shelf.Series[seriesPrefKey] ?: shelf.Series[series.key] ?: shelf.SeriesDefaults ?: SeriesPrefsDto()
-        val inLibrary = seriesPrefKey !in shelf.LibraryRemoved && series.key !in shelf.LibraryRemoved
+        val inLibrary = onShelf && seriesPrefKey !in shelf.LibraryRemoved && series.key !in shelf.LibraryRemoved
 
         _uiState.update {
             it.copy(
@@ -1111,7 +1114,7 @@ class BookshelfViewModel @Inject constructor(
         val loaded = BookshelfTab.MANGA in _uiState.value.loadedTabs
         loadTab(BookshelfTab.MANGA, force = false)
         // A fresh shelf that does not have it will not be loaded again.
-        if (loaded && tabJobs[BookshelfTab.MANGA]?.isActive != true) reportMissingSeries()
+        if (loaded && tabJobs[BookshelfTab.MANGA]?.isActive != true) openPendingSeriesFromSources()
     }
 
     private fun resolvePendingSeries(): Boolean {
@@ -1122,10 +1125,82 @@ class BookshelfViewModel @Inject constructor(
         return true
     }
 
-    private fun reportMissingSeries() {
-        val (key, title) = pendingSeries ?: return
+    // A series that is not on the reader's shelf (a reading list entry from Discover
+    // or a friend) opens from its source with "In library" off, as Discover's Read does.
+    private fun openPendingSeriesFromSources() {
+        val (key, rawTitle) = pendingSeries ?: return
         pendingSeries = null
-        tell(Strings.format("reading_not_in_library", title.ifBlank { key }))
+        val title = rawTitle.ifBlank { key }
+        sourceOpenJob?.cancel()
+        sourceOpenJob = viewModelScope.launch {
+            tell(Strings.format("reading_series_opening", title))
+            val series = findSeriesInSources(key, title)
+            if (series == null) {
+                tell(Strings.format("reading_series_not_found", title))
+            } else {
+                openMangaSeries(series, onShelf = false)
+            }
+        }
+    }
+
+    private suspend fun findSeriesInSources(key: String, title: String): MangaSeriesDisplayItem? {
+        val wantedKey = BooksRepository.mangaSeriesKey(title).ifBlank { key }
+        val known = (booksRepository.findMangaStreamByKey(key) ?: booksRepository.findMangaStreamByKey(wantedKey))
+            ?.takeIf { it.MangaId > 0 }
+        if (known != null) {
+            val shownTitle = known.Title.ifBlank { title }
+            return sourceSeries(known.Key.ifBlank { wantedKey }, shownTitle, known.MangaId, null, null)
+        }
+        val response = booksRepository.searchManga(title).getOrNull() ?: return null
+        val hit = pickSourceMatch(
+            candidates = response.Sources
+                .sortedByDescending { source -> source.Results.firstOrNull()?.Match ?: 0.0 }
+                .flatMap { it.Results },
+            wantedKey = wantedKey,
+            keyOf = { BooksRepository.mangaSeriesKey(it.Title) },
+            inLibraryOf = { it.InLibrary },
+        ) ?: return null
+        // Adds it to the server so it can be read; the reader's shelf is left alone.
+        val requested = booksRepository.requestManga(hit.MangaId, hit.Title, addToLibrary = false).getOrNull() ?: return null
+        val status = requested.Status.lowercase()
+        if (status.isNotEmpty() && status !in OPENABLE_REQUEST_STATUSES) return null
+        val id = booksRepository.findMangaStreamByKey(wantedKey)?.MangaId?.takeIf { it > 0 } ?: hit.MangaId
+        return sourceSeries(wantedKey, hit.Title, id, hit.Author, hit.Status)
+    }
+
+    private suspend fun sourceSeries(key: String, title: String, mangaId: Int, author: String?, status: String?) =
+        MangaSeriesDisplayItem(
+            key = key,
+            title = title,
+            author = author,
+            status = status,
+            coverUrl = booksRepository.mangaStreamCoverUrl(mangaId, title),
+            mangaId = mangaId,
+            chapterCount = 0,
+            downloadedCount = 0,
+            readCount = 0,
+            latestUpload = 0L,
+            lastReadAt = null,
+            resumeChapterId = null,
+            resumeStreamChapterId = null,
+            firstChapterId = null,
+        )
+
+    // The Discover sheet on a title, for a book or audiobook that is not in the library:
+    // its results carry the request button.
+    fun openDiscoverFor(title: String, tab: BookshelfTab) {
+        discoverJob?.cancel()
+        discoverSearchDebounceJob?.cancel()
+        _uiState.update {
+            it.copy(
+                showDiscoverSheet = true,
+                discoverMediaTab = tab,
+                discoverQuery = title,
+                bookSearchResults = emptyList(),
+                mangaSearchResponse = null,
+            )
+        }
+        runDiscoverSearch()
     }
 
     // A book or audiobook of the library with this title, for a reading list
@@ -1320,6 +1395,20 @@ class BookshelfViewModel @Inject constructor(
         _uiState.update { it.copy(seriesDetail = detail.copy(inLibrary = next)) }
         viewModelScope.launch {
             booksRepository.setMangaInLibrary(series.key, next)
+                .onSuccess {
+                    runCatching { booksRepository.getShelf(BookshelfTab.MANGA.kind) }.getOrNull()?.let { shelf ->
+                        _uiState.update { it.copy(shelfByKind = it.shelfByKind + (BookshelfTab.MANGA.kind to shelf)) }
+                    }
+                    // Adding puts the series on the shelf the reader sees behind this page.
+                    if (next) loadTab(BookshelfTab.MANGA, force = true)
+                }
+                .onFailure {
+                    _uiState.update { state ->
+                        val current = state.seriesDetail ?: return@update state
+                        state.copy(seriesDetail = current.copy(inLibrary = !next))
+                    }
+                    tell(Strings.get("reader_update_failed"))
+                }
         }
     }
 
@@ -1885,7 +1974,8 @@ class BookshelfViewModel @Inject constructor(
                     firstChapterId = null,
                 )
                 _uiState.update { it.copy(showDiscoverSheet = false, isDiscoverLoading = false) }
-                openMangaSeries(series)
+                val onShelf = _uiState.value.mangaSeries.any { it.key.removePrefix("s:") == series.key.removePrefix("s:") }
+                openMangaSeries(series, onShelf = onShelf)
                 return@launch
             }
 
@@ -2031,6 +2121,7 @@ class BookshelfViewModel @Inject constructor(
     companion object {
         private const val RAW_ITEMS_TTL_MS = 60_000L
         private const val TAB_FRESH_MS = 60_000L
+        private val OPENABLE_REQUEST_STATUSES = setOf("ok", "added", "exists", "duplicate", "queued")
 
         fun mangaDiscoverCoverKey(id: Int): String = "md:$id"
         fun mangaSearchCoverKey(mangaId: Int): String = "ms:$mangaId"

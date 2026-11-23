@@ -30,6 +30,8 @@ internal fun fillReaderPl(m: HashMap<String, String>) {
     m["reading_toast_error"] = "Nie udało się zaktualizować Twojej listy do czytania. Spróbuj ponownie."
     m["reading_toast_full"] = "Twoja lista do czytania jest pełna"
     m["reading_not_in_library"] = "{0} nie ma jeszcze w Twojej bibliotece"
+    m["reading_series_opening"] = "Otwieranie: {0}..."
+    m["reading_series_not_found"] = "Nie znaleziono {0} w Twoich źródłach"
     m["reading_menu_add_to_friend"] = "Dodaj do listy do czytania znajomego"
     m["reading_picker_title"] = "Dodaj do listy do czytania znajomego"
     m["reading_result_added"] = "Dodano do jego listy do czytania"

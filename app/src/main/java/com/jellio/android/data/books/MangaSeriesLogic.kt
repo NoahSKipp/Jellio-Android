@@ -172,3 +172,17 @@ fun bookResumeKind(progress: Double, finished: Boolean): ResumeKind = when {
     progress > 0.0 -> ResumeKind.RESUME
     else -> ResumeKind.START
 }
+
+// The result to open for a reading list entry that no library holds: one whose
+// title is the wanted one (same key), the copy already in Suwayomi first. A close
+// but different title is not opened by guess. [candidates] come best source first.
+fun <T> pickSourceMatch(
+    candidates: List<T>,
+    wantedKey: String,
+    keyOf: (T) -> String,
+    inLibraryOf: (T) -> Boolean,
+): T? {
+    if (wantedKey.isBlank()) return null
+    val exact = candidates.filter { keyOf(it) == wantedKey }
+    return exact.firstOrNull(inLibraryOf) ?: exact.firstOrNull()
+}
