@@ -106,6 +106,15 @@ fun isBigRelease(version: String): Boolean {
 
 val CHANGELOG_RELEASES = listOf(
     ChangelogRelease(
+        version = "0.4.0",
+        title = "What's New in Jellio",
+        subtitle = "Version 0.4.0",
+        features = listOf(
+            ChangelogFeature(Icons.Filled.AutoAwesome, "A New Manga Page", "The manga page now follows Mihon: a blurred cover banner with author, artist, status and source, a sticky top bar, a Resume button that shrinks while you scroll, a Download menu (next chapters, unread, bookmarked, all) and one Filter, Sort and Display sheet. Books and audiobooks get a matching Details page from their long-press menu. Needs plugin 1.114.0 for the artist, genres and description."),
+            ChangelogFeature(Icons.Filled.Sync, "Home Stays Current", "Continue Watching and Next Up refresh when you return to the app and every minute while Home is open, newest first, so what you watched or removed on the web shows up without a restart."),
+        ),
+    ),
+    ChangelogRelease(
         version = "0.3.8",
         title = "What's New in Jellio",
         subtitle = "Version 0.3.8",
