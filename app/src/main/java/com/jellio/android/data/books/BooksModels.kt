@@ -419,6 +419,10 @@ data class MangaStreamSeriesDto(
     val Chapters: List<MangaStreamChapterDto> = emptyList(),
     val Source: String? = null,
     val SourceName: String? = null,
+    // Newer plugins send these; an older one leaves them out.
+    val Artist: String? = null,
+    val Description: String? = null,
+    val Genres: List<String>? = null,
 )
 
 @JsonClass(generateAdapter = true)

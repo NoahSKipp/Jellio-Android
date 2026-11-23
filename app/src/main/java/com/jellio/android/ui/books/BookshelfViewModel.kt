@@ -19,7 +19,16 @@ import com.jellio.android.data.books.isMangaContinueDismissed
 import com.jellio.android.data.books.mangaDismissalMarker
 import com.jellio.android.data.books.mangaShelfKey
 import com.jellio.android.data.books.InProgressReadingDto
+import com.jellio.android.data.books.ChapterFacts
 import com.jellio.android.data.books.MangaDiscoverDto
+import com.jellio.android.data.books.MangaDownloadChoice
+import com.jellio.android.data.books.TriState
+import com.jellio.android.data.books.chapterSortKey
+import com.jellio.android.data.books.chaptersToDownload
+import com.jellio.android.data.books.legacyFilter
+import com.jellio.android.data.books.pageFromLocator
+import com.jellio.android.data.books.passesTriState
+import com.jellio.android.data.books.triStateOf
 import com.jellio.android.data.books.MangaSearchResponseDto
 import com.jellio.android.data.books.MangaSeriesSummaryDto
 import com.jellio.android.data.books.MangaStatusDto
@@ -121,25 +130,54 @@ data class MangaChapterRowItem(
     val scanlator: String?,
     val pageCount: Int,
     val uploadDate: Long,
-    val isDownloaded: Boolean,
+    // Downloaded on the server; the device copy is downloadStatus.
+    val serverDownloaded: Boolean,
+    val downloadStatus: String?,
+    val downloadProgress: Float,
     val isRead: Boolean,
     val isBookmarked: Boolean,
     val progress: Double,
+    // Where reading stopped in a chapter that is under way, counted from 1.
+    val page: Int?,
     val streamChapterId: Int?,
     val mangaId: Int?,
     val sourceOrder: Int,
     val baseItem: BaseItemDto? = null,
-)
+) {
+    val isDownloaded: Boolean get() = serverDownloaded || downloadStatus == OfflineDownloadItem.STATUS_COMPLETED
+    val isDownloading: Boolean
+        get() = downloadStatus == OfflineDownloadItem.STATUS_QUEUED ||
+            downloadStatus == OfflineDownloadItem.STATUS_DOWNLOADING ||
+            downloadStatus == OfflineDownloadItem.STATUS_PAUSED
+    val inProgress: Boolean get() = !isRead && progress > 0.0
+}
 
 data class MangaSeriesDetailState(
     val isLoading: Boolean = false,
     val seriesItem: MangaSeriesDisplayItem? = null,
     val streamSeries: MangaStreamSeriesDto? = null,
+    // What the list shows: filtered and sorted by the series settings.
     val chapters: List<MangaChapterRowItem> = emptyList(),
+    // Every chapter the series counts (excluded scanlators and duplicates left out),
+    // for the resume point and the download choices.
+    val allChapters: List<MangaChapterRowItem> = emptyList(),
     val availableScanlators: List<String> = emptyList(),
     val prefs: SeriesPrefsDto = SeriesPrefsDto(),
     val inLibrary: Boolean = true,
     val error: String? = null,
+)
+
+// A change to the series' chapter settings; null leaves a setting as it is and an
+// empty string clears a filter or sort.
+data class SeriesPrefsChange(
+    val excludedScanlators: List<String>? = null,
+    val duplicatesAsOne: Boolean? = null,
+    val filterDownloaded: String? = null,
+    val filterUnread: String? = null,
+    val filterBookmarked: String? = null,
+    val chapterSort: String? = null,
+    val chapterDescending: Boolean? = null,
+    val chapterDisplay: String? = null,
 )
 
 data class BookshelfUiState(
@@ -243,6 +281,7 @@ class BookshelfViewModel @Inject constructor(
             offlineDownloads.downloads.collect { list ->
                 val mapped = list.associateBy { BooksRepository.normalizeId(it.id) }
                 _uiState.update { it.copy(downloadsById = mapped) }
+                if (_uiState.value.seriesDetail != null) rebuildSeriesRows()
             }
         }
     }
@@ -1038,9 +1077,8 @@ class BookshelfViewModel @Inject constructor(
                                 seriesDetail = current.copy(
                                     isLoading = false,
                                     streamSeries = streamSeries,
-                                    chapters = applyChapterFiltersAndSort(rows, current.prefs),
                                     availableScanlators = scanlators,
-                                ),
+                                ).withRows(rows),
                             )
                         }
                     }
@@ -1051,9 +1089,8 @@ class BookshelfViewModel @Inject constructor(
                             state.copy(
                                 seriesDetail = current.copy(
                                     isLoading = false,
-                                    chapters = applyChapterFiltersAndSort(rows, current.prefs),
                                     error = if (rows.isEmpty()) (err.message ?: "Failed to load chapters") else null,
-                                ),
+                                ).withRows(rows),
                             )
                         }
                     }
@@ -1062,12 +1099,7 @@ class BookshelfViewModel @Inject constructor(
             val rows = buildChapterRows(emptyList(), series.localChapters, null, shelf)
             _uiState.update { state ->
                 val current = state.seriesDetail ?: return@update state
-                state.copy(
-                    seriesDetail = current.copy(
-                        isLoading = false,
-                        chapters = applyChapterFiltersAndSort(rows, current.prefs),
-                    ),
-                )
+                state.copy(seriesDetail = current.copy(isLoading = false).withRows(rows))
             }
         }
     }
@@ -1125,8 +1157,9 @@ class BookshelfViewModel @Inject constructor(
         if (streamChapters.isNotEmpty()) {
             return streamChapters.map { ch ->
                 val normId = BooksRepository.normalizeId(ch.Id)
-                val prog = progressMap[normId]?.Progress ?: 0.0
-                val isDl = ch.IsDownloaded || downloads[normId]?.status == OfflineDownloadItem.STATUS_COMPLETED
+                val saved = progressMap[normId]
+                val prog = saved?.Progress ?: 0.0
+                val isRead = prog >= 0.95
                 MangaChapterRowItem(
                     id = ch.Id,
                     title = ch.Name.ifBlank { "Chapter ${ch.Number}" },
@@ -1134,10 +1167,13 @@ class BookshelfViewModel @Inject constructor(
                     scanlator = ch.Scanlator,
                     pageCount = ch.PageCount,
                     uploadDate = ch.UploadDate,
-                    isDownloaded = isDl,
-                    isRead = prog >= 0.95,
+                    serverDownloaded = ch.IsDownloaded,
+                    downloadStatus = downloads[normId]?.status,
+                    downloadProgress = downloads[normId]?.progress ?: 0f,
+                    isRead = isRead,
                     isBookmarked = normId in bookmarks,
                     progress = prog,
+                    page = if (!isRead && prog > 0.0) pageFromLocator(saved?.Locator) else null,
                     streamChapterId = ch.ChapterId,
                     mangaId = ch.MangaId,
                     sourceOrder = ch.SourceOrder,
@@ -1147,8 +1183,9 @@ class BookshelfViewModel @Inject constructor(
 
         return localChapters.mapIndexed { idx, item ->
             val normId = BooksRepository.normalizeId(item.Id)
-            val prog = progressMap[normId]?.Progress ?: 0.0
-            val isDl = downloads[normId]?.status == OfflineDownloadItem.STATUS_COMPLETED
+            val saved = progressMap[normId]
+            val prog = saved?.Progress ?: 0.0
+            val isRead = prog >= 0.95 || item.UserData?.Played == true
             MangaChapterRowItem(
                 id = item.Id,
                 title = item.Name.orEmpty().ifBlank { "Chapter ${item.IndexNumber ?: (idx + 1)}" },
@@ -1156,10 +1193,13 @@ class BookshelfViewModel @Inject constructor(
                 scanlator = null,
                 pageCount = 0,
                 uploadDate = 0L,
-                isDownloaded = isDl,
-                isRead = prog >= 0.95 || item.UserData?.Played == true,
+                serverDownloaded = false,
+                downloadStatus = downloads[normId]?.status,
+                downloadProgress = downloads[normId]?.progress ?: 0f,
+                isRead = isRead,
                 isBookmarked = normId in bookmarks,
                 progress = prog,
+                page = if (!isRead && prog > 0.0) pageFromLocator(saved?.Locator) else null,
                 streamChapterId = null,
                 mangaId = mangaId,
                 sourceOrder = idx,
@@ -1168,27 +1208,45 @@ class BookshelfViewModel @Inject constructor(
         }
     }
 
-    private fun applyChapterFiltersAndSort(
-        allRows: List<MangaChapterRowItem>,
-        prefs: SeriesPrefsDto,
-    ): List<MangaChapterRowItem> {
+    private fun MangaSeriesDetailState.withRows(raw: List<MangaChapterRowItem>): MangaSeriesDetailState =
+        copy(chapters = visibleChapters(raw, prefs), allChapters = baseChapters(raw, prefs))
+
+    // The rows again from the current progress, bookmarks and downloads.
+    private fun rebuildSeriesRows() {
+        val detail = _uiState.value.seriesDetail ?: return
+        val series = detail.seriesItem ?: return
+        if (detail.isLoading) return
+        val shelf = _uiState.value.shelfByKind[BookshelfTab.MANGA.kind] ?: ShelfDto()
+        val rows = buildChapterRows(detail.streamSeries?.Chapters.orEmpty(), series.localChapters, series.mangaId, shelf)
+        _uiState.update { state ->
+            val current = state.seriesDetail ?: return@update state
+            state.copy(seriesDetail = current.withRows(rows))
+        }
+    }
+
+    // Chapters without the excluded scanlators, one per number when duplicates count as one.
+    private fun baseChapters(allRows: List<MangaChapterRowItem>, prefs: SeriesPrefsDto): List<MangaChapterRowItem> {
         val excluded = prefs.ExcludedScanlators.orEmpty().toSet()
+        val kept = allRows.filter { row -> row.scanlator == null || row.scanlator !in excluded }
+        val ordered = kept.sortedWith(compareBy<MangaChapterRowItem> { if (it.number < 0f) Float.MAX_VALUE else it.number }.thenBy { it.sourceOrder })
+        if (prefs.DuplicatesAsOne != true) return ordered
+        val seen = HashSet<Float>()
+        return ordered.filter { seen.add(it.number) }
+    }
+
+    private fun visibleChapters(allRows: List<MangaChapterRowItem>, prefs: SeriesPrefsDto): List<MangaChapterRowItem> {
+        val excluded = prefs.ExcludedScanlators.orEmpty().toSet()
+        val downloaded = triStateOf(prefs.FilterDownloaded)
+        val unread = triStateOf(prefs.FilterUnread).takeIf { it != TriState.OFF }
+            ?: legacyFilter(prefs.ChapterFilter, prefs.FilterUnread, prefs.FilterBookmarked, prefs.FilterDownloaded, "unread")
+        val bookmarked = triStateOf(prefs.FilterBookmarked).takeIf { it != TriState.OFF }
+            ?: legacyFilter(prefs.ChapterFilter, prefs.FilterUnread, prefs.FilterBookmarked, prefs.FilterDownloaded, "bookmarked")
         var filtered = allRows.filter { row ->
             val scan = row.scanlator
             if (scan != null && scan in excluded) return@filter false
-            when (prefs.FilterDownloaded) {
-                "downloaded" -> if (!row.isDownloaded) return@filter false
-                "not_downloaded" -> if (row.isDownloaded) return@filter false
-            }
-            when (prefs.FilterUnread) {
-                "unread" -> if (row.isRead) return@filter false
-                "read" -> if (!row.isRead) return@filter false
-            }
-            when (prefs.FilterBookmarked) {
-                "bookmarked" -> if (!row.isBookmarked) return@filter false
-                "not_bookmarked" -> if (row.isBookmarked) return@filter false
-            }
-            true
+            passesTriState(downloaded, row.isDownloaded) &&
+                passesTriState(unread, !row.isRead) &&
+                passesTriState(bookmarked, row.isBookmarked)
         }
 
         if (prefs.DuplicatesAsOne == true) {
@@ -1197,34 +1255,34 @@ class BookshelfViewModel @Inject constructor(
         }
 
         val descending = prefs.ChapterDescending ?: true
-        val comparator: Comparator<MangaChapterRowItem> = when (prefs.ChapterSort) {
+        val comparator: Comparator<MangaChapterRowItem> = when (chapterSortKey(prefs.ChapterSort)) {
             "source" -> compareBy { it.sourceOrder }
-            "upload" -> compareBy { it.uploadDate }
-            else -> compareBy<MangaChapterRowItem> { it.number }.thenBy { it.sourceOrder }
+            "date" -> compareBy { it.uploadDate }
+            "title" -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.title }
+            else -> compareBy<MangaChapterRowItem> { if (it.number < 0f) Float.MAX_VALUE else it.number }.thenBy { it.sourceOrder }
         }
         return if (descending) filtered.sortedWith(comparator.reversed()) else filtered.sortedWith(comparator)
     }
 
-    fun updateSeriesPreferences(
-        excludedScanlators: List<String>? = null,
-        duplicatesAsOne: Boolean? = null,
-        filterDownloaded: String? = null,
-        filterUnread: String? = null,
-        filterBookmarked: String? = null,
-        chapterSort: String? = null,
-        chapterDescending: Boolean? = null,
-    ) {
+    fun updateSeriesPreferences(change: SeriesPrefsChange) {
         val detail = _uiState.value.seriesDetail ?: return
         val series = detail.seriesItem ?: return
         val key = if (series.key.startsWith("s:")) series.key else "s:${series.key}"
-        val nextPrefs = detail.prefs.copy(
-            ExcludedScanlators = excludedScanlators ?: detail.prefs.ExcludedScanlators,
-            DuplicatesAsOne = duplicatesAsOne ?: detail.prefs.DuplicatesAsOne,
-            FilterDownloaded = filterDownloaded ?: detail.prefs.FilterDownloaded,
-            FilterUnread = filterUnread ?: detail.prefs.FilterUnread,
-            FilterBookmarked = filterBookmarked ?: detail.prefs.FilterBookmarked,
-            ChapterSort = chapterSort ?: detail.prefs.ChapterSort,
-            ChapterDescending = chapterDescending ?: detail.prefs.ChapterDescending,
+        val prefs = detail.prefs
+        fun merged(change: String?, current: String?) = if (change == null) current else change.ifEmpty { null }
+        val filterChanged = change.filterDownloaded != null || change.filterUnread != null || change.filterBookmarked != null
+        // The single filter of older series settings must not come back once the new ones are off.
+        val legacy = if (filterChanged) "all" else null
+        val nextPrefs = prefs.copy(
+            ExcludedScanlators = change.excludedScanlators ?: prefs.ExcludedScanlators,
+            DuplicatesAsOne = change.duplicatesAsOne ?: prefs.DuplicatesAsOne,
+            ChapterFilter = legacy ?: prefs.ChapterFilter,
+            FilterDownloaded = merged(change.filterDownloaded, prefs.FilterDownloaded),
+            FilterUnread = merged(change.filterUnread, prefs.FilterUnread),
+            FilterBookmarked = merged(change.filterBookmarked, prefs.FilterBookmarked),
+            ChapterSort = merged(change.chapterSort, prefs.ChapterSort),
+            ChapterDescending = change.chapterDescending ?: prefs.ChapterDescending,
+            ChapterDisplay = merged(change.chapterDisplay, prefs.ChapterDisplay),
         )
         val shelf = _uiState.value.shelfByKind[BookshelfTab.MANGA.kind] ?: ShelfDto()
         val rawRows = buildChapterRows(
@@ -1234,25 +1292,22 @@ class BookshelfViewModel @Inject constructor(
             shelf,
         )
         _uiState.update { state ->
-            state.copy(
-                seriesDetail = detail.copy(
-                    prefs = nextPrefs,
-                    chapters = applyChapterFiltersAndSort(rawRows, nextPrefs),
-                ),
-            )
+            state.copy(seriesDetail = detail.copy(prefs = nextPrefs).withRows(rawRows))
         }
 
         viewModelScope.launch {
             booksRepository.updateSeriesPrefs(
                 UpdateSeriesPrefsRequest(
                     Key = key,
-                    ExcludedScanlators = nextPrefs.ExcludedScanlators,
-                    DuplicatesAsOne = nextPrefs.DuplicatesAsOne,
-                    FilterDownloaded = nextPrefs.FilterDownloaded,
-                    FilterUnread = nextPrefs.FilterUnread,
-                    FilterBookmarked = nextPrefs.FilterBookmarked,
-                    ChapterSort = nextPrefs.ChapterSort,
-                    ChapterDescending = nextPrefs.ChapterDescending,
+                    ChapterFilter = legacy,
+                    ExcludedScanlators = change.excludedScanlators,
+                    DuplicatesAsOne = change.duplicatesAsOne,
+                    FilterDownloaded = change.filterDownloaded,
+                    FilterUnread = change.filterUnread,
+                    FilterBookmarked = change.filterBookmarked,
+                    ChapterSort = change.chapterSort,
+                    ChapterDescending = change.chapterDescending,
+                    ChapterDisplay = change.chapterDisplay,
                 ),
             )
         }
@@ -1276,10 +1331,19 @@ class BookshelfViewModel @Inject constructor(
                     val normId = BooksRepository.normalizeId(chapter.id)
                     _uiState.update { state ->
                         val detail = state.seriesDetail ?: return@update state
-                        val updatedChapters = detail.chapters.map {
+                        fun mark(rows: List<MangaChapterRowItem>) = rows.map {
                             if (BooksRepository.normalizeId(it.id) == normId) it.copy(isBookmarked = next) else it
                         }
-                        state.copy(seriesDetail = detail.copy(chapters = updatedChapters))
+                        // The shelf keeps the bookmark too, so a rebuild of the rows does not undo it.
+                        val shelf = state.shelfByKind[BookshelfTab.MANGA.kind]
+                        val nextShelf = shelf?.let { current ->
+                            val others = current.Bookmarks.filter { BooksRepository.normalizeId(it) != normId }
+                            current.copy(Bookmarks = if (next) others + normId else others)
+                        }
+                        state.copy(
+                            shelfByKind = if (nextShelf != null) state.shelfByKind + (BookshelfTab.MANGA.kind to nextShelf) else state.shelfByKind,
+                            seriesDetail = detail.copy(chapters = mark(detail.chapters), allChapters = mark(detail.allChapters)),
+                        )
                     }
                 }
         }
@@ -1287,55 +1351,56 @@ class BookshelfViewModel @Inject constructor(
 
     fun downloadMangaChapter(chapter: MangaChapterRowItem, seriesTitle: String, seriesKey: String) {
         viewModelScope.launch {
-            val dto = chapter.baseItem ?: BaseItemDto(
-                Id = chapter.id,
-                Name = chapter.title,
-                Type = "Book",
-                SeriesName = seriesTitle,
-                IndexNumber = chapter.number.toInt(),
-            )
-            offlineDownloads.queueBookDownload(
-                item = dto,
-                isManga = true,
-                seriesKey = seriesKey,
-                streamChapterId = chapter.streamChapterId,
-                streamMangaId = chapter.mangaId,
-                userIdOverride = _uiState.value.userId,
-            )
+            queueChapterDownload(chapter, seriesTitle, seriesKey)
             _uiState.update { it.copy(statusMessage = "Queued download: ${chapter.title}") }
         }
     }
 
-    fun downloadAllChapters(unreadOnly: Boolean) {
+    // Queues chapters through the same download manager as the per-chapter button.
+    fun downloadChapters(choice: MangaDownloadChoice) {
         val detail = _uiState.value.seriesDetail ?: return
         val series = detail.seriesItem ?: return
-        val targets = detail.chapters.filter { ch ->
-            !ch.isDownloaded && (!unreadOnly || !ch.isRead)
+        val facts = detail.allChapters.map { ch ->
+            ChapterFacts(
+                key = ch.id,
+                number = ch.number,
+                sourceOrder = ch.sourceOrder,
+                isRead = ch.isRead,
+                inProgress = ch.inProgress,
+                isDownloaded = ch.isDownloaded,
+                isQueued = ch.isDownloading,
+                isBookmarked = ch.isBookmarked,
+            )
         }
+        val picked = chaptersToDownload(facts, choice, series.resumeChapterId).toSet()
+        val targets = detail.allChapters.filter { it.id in picked }
+            .sortedWith(compareBy<MangaChapterRowItem> { if (it.number < 0f) Float.MAX_VALUE else it.number }.thenBy { it.sourceOrder })
         if (targets.isEmpty()) {
-            _uiState.update { it.copy(statusMessage = "Nothing to download") }
+            tell(Strings.get("series_download_none"))
             return
         }
         viewModelScope.launch {
-            targets.forEach { ch ->
-                val dto = ch.baseItem ?: BaseItemDto(
-                    Id = ch.id,
-                    Name = ch.title,
-                    Type = "Book",
-                    SeriesName = series.title,
-                    IndexNumber = ch.number.toInt(),
-                )
-                offlineDownloads.queueBookDownload(
-                    item = dto,
-                    isManga = true,
-                    seriesKey = series.key,
-                    streamChapterId = ch.streamChapterId,
-                    streamMangaId = ch.mangaId,
-                    userIdOverride = _uiState.value.userId,
-                )
-            }
-            _uiState.update { it.copy(statusMessage = "Queued ${targets.size} chapters") }
+            targets.forEach { ch -> queueChapterDownload(ch, series.title, series.key) }
+            tell(Strings.format("series_download_queued", targets.size))
         }
+    }
+
+    private suspend fun queueChapterDownload(chapter: MangaChapterRowItem, seriesTitle: String, seriesKey: String) {
+        val dto = chapter.baseItem ?: BaseItemDto(
+            Id = chapter.id,
+            Name = chapter.title,
+            Type = "Book",
+            SeriesName = seriesTitle,
+            IndexNumber = chapter.number.toInt(),
+        )
+        offlineDownloads.queueBookDownload(
+            item = dto,
+            isManga = true,
+            seriesKey = seriesKey,
+            streamChapterId = chapter.streamChapterId,
+            streamMangaId = chapter.mangaId,
+            userIdOverride = _uiState.value.userId,
+        )
     }
 
     fun downloadBookOrAudiobook(item: BaseItemDto) {
