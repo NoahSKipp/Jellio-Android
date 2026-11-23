@@ -20,6 +20,7 @@ internal object StringsIt {
         fillErrors(m)
         fillAniSyncIt(m)
         fillReaderIt(m)
+        fillSeriesIt(m)
         fillCardMenu(m)
         fillNotifyIt(m)
         m

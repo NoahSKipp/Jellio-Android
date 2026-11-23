@@ -20,6 +20,7 @@ internal object StringsFr {
         fillErrors(m)
         fillAniSyncFr(m)
         fillReaderFr(m)
+        fillSeriesFr(m)
         fillCardMenu(m)
         fillNotifyFr(m)
         m

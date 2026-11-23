@@ -20,6 +20,7 @@ internal object StringsEn {
         fillErrors(m)
         fillAniSyncEn(m)
         fillReaderEn(m)
+        fillSeriesEn(m)
         fillCardMenu(m)
         fillNotifyEn(m)
         m

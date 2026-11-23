@@ -20,6 +20,7 @@ internal object StringsDe {
         fillErrors(m)
         fillAniSyncDe(m)
         fillReaderDe(m)
+        fillSeriesDe(m)
         fillCardMenu(m)
         fillNotifyDe(m)
         m

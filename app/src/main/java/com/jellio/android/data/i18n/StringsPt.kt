@@ -20,6 +20,7 @@ internal object StringsPt {
         fillErrors(m)
         fillAniSyncPt(m)
         fillReaderPt(m)
+        fillSeriesPt(m)
         fillCardMenu(m)
         fillNotifyPt(m)
         m
