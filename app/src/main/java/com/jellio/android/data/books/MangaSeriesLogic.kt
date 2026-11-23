@@ -165,3 +165,10 @@ fun chapterLabel(display: String?, title: String, number: Float, numberLabel: St
     val shown = if (number == number.toInt().toFloat()) number.toInt().toString() else number.toString()
     return "$numberLabel $shown"
 }
+
+// The Resume button of a book or audiobook, from how far it has been read or heard.
+fun bookResumeKind(progress: Double, finished: Boolean): ResumeKind = when {
+    finished || progress >= 0.98 -> ResumeKind.READ_AGAIN
+    progress > 0.0 -> ResumeKind.RESUME
+    else -> ResumeKind.START
+}

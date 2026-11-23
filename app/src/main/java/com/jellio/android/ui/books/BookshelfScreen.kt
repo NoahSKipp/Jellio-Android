@@ -107,6 +107,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.jellio.android.data.books.BooksRepository
+import com.jellio.android.data.books.bookResumeKind
+import com.jellio.android.data.i18n.formatDurationMinutes
 import com.jellio.android.data.books.READING_KIND_AUDIOBOOK
 import com.jellio.android.data.books.READING_KIND_MANGA
 import com.jellio.android.data.books.ReadingOpen
@@ -209,6 +211,7 @@ fun BookshelfScreen(
     var sortMenuOpen by remember { mutableStateOf(false) }
     var menuTarget by remember { mutableStateOf<ShelfMenuTarget?>(null) }
     var removeTarget by remember { mutableStateOf<ShelfMenuTarget?>(null) }
+    var detailTarget by remember { mutableStateOf<ShelfMenuTarget?>(null) }
 
     Box(
         modifier = modifier
@@ -478,6 +481,11 @@ fun BookshelfScreen(
                 },
                 onRemoveLibrary = { removeTarget = target },
                 onDismiss = { menuTarget = null },
+                onDetails = if (!isManga && itemId != null) {
+                    { detailTarget = target }
+                } else {
+                    null
+                },
                 reading = readingActionsFor(
                     if (isManga) {
                         readingTargetForSeries(
@@ -539,15 +547,18 @@ fun BookshelfScreen(
             )
         }
 
+        // Messages show as toasts while a page covers the shelf.
+        val pageOpen = state.seriesDetail != null || detailTarget != null
+        LaunchedEffect(state.statusMessage, pageOpen) {
+            val message = state.statusMessage
+            if (pageOpen && message != null) {
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                viewModel.clearStatusMessage()
+            }
+        }
+
         // Manga series page
         state.seriesDetail?.let { detail ->
-            val seriesStatus = state.statusMessage
-            LaunchedEffect(seriesStatus) {
-                if (seriesStatus != null) {
-                    Toast.makeText(context, seriesStatus, Toast.LENGTH_SHORT).show()
-                    viewModel.clearStatusMessage()
-                }
-            }
             MangaSeriesPage(
                 detail = detail,
                 onDismiss = viewModel::closeMangaSeries,
@@ -570,6 +581,75 @@ fun BookshelfScreen(
                 },
                 reading = detail.seriesItem?.let { readingActionsFor(it.readingTarget()) },
             )
+        }
+
+        // Book and audiobook page, from the long-press menu
+        detailTarget?.let { target ->
+            val audiobook = target.tab == BookshelfTab.AUDIOBOOK
+            val item = target.itemId?.let { id ->
+                (if (audiobook) state.audiobookItems else state.ebookItems).firstOrNull { it.Id == id }
+            }
+            if (item == null) {
+                LaunchedEffect(target) { detailTarget = null }
+            } else {
+                val norm = BooksRepository.normalizeId(item.Id)
+                val info = state.shelfInfoById[norm]
+                val progress = if (audiobook) {
+                    ((item.UserData?.PlayedPercentage ?: 0.0) / 100.0).coerceIn(0.0, 1.0)
+                } else {
+                    state.readingProgressById[norm]?.Progress ?: 0.0
+                }
+                val finished = if (audiobook) null else viewModel.isBookFinished(item.Id)
+                val download = state.downloadsById[norm]
+                val minutes = ((item.RunTimeTicks ?: 0L) / 600_000_000L).toInt()
+                val infoLine = listOfNotNull(
+                    if (audiobook) minutes.takeIf { it > 0 }?.let { formatDurationMinutes(it) } else item.Path?.substringAfterLast('.', "")?.uppercase()?.takeIf { it.isNotBlank() && it.length <= 5 },
+                    (info?.Year ?: item.ProductionYear)?.toString(),
+                    (info?.SeriesTitle ?: item.SeriesName)?.takeIf { it.isNotBlank() },
+                    "${(progress * 100).roundToInt()}%".takeIf { progress > 0.0 && progress < 0.98 },
+                ).joinToString(" \u2022 ").ifBlank { null }
+                BookDetailPage(
+                    model = BookDetailModel(
+                        title = item.Name.orEmpty(),
+                        author = if (audiobook) {
+                            item.AlbumArtist ?: item.Artists?.firstOrNull() ?: info?.Authors
+                        } else {
+                            info?.Authors ?: item.People?.firstOrNull()?.Name
+                        },
+                        infoLine = infoLine,
+                        coverUrl = state.coverUrlsByKey[norm],
+                        description = item.Overview?.replace(Regex("<[^>]+>"), " ")?.replace(Regex("\\s+"), " ")?.trim()?.ifBlank { null },
+                        genres = (info?.Genres?.takeIf { it.isNotEmpty() } ?: item.Genres.orEmpty()).filter { it.isNotBlank() },
+                        audiobook = audiobook,
+                        resumeKind = bookResumeKind(progress, finished == true),
+                        downloaded = download?.status == OfflineDownloadItem.STATUS_COMPLETED,
+                        downloading = download != null && download.status != OfflineDownloadItem.STATUS_COMPLETED &&
+                            download.status != OfflineDownloadItem.STATUS_FAILED,
+                        finished = finished,
+                    ),
+                    onDismiss = { detailTarget = null },
+                    onResume = {
+                        detailTarget = null
+                        if (audiobook) onOpenAudiobook(item.Id) else onOpenReader(item.Id, "book", null, null)
+                    },
+                    onDownload = { viewModel.downloadBookOrAudiobook(item) },
+                    onCategories = { viewModel.openAssignCategoriesFor(norm) },
+                    onMarkRead = if (audiobook) null else ({ read: Boolean -> viewModel.markBookRead(item.Id, read) }),
+                    onRemove = {
+                        detailTarget = null
+                        removeTarget = target
+                    },
+                    reading = readingActionsFor(
+                        readingTargetForItem(
+                            itemId = item.Id,
+                            type = if (audiobook) "AudioBook" else "Book",
+                            title = item.Name.orEmpty(),
+                            author = null,
+                            manga = false,
+                        ),
+                    ),
+                )
+            }
         }
 
         // Category Manager Modal

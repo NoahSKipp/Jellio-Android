@@ -47,8 +47,10 @@ internal fun ShelfItemMenu(
     onRemoveLibrary: (() -> Unit)?,
     onDismiss: () -> Unit,
     reading: ReadingMenuActions? = null,
+    onDetails: (() -> Unit)? = null,
 ) {
     val actions = buildList {
+        onDetails?.let { add(ShelfMenuAction(Strings.get("series_details"), onClick = it)) }
         if (finished != null && onMarkRead != null) {
             add(
                 if (finished) {

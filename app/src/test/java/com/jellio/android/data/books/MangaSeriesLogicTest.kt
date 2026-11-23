@@ -147,4 +147,12 @@ class MangaSeriesLogicTest {
         assertEquals("Ch.12 - Name", chapterLabel("title", "Ch.12 - Name", 12f, "Chapter"))
         assertEquals("Prologue", chapterLabel("number", "Prologue", -1f, "Chapter"))
     }
+
+    @Test
+    fun bookResumeKindFollowsProgress() {
+        assertEquals(ResumeKind.START, bookResumeKind(0.0, false))
+        assertEquals(ResumeKind.RESUME, bookResumeKind(0.4, false))
+        assertEquals(ResumeKind.READ_AGAIN, bookResumeKind(0.99, false))
+        assertEquals(ResumeKind.READ_AGAIN, bookResumeKind(0.2, true))
+    }
 }
