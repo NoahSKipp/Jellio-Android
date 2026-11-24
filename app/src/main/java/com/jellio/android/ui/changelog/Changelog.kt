@@ -106,6 +106,14 @@ fun isBigRelease(version: String): Boolean {
 
 val CHANGELOG_RELEASES = listOf(
     ChangelogRelease(
+        version = "0.4.1",
+        title = "What's New in Jellio",
+        subtitle = "Version 0.4.1",
+        features = listOf(
+            ChangelogFeature(Icons.Filled.AutoAwesome, "Manga Page Polish", "Titles on your reading list that are not in your library now open from their source, with an Add to library button, instead of an error. The header art is clearer, and author, artist, status and genres show whenever the server has them."),
+        ),
+    ),
+    ChangelogRelease(
         version = "0.4.0",
         title = "What's New in Jellio",
         subtitle = "Version 0.4.0",
