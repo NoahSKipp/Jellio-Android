@@ -391,6 +391,8 @@ data class MangaSeriesSummaryDto(
     val LastReadAt: String? = null,
     val Resume: MangaStreamResumeDto? = null,
     val FirstChapterId: String? = null,
+    // A newer plugin may list them with the shelf; an older one leaves them out.
+    val Genres: List<String>? = null,
 )
 
 @JsonClass(generateAdapter = true)

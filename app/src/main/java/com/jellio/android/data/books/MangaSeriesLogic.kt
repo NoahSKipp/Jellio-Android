@@ -186,3 +186,38 @@ fun <T> pickSourceMatch(
     val exact = candidates.filter { keyOf(it) == wantedKey }
     return exact.firstOrNull(inLibraryOf) ?: exact.firstOrNull()
 }
+
+// What the series header shows. The series detail wins; the shelf summary fills what
+// the plugin left out. Nothing is made up: a missing field stays null.
+data class SeriesHeaderInfo(
+    val author: String?,
+    val artist: String?,
+    val status: String?,
+    val source: String?,
+    val description: String?,
+    val genres: List<String>,
+) {
+    // "Ongoing • Asura Scans", or whichever half exists.
+    val statusLine: String? get() = listOfNotNull(status, source).joinToString(" • ").ifEmpty { null }
+}
+
+fun seriesHeaderInfo(
+    detailAuthor: String?,
+    detailArtist: String?,
+    detailStatus: String?,
+    detailSource: String?,
+    detailDescription: String?,
+    detailGenres: List<String>?,
+    shelfAuthor: String?,
+    shelfStatus: String?,
+    shelfGenres: List<String>?,
+    statusLabel: (String) -> String,
+): SeriesHeaderInfo {
+    fun clean(value: String?) = value?.trim()?.takeIf { it.isNotEmpty() }
+    fun cleanList(values: List<String>?) = values.orEmpty().mapNotNull { clean(it) }.distinctBy { it.lowercase() }
+    val author = clean(detailAuthor) ?: clean(shelfAuthor)
+    val artist = clean(detailArtist)?.takeIf { !it.equals(author, ignoreCase = true) }
+    val status = mangaStatusText(clean(detailStatus), statusLabel) ?: mangaStatusText(clean(shelfStatus), statusLabel)
+    val genres = cleanList(detailGenres).ifEmpty { cleanList(shelfGenres) }
+    return SeriesHeaderInfo(author, artist, status, clean(detailSource), clean(detailDescription), genres)
+}

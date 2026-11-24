@@ -91,9 +91,9 @@ import com.jellio.android.data.books.TriState
 import com.jellio.android.data.books.chapterLabel
 import com.jellio.android.data.books.chapterSortKey
 import com.jellio.android.data.books.legacyFilter
-import com.jellio.android.data.books.mangaStatusText
 import com.jellio.android.data.books.nextTriState
 import com.jellio.android.data.books.resumeTarget
+import com.jellio.android.data.books.seriesHeaderInfo
 import com.jellio.android.data.books.topBarFraction
 import com.jellio.android.data.books.triStateOf
 import com.jellio.android.data.books.triStateValue
@@ -200,16 +200,23 @@ private fun MangaSeriesContent(
     }
 
     val streamSeries = detail.streamSeries
-    val author = streamSeries?.Author?.takeIf { it.isNotBlank() } ?: series.author?.takeIf { it.isNotBlank() }
-    val artist = streamSeries?.Artist?.takeIf { it.isNotBlank() && !it.equals(author, ignoreCase = true) }
-    val statusLine = listOfNotNull(
-        mangaStatusText(streamSeries?.Status ?: series.status) { Strings.get(it) },
-        (streamSeries?.SourceName ?: streamSeries?.Source)?.takeIf { it.isNotBlank() },
-    ).joinToString(" • ")
+    val info =
+        seriesHeaderInfo(
+            detailAuthor = streamSeries?.Author,
+            detailArtist = streamSeries?.Artist,
+            detailStatus = streamSeries?.Status,
+            detailSource = streamSeries?.SourceName?.takeIf { it.isNotBlank() } ?: streamSeries?.Source,
+            detailDescription = streamSeries?.Description,
+            detailGenres = streamSeries?.Genres,
+            shelfAuthor = series.author,
+            shelfStatus = series.status,
+            shelfGenres = series.streamSummary?.Genres,
+            statusLabel = { Strings.get(it) },
+        )
     val headerLines = buildList {
-        if (author != null) add(DetailHeaderLine(Icons.Filled.Person, author))
-        if (artist != null) add(DetailHeaderLine(Icons.Filled.Brush, artist))
-        if (statusLine.isNotEmpty()) add(DetailHeaderLine(Icons.Filled.Schedule, statusLine))
+        info.author?.let { add(DetailHeaderLine(Icons.Filled.Person, it)) }
+        info.artist?.let { add(DetailHeaderLine(Icons.Filled.Brush, it)) }
+        info.statusLine?.let { add(DetailHeaderLine(Icons.Filled.Schedule, it)) }
     }
     val actions = buildList {
         add(
@@ -250,13 +257,13 @@ private fun MangaSeriesContent(
             item(key = "actions", contentType = "actions") {
                 DetailActionRow(actions = actions, modifier = Modifier.padding(top = 4.dp))
             }
-            val description = streamSeries?.Description?.takeIf { it.isNotBlank() }
+            val description = info.description
             if (description != null) {
                 item(key = "description", contentType = "description") {
                     DetailDescription(text = description)
                 }
             }
-            val genres = streamSeries?.Genres.orEmpty().filter { it.isNotBlank() }
+            val genres = info.genres
             if (genres.isNotEmpty()) {
                 item(key = "genres", contentType = "genres") {
                     LazyRow(
