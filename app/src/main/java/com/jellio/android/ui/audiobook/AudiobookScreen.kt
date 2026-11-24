@@ -122,8 +122,18 @@ fun AudiobookScreen(
     controller: AudiobookPlayerController,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    readingListViewModel: com.jellio.android.ui.books.ReadingListViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
 ) {
     val state by controller.state.collectAsState()
+    val readingSupported by readingListViewModel.supported.collectAsState()
+    val readingKeys by readingListViewModel.keys.collectAsState()
+    val readingTarget = remember(state.bookItem?.Id) {
+        state.bookItem?.let {
+            com.jellio.android.data.books.readingTargetForItem(it.Id, "AudioBook", it.Name, it.AlbumArtist ?: it.Artists?.firstOrNull(), false)
+        }
+    }
+    val onReadingList = readingTarget != null && readingTarget.key in readingKeys
+    LaunchedEffect(readingTarget?.key) { if (readingTarget != null) readingListViewModel.refreshKeys() }
 
     LaunchedEffect(itemId) {
         controller.loadAndPlayById(itemId)
@@ -218,6 +228,17 @@ fun AudiobookScreen(
                     letterSpacing = 1.4.sp,
                 )
 
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                if (readingSupported == true && readingTarget != null) {
+                    IconButton(onClick = { readingListViewModel.toggle(readingTarget) }) {
+                        Icon(
+                            imageVector = if (onReadingList) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                            contentDescription = com.jellio.android.ui.i18n.string(com.jellio.android.data.books.readingToggleLabelKey(onReadingList)),
+                            tint = if (onReadingList) JellioSecondary else JellioTextSecondary,
+                        )
+                    }
+                }
+
                 OfflineDownloadActionButton(
                     download = state.offlineDownload,
                     onQueue = { controller.queueOfflineDownload() },
@@ -225,6 +246,7 @@ fun AudiobookScreen(
                     onResume = { controller.resumeOfflineDownload() },
                     onDelete = { controller.deleteOfflineDownload() },
                 )
+                }
             }
 
             when {
