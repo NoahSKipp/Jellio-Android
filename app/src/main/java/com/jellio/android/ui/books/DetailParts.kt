@@ -36,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
@@ -67,8 +68,8 @@ import com.jellio.android.ui.theme.JellioTextTertiary
 
 internal val DetailTopBarHeight = 56.dp
 
-// The cover, zoomed and blurred, fading into the page. Where blur is not
-// available (before Android 12) a dark scrim over the faint cover stands in.
+// The cover, zoomed and lightly blurred, fading into the page like Mihon's. Before
+// Android 12 there is no blur, so the zoomed cover is only dimmed a bit more.
 @Composable
 internal fun DetailBanner(coverUrl: String?, modifier: Modifier = Modifier) {
     val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -78,23 +79,30 @@ internal fun DetailBanner(coverUrl: String?, modifier: Modifier = Modifier) {
                 model = coverUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                alignment = BiasAlignment(0f, -0.4f),
                 modifier = Modifier
                     .matchParentSize()
-                    .graphicsLayer(scaleX = 1.3f, scaleY = 1.3f)
-                    .then(if (canBlur) Modifier.blur(28.dp, BlurredEdgeTreatment.Unbounded) else Modifier)
-                    .alpha(if (canBlur) 0.55f else 0.14f),
+                    .graphicsLayer(scaleX = 1.15f, scaleY = 1.15f)
+                    .then(if (canBlur) Modifier.blur(10.dp, BlurredEdgeTreatment.Unbounded) else Modifier)
+                    .alpha(if (canBlur) 0.55f else 0.45f),
             )
         }
+        // Keeps the status bar and the back and menu icons readable over a light cover.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(96.dp)
+                .align(Alignment.TopCenter)
+                .background(Brush.verticalGradient(listOf(JellioBg.copy(alpha = 0.55f), Color.Transparent))),
+        )
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .background(
                     Brush.verticalGradient(
-                        listOf(
-                            JellioBg.copy(alpha = if (canBlur) 0.35f else 0.7f),
-                            JellioBg.copy(alpha = if (canBlur) 0.7f else 0.9f),
-                            JellioBg,
-                        ),
+                        0f to Color.Transparent,
+                        0.55f to Color.Transparent,
+                        1f to JellioBg,
                     ),
                 ),
         )
