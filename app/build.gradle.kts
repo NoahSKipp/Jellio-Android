@@ -31,7 +31,7 @@ android {
         applicationId = "com.jellio.android"
         minSdk = 24
         targetSdk = 36
-        versionName = "0.4.1"
+        versionName = "0.4.2"
         versionCode = versionCodeOf(versionName!!)
     }
 
