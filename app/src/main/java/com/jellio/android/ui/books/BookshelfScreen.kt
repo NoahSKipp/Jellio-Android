@@ -166,8 +166,8 @@ fun BookshelfScreen(
     var readingMenuTarget by remember { mutableStateOf<ReadingCardModel?>(null) }
     var readingShareTarget by remember { mutableStateOf<ReadingTarget?>(null) }
     val friendsReachable = friendsState.available && friendsState.friends.isNotEmpty()
-    val readingSections = remember(readingCards, readingSupported) {
-        if (readingSupported == true) splitReadingEntries(readingCards) { it.kind } else ReadingSections<ReadingCardModel>(emptyList(), emptyList())
+    val readingSections = remember(readingCards, readingSupported, state.activeTab) {
+        if (readingSupported == true) splitReadingEntries(readingCards, state.activeTab.kind) { it.kind } else ReadingSections<ReadingCardModel>(emptyList(), emptyList())
     }
 
     // The toggles and the Reading and Listening rows are read whenever a tab opens.

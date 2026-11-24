@@ -87,6 +87,19 @@ class ReadingListLogicTest {
     }
 
     @Test
+    fun sectionsKeepOnlyTheActiveTabKind() {
+        val all = listOf(entry("a", "ebook"), entry("b", "audiobook"), entry("c", "manga"))
+        val books = splitReadingEntries(all, "ebook") { it.Kind }
+        assertEquals(listOf("a"), books.reading.map { it.Key })
+        assertTrue(books.listening.isEmpty())
+        val manga = splitReadingEntries(all, "manga") { it.Kind }
+        assertEquals(listOf("c"), manga.reading.map { it.Key })
+        val audio = splitReadingEntries(all, "audiobook") { it.Kind }
+        assertEquals(listOf("b"), audio.listening.map { it.Key })
+        assertTrue(audio.reading.isEmpty())
+    }
+
+    @Test
     fun sectionsSplitBooksAndMangaFromAudiobooks() {
         val sections = splitReadingEntries(
             listOf(entry("a", "ebook"), entry("b", "audiobook"), entry("c", "manga"), entry("d", "audiobook")),

@@ -113,8 +113,10 @@ fun ReadingTarget.toAddBody(): ReadingAddBody =
 // The "Reading" section holds books and manga, "Listening" audiobooks.
 class ReadingSections<T>(val reading: List<T>, val listening: List<T>)
 
-fun <T> splitReadingEntries(entries: List<T>, kindOf: (T) -> String): ReadingSections<T> {
-    val (listening, reading) = entries.partition { kindOf(it) == READING_KIND_AUDIOBOOK }
+// `tabKind` keeps only the entries of the shelf tab being shown.
+fun <T> splitReadingEntries(entries: List<T>, tabKind: String? = null, kindOf: (T) -> String): ReadingSections<T> {
+    val shown = if (tabKind == null) entries else entries.filter { kindOf(it) == tabKind }
+    val (listening, reading) = shown.partition { kindOf(it) == READING_KIND_AUDIOBOOK }
     return ReadingSections(reading, listening)
 }
 
